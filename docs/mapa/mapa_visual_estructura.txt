@@ -61,3 +61,4 @@ SIS_Universitario/
 ├── main.py                         # punto de entrada: abre login
 ├── requirements.txt
 └── README.md
+└── .gitignore
