@@ -1,0 +1,63 @@
+En la semana 3 se analiza el documento para trabajar una estructura modular y escalable a futuro.
+Luego de analizar el documento cree esta estructura que me servira de guia para los avances semanales y su estructura.
+El creciemiento del proyecto sera semanal con entregables.
+La estructura puede variar o ser actualizada segun el desarrollo del curso.
+
+Estudiante:
+José Rodolfo Morales Calderón.
+Carnet:
+305000192.
+Correo:
+305000192@cuc.cr
+
+SIS_Universitario/
+├── app/
+│   ├── __init__.py
+│   │
+│   ├── core/
+│   │   ├── __init__.py
+│   │   ├── config.py              # servidor, db, driver ODBC, etc.
+│   │   ├── db.py                  # conexión pyodbc (y luego SQLAlchemy si quieres)
+│   │   ├── security.py            # validaciones de login (SQL + tabla Usuarios)
+│   │   └── errors.py              # mensajes/errores consistentes
+│   │
+│   ├── repositories/
+│   │   ├── __init__.py
+│   │   └── usuarios_repo.py       # queries: existe_usuario_tabla(), traer_foto_ruta(), etc.
+│   │
+│   ├── services/
+│   │   ├── __init__.py
+│   │   └── auth_service.py        # lógica: autenticar(), reglas del doc
+│   │
+│   ├── ui/
+│   │   ├── __init__.py
+│   │   ├── login_window.py        # Tkinter o PySide6 (según elijas)
+│   │   └── assets/
+│   │       └── users/             # imágenes por usuario (simuladas)
+│   │
+│   └── modules/                   # (A futuro) por dominio
+│       ├── estudiantes/
+│       ├── diplomados/
+│       ├── cursos/
+│       ├── matricula/
+│       ├── notas/
+│       ├── asistencia/
+│       └── reportes/
+│
+├── database/
+│   ├── scripts/
+│   │   ├── 01_create_db_universidad.sql
+│   │   ├── 02_tables_base.sql
+│   │   └── 03_seed_usuarios_prueba.sql
+│   └── diagramas/
+│       └── ERD.png
+│
+├── docs/
+│   ├── enunciado/
+│   │   └── Enunciado del Proyecto.docx
+│   └── avances/
+│       └── Entregable_1.md
+│
+├── main.py                         # punto de entrada: abre login
+├── requirements.txt
+└── README.md
