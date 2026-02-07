@@ -8,19 +8,12 @@ INSERT INTO Usuarios
     Estado_Usuario
 )
 VALUES
+
 (
-    1,
-    101110111,
-    'Luisa',
-    'Luisa Maria Rojas',
-    1,
-    1
-),
-(
-    1,
-    202220222,
-    'Marcos',
-    'Marcos Mora Mata',
+    8,
+    3050001113,
+    'Antonio',
+    'Antonio Matamala Gonzalez',
     1,
     1
 );
