@@ -1,8 +1,7 @@
 # main.py
-# Punto de entrada del programa, lanza la ventana de login
+# Punto de entrada del programa: muestra Welcome, luego Login, luego MainMenu
 
-
-from app.ui.login_window import run_login_window
+from app.ui.welcome_window import run_welcome_window
 
 if __name__ == "__main__":
-    run_login_window()
+    run_welcome_window()

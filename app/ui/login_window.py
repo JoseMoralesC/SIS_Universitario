@@ -1,89 +1,85 @@
 # app/ui/login_window.py
+from __future__ import annotations
 import tkinter as tk
-from tkinter import messagebox
-from PIL import Image, ImageTk
-import os
+from tkinter import ttk, messagebox
 
-from app.services.auth_service import (
-    login_sql_y_validar_tabla,
-    UsuarioNoRegistradoError,
-    AuthError
-)
+class LoginDialog(tk.Toplevel):
+    def __init__(self, master: tk.Misc, title="Login de conexión a DB"):
+        super().__init__(master)
+        self.title(title)
+        self.resizable(False, False)
 
-def run_login_window():
-    root = tk.Tk()
-    root.title("Login de conexión a DB")
-    root.geometry("420x260")
-    root.resizable(False, False)
+        self.result = None  # dict o None
 
-    # ------------------ RUTAS DE IMÁGENES ------------------
-    BASE_DIR = os.path.dirname(os.path.dirname(__file__))
-    IMG_PATH = os.path.join(BASE_DIR, "assets", "users")
+        # --- modal ---
+        self.transient(master)
+        self.grab_set()
 
-    # ------------------ IMAGEN ------------------
-    img_label = tk.Label(root)
-    img_label.pack(pady=10)
+        # --- UI 
+        frm = ttk.Frame(self, padding=14)
+        frm.grid(row=0, column=0, sticky="nsew")
 
-    def cargar_imagen(nombre_usuario: str):
-        nombre = nombre_usuario.strip()
+        ttk.Label(frm, text="Usuario:").grid(row=0, column=0, sticky="w", pady=6)
+        ttk.Label(frm, text="Contraseña:").grid(row=1, column=0, sticky="w", pady=6)
 
-        if nombre:
-            archivo = f"{nombre}.jpg"
-        else:
-            archivo = "default.png"
+        self.var_user = tk.StringVar()
+        self.var_pass = tk.StringVar()
 
-        ruta = os.path.join(IMG_PATH, archivo)
+        ent_user = ttk.Entry(frm, textvariable=self.var_user, width=30)
+        ent_pass = ttk.Entry(frm, textvariable=self.var_pass, show="*", width=30)
+        ent_user.grid(row=0, column=1, pady=6, padx=(10,0))
+        ent_pass.grid(row=1, column=1, pady=6, padx=(10,0))
 
-        if not os.path.exists(ruta):
-            ruta = os.path.join(IMG_PATH, "default.png")
+        btns = ttk.Frame(frm)
+        btns.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(12, 0))
+        btns.columnconfigure((0,1), weight=1)
 
-        img = Image.open(ruta)
-        img = img.resize((90, 90))
-        img_tk = ImageTk.PhotoImage(img)
+        ttk.Button(btns, text="Ingresar", command=self._ok).grid(row=0, column=0, sticky="ew", padx=6)
+        ttk.Button(btns, text="Cancelar", command=self._cancel).grid(row=0, column=1, sticky="ew", padx=6)
 
-        img_label.configure(image=img_tk)
-        img_label.image = img_tk  # evita garbage collector
+        self.bind("<Return>", lambda e: self._ok())
+        self.bind("<Escape>", lambda e: self._cancel())
 
-    cargar_imagen("")  # imagen inicial
+        self.protocol("WM_DELETE_WINDOW", self._cancel)
 
-    # ------------------ USUARIO ------------------
-    tk.Label(root, text="Usuario:").pack()
-    entry_usuario = tk.Entry(root, width=30)
-    entry_usuario.pack()
-    entry_usuario.bind("<KeyRelease>", lambda e: cargar_imagen(entry_usuario.get()))
+        # centrar sobre master
+        self.update_idletasks()
+        x = master.winfo_rootx() + (master.winfo_width() // 2) - (self.winfo_width() // 2)
+        y = master.winfo_rooty() + (master.winfo_height() // 2) - (self.winfo_height() // 2)
+        self.geometry(f"+{x}+{y}")
 
-    # ------------------ CONTRASEÑA ------------------
-    tk.Label(root, text="Contraseña:").pack(pady=(6, 0))
-    entry_contra = tk.Entry(root, width=30, show="*")
-    entry_contra.pack()
+        ent_user.focus_set()
 
-    # ------------------ VALIDAR ------------------
-    def validar():
-        usuario = entry_usuario.get().strip()
-        contra = entry_contra.get().strip()
-
-        if not usuario or not contra:
-            messagebox.showwarning("Advertencia", "Debe llenar todos los campos")
+    def _ok(self):
+        u = self.var_user.get().strip()
+        p = self.var_pass.get().strip()
+        if not u or not p:
+            messagebox.showwarning("Validación", "Debe ingresar usuario y contraseña.")
             return
 
-        try:
-            login_sql_y_validar_tabla(usuario, contra)
-            messagebox.showinfo("Éxito", "Acceso permitido al sistema.")
-        except UsuarioNoRegistradoError as e:
-            messagebox.showerror("Error", str(e))
-        except AuthError as e:
-            messagebox.showerror("Error", f"Credenciales incorrectas:\n{e}")
-        except Exception as e:
-            messagebox.showerror("Error", f"Error inesperado:\n{e}")
+        
+        self.result = {"usuario": u, "contra": p}
+        self.destroy()
 
-    def cancelar():
+    def _cancel(self):
+        self.result = None
+        self.destroy()
+
+
+def run_login_window(master: tk.Misc | None = None):
+    """
+    - Si master viene (Welcome), abre Toplevel modal.
+    - Si no viene, crea Tk root y funciona standalone como antes.
+    """
+    if master is None:
+        root = tk.Tk()
+        root.withdraw()
+        dlg = LoginDialog(root)
+        root.wait_window(dlg)
+        result = dlg.result
         root.destroy()
+        return result
 
-    # ------------------ BOTONES ------------------
-    frame_btn = tk.Frame(root)
-    frame_btn.pack(pady=12)
-
-    tk.Button(frame_btn, text="VALIDAR", width=12, command=validar).pack(side="left", padx=6)
-    tk.Button(frame_btn, text="CANCELAR", width=12, command=cancelar).pack(side="left", padx=6)
-
-    root.mainloop()
+    dlg = LoginDialog(master)
+    master.wait_window(dlg)
+    return dlg.result

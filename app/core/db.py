@@ -15,7 +15,7 @@ def build_conn_str(usuario: str, contra: str) -> str:
         "TrustServerCertificate=yes;"
     )
 
-def connect(usuario: str, contra: str, timeout: int = 5):
+def connect(usuario: str, contra: str, timeout: int = 15):
     conn_str = build_conn_str(usuario, contra)
     return pyodbc.connect(conn_str, timeout=timeout)
 

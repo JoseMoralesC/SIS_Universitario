@@ -1,5 +1,5 @@
 Sistema de Gestión Académica
-SIS-Universitario — Entregable No. 1
+SIS-Universitario — Entregable No. 1 y Entregable No. 2
 
 Curso: Programación III
 Lenguaje: Python
@@ -146,25 +146,100 @@ Existe en la tabla Usuarios
 
 Tiene su imagen asociada en el sistema
 
-Estructura del Proyecto
+----------------------------------------------------------------
+ENTREGABLE No. 2
+----------------------------------------------------------------
+
+Descripción General del Entregable No. 2
+
+El Entregable No. 2 amplía el sistema SIS-Universitario incorporando un menú principal moderno y la implementación de mantenimientos académicos mediante operaciones CRUD reales, conectados directamente a la base de datos SQL Server.
+
+Este entregable introduce una arquitectura más robusta, orientada a la escalabilidad y reutilización de código, manteniendo separación estricta de responsabilidades por capas.
+
+Alcance del Entregable No. 2
+
+- Ventana de bienvenida (Welcome) como punto de entrada del sistema.
+- Menú principal con navegación lateral.
+- Carga diferida (lazy-load) de módulos según selección del usuario.
+- Implementación completa de CRUD para los siguientes mantenimientos:
+
+  - Docentes
+  - Programas
+  - Cursos / Materias
+  - Estudiantes
+
+- Integración directa con SQL Server mediante pyodbc.
+- Validaciones de negocio centralizadas en la capa de servicios.
+- Manejo controlado de errores de base de datos y validaciones.
+- Interfaz gráfica unificada y consistente utilizando Tkinter.
+
+Interfaz del Sistema
+
+El sistema cuenta con:
+
+- Ventana de bienvenida con información general del sistema.
+- Menú principal con navegación lateral.
+- Módulos organizados en pestañas.
+- Formularios de mantenimiento con:
+  - Campos de texto
+  - Combobox dinámicos
+  - Botones de acción: Nuevo, Guardar, Actualizar y Eliminar
+- Listados con grillas (TreeView) con scroll vertical y horizontal.
+- Ajuste automático del ancho de columnas según contenido.
+
+Arquitectura del Sistema
+
+El proyecto sigue una arquitectura modular basada en capas:
+
+- UI: manejo de ventanas y componentes gráficos.
+- Endpoints: orquestación de operaciones y conexión a base de datos.
+- Services: validaciones y reglas de negocio.
+- Repositories: acceso directo a SQL Server.
+- Core: configuración general, conexión y sesión.
+
+Estructura del Proyecto (Entregable No. 2)
+
 SIS_Universitario/
 │
 ├── app/
 │   ├── core/
 │   │   ├── config.py
 │   │   ├── db.py
+│   │   ├── session.py
+│   │   └── __init__.py
+│   │
+│   ├── endpoints/
+│   │   ├── docentes_endpoints.py
+│   │   ├── cursos_endpoints.py
+│   │   ├── programas_endpoints.py
+│   │   ├── estudiantes_endpoints.py
 │   │   └── __init__.py
 │   │
 │   ├── services/
 │   │   ├── auth_service.py
+│   │   ├── docentes_service.py
+│   │   ├── cursos_service.py
+│   │   ├── programas_service.py
+│   │   ├── estudiantes_service.py
 │   │   └── __init__.py
 │   │
 │   ├── repositories/
-│   │   ├── usuarios_repo.py
+│   │   ├── docentes_repo.py
+│   │   ├── cursos_repo.py
+│   │   ├── programas_repo.py
+│   │   ├── estudiantes_repo.py
 │   │   └── __init__.py
 │   │
 │   ├── ui/
-│   │   ├── login_window.py
+│   │   ├── welcome_window.py
+│   │   ├── main_menu.py
+│   │   ├── mantenimientos/
+│   │   │   ├── base_tab.py
+│   │   │   ├── docentes_tab.py
+│   │   │   ├── cursos_tab.py
+│   │   │   ├── programas_tab.py
+│   │   │   ├── estudiantes_tab.py
+│   │   │   └── __init__.py
 │   │   └── __init__.py
 │   │
 │   └── assets/
@@ -187,6 +262,8 @@ Verificar que SQL Server Express esté activo.
 
 Confirmar que la base de datos Universidad exista.
 
+Actualizar en app/core/config.py los datos de conexión si es necesario.
+
 Ejecutar el sistema desde consola:
 
 python main.py
@@ -197,7 +274,6 @@ Instalar dependencias necesarias:
 
 pip install pyodbc pillow
 
-
 Requiere:
 
 ODBC Driver 17 o 18 for SQL Server
@@ -206,17 +282,17 @@ Python 3.10+
 
 Observaciones Finales
 
-El sistema cumple con todos los requisitos del Entregable No. 1.
+El sistema cumple con los requisitos del Entregable No. 1 y Entregable No. 2.
 
-La arquitectura está preparada para crecer en los siguientes entregables.
+La arquitectura permite escalar el sistema para futuros entregables.
 
-Se mantiene separación de capas: UI, servicios, repositorios y base de datos.
+Se mantiene una separación clara de capas y responsabilidades.
 
-El proyecto fue desarrollado siguiendo buenas prácticas de programación.
+El código sigue un enfoque modular y mantenible.
 
 Autor
 
 José Rodolfo Morales Calderón
 Curso: Programación III
 Institución: Colegio Universitario de Cartago (CUC)
-Repositorio Github (Publico): https://github.com/JoseMoralesC/SIS_Universitario 
+Repositorio Github (Publico): https://github.com/JoseMoralesC/SIS_Universitario
