@@ -2,11 +2,11 @@
 from __future__ import annotations
 
 import tkinter as tk
-from tkinter import ttk, messagebox
 import tkinter.font as tkfont
+from tkinter import ttk
 
 from app.ui.mantenimientos.base_tab import MaintenanceTab
-from app.endpoints.cursos_endpoints import (
+from app.endpoints.mantenimiento.cursos_endpoints import (
     get_lookups,
     listar_cursos,
     siguiente_materia_cod,
@@ -14,13 +14,21 @@ from app.endpoints.cursos_endpoints import (
     actualizar_curso,
     eliminar_curso,
 )
-from app.services.cursos_service import ValidationError
+
+from app.core.error_handler import (
+    handle_exception,
+    show_info,
+    show_warning,
+)
+
+from app.ui.components.confirm_dialog import show_confirm
 
 
 class CursosTab(MaintenanceTab):
-    def __init__(self, parent, db_user: str, db_pass: str):
+    def __init__(self, parent, db_user: str, db_pass: str, codigo_usuario: int):
         self.db_user = db_user
         self.db_pass = db_pass
+        self.codigo_usuario = codigo_usuario
 
         # Lookups
         self.estado_desc_to_cod: dict[str, int] = {}
@@ -47,6 +55,7 @@ class CursosTab(MaintenanceTab):
         self.vars["Materia_Cod"] = tk.StringVar(value="")
         self.vars["Descripcion"] = tk.StringVar(value="")
         self.vars["Programa"] = tk.StringVar(value="")
+        self.vars["Precio"] = tk.StringVar(value="")
         self.vars["Estado"] = tk.StringVar(value="")
 
         r = 0
@@ -68,6 +77,8 @@ class CursosTab(MaintenanceTab):
         self.cb_programa.grid(row=r, column=1, sticky="ew", padx=(10, 0), pady=6)
         r += 1
 
+        add_entry("Precio", "Precio")
+
         ttk.Label(parent, text="Estado:").grid(row=r, column=0, sticky="w", pady=6)
         self.cb_estado = ttk.Combobox(parent, textvariable=self.vars["Estado"], state="readonly", width=26)
         self.cb_estado.grid(row=r, column=1, sticky="ew", padx=(10, 0), pady=6)
@@ -77,10 +88,17 @@ class CursosTab(MaintenanceTab):
         parent.rowconfigure(0, weight=1)
         parent.columnconfigure(0, weight=1)
 
-        cols = ("ID", "Descripción", "Programa ID", "Programa", "Estado")
+        cols = ("ID", "Descripción", "Programa ID", "Programa", "Precio", "Estado")
         self.tree = ttk.Treeview(parent, columns=cols, show="headings")
 
-        base_widths = {"ID": 60, "Descripción": 260, "Programa ID": 80, "Programa": 220, "Estado": 100}
+        base_widths = {
+            "ID": 60,
+            "Descripción": 260,
+            "Programa ID": 80,
+            "Programa": 220,
+            "Precio": 100,
+            "Estado": 100,
+        }
         for c in cols:
             self.tree.heading(c, text=c)
             self.tree.column(c, width=base_widths.get(c, 140), anchor="w", stretch=True)
@@ -118,6 +136,7 @@ class CursosTab(MaintenanceTab):
     def reset_view_blank(self):
         self.vars["Materia_Cod"].set("")
         self.vars["Descripcion"].set("")
+        self.vars["Precio"].set("")
 
         try:
             self.cb_programa["values"] = []
@@ -136,7 +155,7 @@ class CursosTab(MaintenanceTab):
         try:
             estados, programas = get_lookups(self.db_user, self.db_pass)
         except Exception as e:
-            messagebox.showerror("DB", f"No se pudieron cargar catálogos:\n{e}")
+            handle_exception(self, e, context="Cargar catálogos (Cursos)")
             estados, programas = [], []
 
         self.estado_desc_to_cod = {desc: cod for cod, desc in estados}
@@ -159,18 +178,14 @@ class CursosTab(MaintenanceTab):
             self.tree.delete(it)
 
         try:
+            # ✅ FIX: endpoint no acepta codigo_usuario en listar
             rows = listar_cursos(self.db_user, self.db_pass)
         except Exception as e:
-            messagebox.showerror("DB", f"No se pudo cargar Cursos:\n{e}")
+            handle_exception(self, e, context="Cargar cursos")
             return
 
         for r in rows:
-            # (Materia_Cod, Materia_Desc, Curso_Cod, Programa_Desc, Estado_Desc)
-            self.tree.insert(
-                "",
-                "end",
-                values=(r[0], r[1], r[2], r[3], r[4])
-            )
+            self.tree.insert("", "end", values=(r[0], r[1], r[2], r[3], str(r[4]), r[5]))
 
         self._autosize_columns()
 
@@ -200,9 +215,18 @@ class CursosTab(MaintenanceTab):
         self.vars["Materia_Cod"].set(str(v[0]))
         self.vars["Descripcion"].set(str(v[1]))
 
-        # v[2] es Programa ID, v[3] es Programa nombre
-        self.vars["Programa"].set(str(v[3]))
-        self.vars["Estado"].set(str(v[4]))
+        prog_name = str(v[3]).strip()
+        if prog_name in self.programa_desc_to_cod:
+            self.vars["Programa"].set(prog_name)
+        else:
+            # fallback seguro
+            if self.cb_programa["values"]:
+                self.vars["Programa"].set(self.cb_programa["values"][0])
+            else:
+                self.vars["Programa"].set("")
+
+        self.vars["Precio"].set("" if v[4] is None else str(v[4]))
+        self.vars["Estado"].set(str(v[5]))
 
     # -----------------------------
     # CRUD
@@ -214,10 +238,12 @@ class CursosTab(MaintenanceTab):
             new_id = siguiente_materia_cod(self.db_user, self.db_pass)
             self.vars["Materia_Cod"].set(str(new_id))
         except Exception as e:
-            messagebox.showerror("DB", f"No se pudo obtener el siguiente ID:\n{e}")
+            handle_exception(self, e, context="Generar ID (Cursos)")
             self.vars["Materia_Cod"].set("")
 
         self.vars["Descripcion"].set("")
+        self.vars["Precio"].set("")
+
         if self.cb_programa["values"]:
             self.vars["Programa"].set(self.cb_programa["values"][0])
         if self.cb_estado["values"]:
@@ -231,57 +257,66 @@ class CursosTab(MaintenanceTab):
 
         id_txt = self.vars["Materia_Cod"].get().strip()
         if not id_txt.isdigit():
-            messagebox.showwarning("Validación", "Debe presionar 'Nuevo' para generar el ID antes de guardar.")
+            show_warning(self, "Validación", "Debe presionar 'Nuevo' para generar el ID antes de guardar.")
             return
 
         desc = self.vars["Descripcion"].get().strip()
         prog_desc = self.vars["Programa"].get().strip()
+        precio_txt = self.vars["Precio"].get().strip()
         est_desc = self.vars["Estado"].get().strip()
 
+        if not desc:
+            show_warning(self, "Validación", "La descripción es requerida.")
+            return
+
         if prog_desc not in self.programa_desc_to_cod:
-            messagebox.showwarning("Validación", "Programa inválido.")
+            show_warning(self, "Validación", "Programa inválido.")
             return
         if est_desc not in self.estado_desc_to_cod:
-            messagebox.showwarning("Validación", "Estado inválido.")
+            show_warning(self, "Validación", "Estado inválido.")
             return
 
         try:
+            # ✅ FIX: no pasar codigo_usuario si endpoint no lo recibe (por ahora)
             crear_curso(
                 self.db_user,
                 self.db_pass,
                 materia_cod=int(id_txt),
                 descripcion=desc,
                 curso_cod=self.programa_desc_to_cod[prog_desc],
+                precio=precio_txt,
                 estado_codigo=self.estado_desc_to_cod[est_desc],
             )
-        except ValidationError as ve:
-            messagebox.showwarning("Validación", str(ve))
-            return
         except Exception as e:
-            messagebox.showerror("DB", f"No se pudo guardar el curso:\n{e}")
+            handle_exception(self, e, context="Guardar curso")
             return
 
         self.refresh_grid()
         self.on_nuevo()
-        messagebox.showinfo("Éxito", "Curso guardado correctamente.")
+        show_info(self, "Éxito", "Curso guardado correctamente.")
 
     def on_actualizar(self):
         self.ensure_loaded()
 
         materia_cod = self._selected_id()
         if not materia_cod:
-            messagebox.showwarning("Actualizar", "Seleccione un curso del listado para actualizar.")
+            show_warning(self, "Actualizar", "Seleccione un curso del listado para actualizar.")
             return
 
         desc = self.vars["Descripcion"].get().strip()
         prog_desc = self.vars["Programa"].get().strip()
+        precio_txt = self.vars["Precio"].get().strip()
         est_desc = self.vars["Estado"].get().strip()
 
+        if not desc:
+            show_warning(self, "Validación", "La descripción es requerida.")
+            return
+
         if prog_desc not in self.programa_desc_to_cod:
-            messagebox.showwarning("Validación", "Programa inválido.")
+            show_warning(self, "Validación", "Programa inválido.")
             return
         if est_desc not in self.estado_desc_to_cod:
-            messagebox.showwarning("Validación", "Estado inválido.")
+            show_warning(self, "Validación", "Estado inválido.")
             return
 
         try:
@@ -291,38 +326,33 @@ class CursosTab(MaintenanceTab):
                 materia_cod=materia_cod,
                 descripcion=desc,
                 curso_cod=self.programa_desc_to_cod[prog_desc],
+                precio=precio_txt,
                 estado_codigo=self.estado_desc_to_cod[est_desc],
             )
-        except ValidationError as ve:
-            messagebox.showwarning("Validación", str(ve))
-            return
         except Exception as e:
-            messagebox.showerror("DB", f"No se pudo actualizar el curso:\n{e}")
+            handle_exception(self, e, context="Actualizar curso")
             return
 
         self.refresh_grid()
-        messagebox.showinfo("Éxito", "Curso actualizado correctamente.")
+        show_info(self, "Éxito", "Curso actualizado correctamente.")
 
     def on_eliminar(self):
         self.ensure_loaded()
 
         materia_cod = self._selected_id()
         if not materia_cod:
-            messagebox.showwarning("Eliminar", "Seleccione un curso del listado para eliminar.")
+            show_warning(self, "Eliminar", "Seleccione un curso del listado para eliminar.")
             return
 
-        if not messagebox.askyesno("Confirmar", f"¿Eliminar el curso ID {materia_cod}?"):
+        if not show_confirm(self, "Confirmar", f"¿Pasar a INACTIVO el curso ID {materia_cod}?"):
             return
 
         try:
             eliminar_curso(self.db_user, self.db_pass, materia_cod)
-        except ValidationError as ve:
-            messagebox.showwarning("Validación", str(ve))
-            return
         except Exception as e:
-            messagebox.showerror("DB", f"No se pudo eliminar el curso:\n{e}")
+            handle_exception(self, e, context="Eliminar curso")
             return
 
         self.refresh_grid()
         self.on_nuevo()
-        messagebox.showinfo("Éxito", "Curso eliminado correctamente.")
+        show_info(self, "Éxito", "Curso pasado a INACTIVO correctamente.")

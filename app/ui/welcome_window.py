@@ -5,7 +5,11 @@ import os
 import tkinter as tk
 from tkinter import ttk, messagebox
 
-from app.ui.main_menu import run_main_menu
+from app.ui.views.main_menu_view import MainMenuView
+from app.core.db import connect
+from app.repositories.usuarios_repo import existe_usuario_en_tabla, get_codigo_usuario
+from app.repositories.auditoria_repo import insert_auditoria
+from app.core.auditoria import Mov
 
 # Pillow (para .jpg)
 try:
@@ -22,7 +26,6 @@ class WelcomeWindow(tk.Tk):
         self.title("Sistema de Gestión Académica – Bienvenida")
         self.minsize(1100, 650)
 
-       
         style = ttk.Style(self)
         try:
             style.theme_use("clam")
@@ -37,30 +40,66 @@ class WelcomeWindow(tk.Tk):
         style.configure("W.Left.TFrame", background=self.bg_left)
         style.configure("W.Right.TFrame", background=self.bg_right)
 
-        style.configure("W.Title.TLabel", background=self.bg_left, foreground="white",
-                        font=("Segoe UI", 18, "bold"))
-        style.configure("W.Sub.TLabel", background=self.bg_left, foreground=self.text_soft,
-                        font=("Segoe UI", 10))
+        style.configure(
+            "W.Title.TLabel",
+            background=self.bg_left,
+            foreground="white",
+            font=("Segoe UI", 18, "bold"),
+        )
+        style.configure(
+            "W.Sub.TLabel",
+            background=self.bg_left,
+            foreground=self.text_soft,
+            font=("Segoe UI", 10),
+        )
 
-        style.configure("W.Header.TLabel", background=self.bg_right, foreground="#1f2a35",
-                        font=("Segoe UI", 18, "bold"))
-        style.configure("W.Text.TLabel", background=self.bg_right, foreground="#3a4b5c",
-                        font=("Segoe UI", 11))
+        style.configure(
+            "W.Header.TLabel",
+            background=self.bg_right,
+            foreground="#1f2a35",
+            font=("Segoe UI", 18, "bold"),
+        )
+        style.configure(
+            "W.Text.TLabel",
+            background=self.bg_right,
+            foreground="#3a4b5c",
+            font=("Segoe UI", 11),
+        )
 
         style.configure("Card.TLabelframe", background="white")
-        style.configure("Card.TLabelframe.Label", background="white", foreground="#1f2a35",
-                        font=("Segoe UI", 10, "bold"))
-        style.configure("Card.TLabel", background="white", foreground="#1f2a35",
-                        font=("Segoe UI", 10))
+        style.configure(
+            "Card.TLabelframe.Label",
+            background="white",
+            foreground="#1f2a35",
+            font=("Segoe UI", 10, "bold"),
+        )
+        style.configure(
+            "Card.TLabel",
+            background="white",
+            foreground="#1f2a35",
+            font=("Segoe UI", 10),
+        )
 
         # Login panel style
         style.configure("LP.TFrame", background="white")
-        style.configure("LP.Title.TLabel", background="white", foreground="#1f2a35",
-                        font=("Segoe UI", 14, "bold"))
-        style.configure("LP.Sub.TLabel", background="white", foreground="#506070",
-                        font=("Segoe UI", 10))
-        style.configure("LP.Field.TLabel", background="white", foreground="#1f2a35",
-                        font=("Segoe UI", 10, "bold"))
+        style.configure(
+            "LP.Title.TLabel",
+            background="white",
+            foreground="#1f2a35",
+            font=("Segoe UI", 14, "bold"),
+        )
+        style.configure(
+            "LP.Sub.TLabel",
+            background="white",
+            foreground="#506070",
+            font=("Segoe UI", 10),
+        )
+        style.configure(
+            "LP.Field.TLabel",
+            background="white",
+            foreground="#1f2a35",
+            font=("Segoe UI", 10, "bold"),
+        )
 
         self._build_ui()
 
@@ -76,14 +115,15 @@ class WelcomeWindow(tk.Tk):
         left.grid(row=0, column=0, sticky="nsew")
         left.grid_propagate(False)
 
-        ttk.Label(left, text="Gestión Académica", style="W.Title.TLabel")\
-            .grid(row=0, column=0, sticky="w", padx=24, pady=(28, 6))
+        ttk.Label(left, text="Gestión Académica", style="W.Title.TLabel").grid(
+            row=0, column=0, sticky="w", padx=24, pady=(28, 6)
+        )
 
         ttk.Label(
             left,
             text="Plataforma administrativa para\nDocentes, Estudiantes, Cursos y Programas.",
             style="W.Sub.TLabel",
-            justify="left"
+            justify="left",
         ).grid(row=1, column=0, sticky="w", padx=24, pady=(0, 18))
 
         # “Estado del sistema” (informativo)
@@ -101,7 +141,7 @@ class WelcomeWindow(tk.Tk):
         status_line("Modo", "Académico")
         status_line("Versión", "1.0")
 
-        # Botón iniciar sesión 
+        # Botón iniciar sesión
         btn_login = tk.Button(
             left,
             text="Iniciar sesión",
@@ -119,7 +159,7 @@ class WelcomeWindow(tk.Tk):
         )
         btn_login.grid(row=3, column=0, sticky="ew", padx=24, pady=(6, 10))
 
-        # Salir
+        # Salir (cierra TODO el programa)
         btn_exit = tk.Button(
             left,
             text="Salir",
@@ -145,24 +185,25 @@ class WelcomeWindow(tk.Tk):
         right.columnconfigure(0, weight=1)
         right.rowconfigure(0, weight=1)
 
-        wrap = tk.Frame(right, bg=self.bg_right)
-        wrap.grid(row=0, column=0, sticky="nsew", padx=22, pady=22)
-        wrap.columnconfigure(0, weight=1)
-        wrap.rowconfigure(2, weight=1)
+        self.wrap = tk.Frame(right, bg=self.bg_right)
+        self.wrap.grid(row=0, column=0, sticky="nsew", padx=22, pady=22)
+        self.wrap.columnconfigure(0, weight=1)
+        self.wrap.rowconfigure(0, weight=1)
 
-        # Contenido informativo (lo dejamos tal cual)
-        self.info_wrap = tk.Frame(wrap, bg=self.bg_right)
+        # Contenido informativo (Welcome)
+        self.info_wrap = tk.Frame(self.wrap, bg=self.bg_right)
         self.info_wrap.grid(row=0, column=0, sticky="nsew")
         self.info_wrap.columnconfigure(0, weight=1)
         self.info_wrap.rowconfigure(2, weight=1)
 
-        ttk.Label(self.info_wrap, text="Bienvenido al Sistema Administrativo", style="W.Header.TLabel")\
-            .grid(row=0, column=0, sticky="ew", pady=(0, 6))
+        ttk.Label(self.info_wrap, text="Bienvenido al Sistema Administrativo", style="W.Header.TLabel").grid(
+            row=0, column=0, sticky="ew", pady=(0, 6)
+        )
 
         ttk.Label(
             self.info_wrap,
             text="Seleccione “Iniciar sesión” para acceder al menú principal.",
-            style="W.Text.TLabel"
+            style="W.Text.TLabel",
         ).grid(row=1, column=0, sticky="ew", pady=(0, 14))
 
         cards = tk.Frame(self.info_wrap, bg=self.bg_right)
@@ -180,19 +221,25 @@ class WelcomeWindow(tk.Tk):
             text="© Proyecto Académico – CUC",
             bg=self.bg_right,
             fg="#667788",
-            font=("Segoe UI", 9)
+            font=("Segoe UI", 9),
         ).grid(row=3, column=0, sticky="w", pady=(14, 0))
 
-        # Panel Login 
+        # Panel Login (overlay embebido)
         self.login_panel = LoginPanel(
-            parent=wrap,
-            on_success=self._open_main_menu_fullscreen,
-            on_cancel=self.hide_login_panel
+            parent=self.wrap,
+            on_success=self._open_main_menu_embedded,
+            on_cancel=self.hide_login_panel,
         )
         self.login_panel.place_forget()
         self._login_open = False
 
-        # para que el panel calcule posiciones
+        # Main menu embebido (overlay, oculto)
+        self.main_menu_view: MainMenuView | None = None
+        # Capa full-screen para "pantallas" (MainMenu)
+        self.main_layer = tk.Frame(self, bg=self.bg_right)
+        self.main_layer.place_forget()
+
+        # Para que el panel calcule posiciones
         self.after(50, lambda: None)
 
     def _card(self, parent, r, c, title, desc):
@@ -210,10 +257,8 @@ class WelcomeWindow(tk.Tk):
             self.show_login_panel()
 
     def show_login_panel(self):
-        
         self._login_open = True
 
-        # Tamaño y animación
         self.update_idletasks()
         parent = self.login_panel.master  # wrap
         pw = parent.winfo_width()
@@ -222,7 +267,7 @@ class WelcomeWindow(tk.Tk):
         panel_w = 420
         panel_h = ph
 
-        start_x = pw 
+        start_x = pw
         end_x = max(0, pw - panel_w)
 
         self.login_panel.place(x=start_x, y=0, width=panel_w, height=panel_h)
@@ -231,8 +276,10 @@ class WelcomeWindow(tk.Tk):
 
         self._slide(self.login_panel, start_x, end_x, step=28)
 
-    def hide_login_panel(self):
+    def hide_login_panel(self, on_done=None):
         if not self._login_open:
+            if on_done:
+                on_done()
             return
 
         self.update_idletasks()
@@ -245,6 +292,8 @@ class WelcomeWindow(tk.Tk):
         def after_hide():
             self.login_panel.place_forget()
             self._login_open = False
+            if on_done:
+                on_done()
 
         self._slide(self.login_panel, current_x, end_x, step=32, on_done=after_hide)
 
@@ -265,15 +314,67 @@ class WelcomeWindow(tk.Tk):
         tick(x_from)
 
     # -----------------------------
-    #  Main menu fullscreen
+    #  MainMenu embebido (overlay)
     # -----------------------------
-    def _open_main_menu_fullscreen(self, usuario: str, contra: str):
+    def _open_main_menu_embedded(self, usuario: str, contra: str, codigo_usuario: int):
         """
-        Credenciales validadas -> abre main_menu en pantalla completa.
-        NOTA: En tu proyecto, usuario/contra son credenciales para SQL Server (db_user/db_pass).
+        Login OK -> mostrar MainMenuView embebido ocupando TODA la ventana (fullscreen overlay).
         """
-        self.destroy()
-        run_main_menu(usuario=usuario, db_user=usuario, db_pass=contra)
+        def _after_login_hidden():
+            self.update_idletasks()
+            w = self.winfo_width()
+            h = self.winfo_height()
+            try:
+                self.state("zoomed")
+            except Exception:
+                pass
+            self.update_idletasks()
+
+            # Preparar overlay fullscreen
+            start_x = w
+            end_x = 0
+
+            self.main_layer.place(x=start_x, y=0, width=w, height=h)
+            self.main_layer.lift()
+
+            if self.main_menu_view is None:
+                self.main_menu_view = MainMenuView(
+                    parent=self.main_layer,      
+                    usuario=usuario,
+                    db_user=usuario,
+                    db_pass=contra,
+                    codigo_usuario=codigo_usuario,
+                    on_exit_request=self._on_main_menu_exit_request
+                    
+                )
+                self.main_menu_view.pack(fill="both", expand=True)
+            else:
+                # Si ya existe, solo refrescar usuario/cred si lo querés (opcional)
+                # Por ahora lo dejamos tal cual.
+                pass
+
+            # Animación: mover la capa completa (no el view)
+            self._slide(self.main_layer, start_x, end_x, step=40)
+
+        self.hide_login_panel(on_done=_after_login_hidden)
+
+    def _on_main_menu_exit_request(self, salir_todo: bool):
+        if salir_todo:
+            self.destroy()
+            return
+
+        # NO: animar salida del overlay y volver al welcome
+        self.update_idletasks()
+        w = self.winfo_width()
+
+        current_x = self.main_layer.winfo_x()
+        end_x = w
+
+        def _done():
+            self.main_layer.place_forget()
+            # Welcome queda visible debajo automáticamente
+
+        self._slide(self.main_layer, current_x, end_x, step=44, on_done=_done)
 
 
 class LoginPanel(ttk.Frame):
@@ -282,6 +383,7 @@ class LoginPanel(ttk.Frame):
     - UI renovada pero coherente con tu estética.
     - Avatar automático según usuario escrito.
     """
+
     def __init__(self, parent, on_success, on_cancel):
         super().__init__(parent, style="LP.TFrame")
 
@@ -325,8 +427,9 @@ class LoginPanel(ttk.Frame):
         header.columnconfigure(0, weight=1)
 
         ttk.Label(header, text="Iniciar sesión", style="LP.Title.TLabel").grid(row=0, column=0, sticky="w")
-        ttk.Label(header, text="Ingrese sus credenciales para continuar.", style="LP.Sub.TLabel")\
-            .grid(row=1, column=0, sticky="w", pady=(2, 0))
+        ttk.Label(header, text="Ingrese sus credenciales para continuar.", style="LP.Sub.TLabel").grid(
+            row=1, column=0, sticky="w", pady=(2, 0)
+        )
 
         sep = ttk.Separator(card)
         sep.grid(row=1, column=0, sticky="ew", padx=16, pady=(4, 12))
@@ -353,7 +456,7 @@ class LoginPanel(ttk.Frame):
             text="Tip: al escribir el usuario, la foto se carga automáticamente.",
             bg="white",
             fg="#6a7a8a",
-            font=("Segoe UI", 9)
+            font=("Segoe UI", 9),
         )
         tip.grid(row=3, column=0, sticky="w", padx=16, pady=(6, 10))
 
@@ -408,10 +511,8 @@ class LoginPanel(ttk.Frame):
         key = (username or "").strip().lower()
         if not key:
             return self._avatar_index.get("default")
-        # match directo
         if key in self._avatar_index:
             return self._avatar_index[key]
-        # match flexible 
         for stem, path in self._avatar_index.items():
             if stem != "default" and stem.startswith(key):
                 return path
@@ -423,12 +524,10 @@ class LoginPanel(ttk.Frame):
             self.lbl_avatar.configure(image="", text="")
             return
 
-        
         if Image is None or ImageTk is None:
             if path.lower().endswith(".png"):
                 try:
                     img = tk.PhotoImage(file=path)
-                    # No resize 
                     self._avatar_img = img
                     self.lbl_avatar.configure(image=img)
                 except Exception:
@@ -437,12 +536,11 @@ class LoginPanel(ttk.Frame):
                 self.lbl_avatar.configure(image="", text="")
             return
 
-        # Con Pillow: soporta JPG/PNG + resize 
         try:
             im = Image.open(path).convert("RGBA")
             im = im.resize((120, 120))
             img = ImageTk.PhotoImage(im)
-            self._avatar_img = img  # keep ref
+            self._avatar_img = img
             self.lbl_avatar.configure(image=img)
         except Exception:
             self.lbl_avatar.configure(image="", text="")
@@ -455,8 +553,45 @@ class LoginPanel(ttk.Frame):
             messagebox.showwarning("Validación", "Debe ingresar usuario y contraseña.")
             return
 
+        # Validación real contra SQL + tabla dbo.Usuarios
+        try:
+            conn = connect(u, p)
+        except Exception as e:
+            # No hay conexión -> no se puede registrar auditoría con ese usuario.
+            messagebox.showerror("Login", f"No fue posible conectar a SQL Server.\n\nDetalle: {e}")
+            return
 
-        self.on_success(u, p)
+        try:
+            codigo_usuario = get_codigo_usuario(conn, u)
+            if codigo_usuario is None:
+                messagebox.showerror("Login", "El usuario existe, pero no tiene Codigo_Usuario en dbo.Usuarios.")
+                return
+            if not existe_usuario_en_tabla(conn, u):
+                # Conecta pero no existe en dbo.Usuarios
+                try:
+                    insert_auditoria(conn, codigo_usuario=codigo_usuario, movimiento_cod=Mov.LOGIN_FAIL)
+                except Exception:
+                    pass
+                messagebox.showerror(
+                    "Login",
+                    "Usuario con permiso en SQL, pero, no registrado en la tabla de la Base de Datos",
+                )
+                return
+
+            # Login OK
+            try:
+                insert_auditoria(conn, codigo_usuario=codigo_usuario, movimiento_cod=Mov.LOGIN_OK)
+            except Exception:
+                # Si falla auditoría no bloqueamos el ingreso.
+                pass
+
+        finally:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+        self.on_success(u, p, codigo_usuario)
 
 
 def run_welcome_window():

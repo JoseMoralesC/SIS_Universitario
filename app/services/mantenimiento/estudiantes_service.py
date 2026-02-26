@@ -1,9 +1,14 @@
 # app/services/estudiantes_service.py
 from __future__ import annotations
 
+import pyodbc
 
-class ValidationError(Exception):
-    pass
+from app.repositories.mantenimiento.estudiantes_repo import (
+    exists_carnet,
+    exists_identificacion,
+)
+
+from app.core.exceptions import ValidationError
 
 
 def validar_estudiante_data(
@@ -37,7 +42,6 @@ def validar_estudiante_data(
     if len(nombre_completo) > 120:
         raise ValidationError("Nombre completo demasiado largo (máximo 120 caracteres).")
 
-    # NULLables
     if direccion == "":
         direccion = None
     if telefono == "":
@@ -61,3 +65,15 @@ def validar_estudiante_data(
         "telefono": telefono,
         "estado_codigo": estado_codigo,
     }
+
+
+def validar_estudiante_unicidad(conn: pyodbc.Connection, *, carnet: str, identificacion: str, exclude_carnet: str | None = None) -> None:
+    carnet = (carnet or "").strip()
+    identificacion = (identificacion or "").strip()
+    exc = (exclude_carnet or "").strip() or None
+
+    if exists_carnet(conn, carnet, exclude_carnet=exc):
+        raise ValidationError("Ya existe un estudiante con ese Carnet.")
+
+    if exists_identificacion(conn, identificacion, exclude_carnet=exc):
+        raise ValidationError("Ya existe un estudiante con esa identificación.")

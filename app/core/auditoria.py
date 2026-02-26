@@ -1,0 +1,37 @@
+# app/core/auditoria.py
+# Códigos de movimiento para dbo.Movimiento_Auditoria
+
+
+class Mov:
+    # Login
+    LOGIN_OK = 1
+    LOGIN_FAIL = 2
+
+    # Matrículas / Facturación (ya existen en tu tabla)
+    MATRICULA_CREADA = 3
+    FACTURA_GENERADA = 4
+
+    
+    DOCENTE_CREADO = 10
+    DOCENTE_ACTUALIZADO = 11
+    DOCENTE_ELIMINADO = 12
+
+    ESTUDIANTE_CREADO = 20
+    ESTUDIANTE_ACTUALIZADO = 21
+    ESTUDIANTE_ELIMINADO = 22
+
+    PROGRAMA_CREADO = 30
+    PROGRAMA_ACTUALIZADO = 31
+    PROGRAMA_ELIMINADO = 32
+
+    CURSO_CREADO = 40
+    CURSO_ACTUALIZADO = 41
+    CURSO_ELIMINADO = 42
+
+    BECA_CREADA = 50
+    BECA_ACTUALIZADA = 51
+    BECA_ELIMINADA = 52
+
+    BECADO_CREADO = 60
+    BECADO_ACTUALIZADO = 61
+    BECADO_ELIMINADO = 62

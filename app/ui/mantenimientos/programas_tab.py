@@ -2,35 +2,53 @@
 from __future__ import annotations
 
 import tkinter as tk
-from tkinter import ttk, messagebox
-
-import tkinter.font as tkfont
+from tkinter import ttk
 
 from app.ui.mantenimientos.base_tab import MaintenanceTab
-from app.endpoints.programas_endpoints import (
+from app.endpoints.mantenimiento.programas_endpoints import (
     get_lookups,
     listar_programas,
     siguiente_curso_cod,
     crear_programa,
     actualizar_programa,
     eliminar_programa,
+    obtener_jornadas_programa,
 )
-from app.services.programas_service import ValidationError
+
+from app.core.error_handler import (
+    handle_exception,
+    show_info,
+    show_warning,
+)
+
+from app.ui.components.confirm_dialog import show_confirm
 
 
 class ProgramasTab(MaintenanceTab):
-    def __init__(self, parent, db_user: str, db_pass: str):
+    def __init__(self, parent, db_user: str, db_pass: str, codigo_usuario: int):
         self.db_user = db_user
         self.db_pass = db_pass
+        self.codigo_usuario = codigo_usuario
 
         self.estado_desc_to_cod: dict[str, int] = {}
         self.estado_cod_to_desc: dict[int, str] = {}
+
+        # Horario Tipo (cantidad de jornadas)
+        self.horario_desc_to_id = {
+            "1 jornada disponible": 1,
+            "2 jornadas disponibles": 2,
+            "3 jornadas disponibles": 3,
+        }
+        self.horario_id_to_desc = {v: k for k, v in self.horario_desc_to_id.items()}
 
         self._loaded = False
 
         super().__init__(parent, "Programas")
         self.reset_view_blank()
 
+    # ------------------------------------------------
+    # LOAD
+    # ------------------------------------------------
     def ensure_loaded(self):
         if getattr(self, "_loaded", False):
             return
@@ -38,15 +56,62 @@ class ProgramasTab(MaintenanceTab):
         self.refresh_grid()
         self._loaded = True
 
-    # -----------------------------
+    # ------------------------------------------------
+    # Helpers
+    # ------------------------------------------------
+    def _get_jornadas_ids(self) -> list[int]:
+        ids: list[int] = []
+        if self.vars["J_Mañana"].get():
+            ids.append(1)
+        if self.vars["J_Tarde"].get():
+            ids.append(2)
+        if self.vars["J_Noche"].get():
+            ids.append(3)
+        return ids
+
+    def _set_jornadas_checks(self, jornadas_ids: list[int] | None):
+        jornadas_ids = jornadas_ids or []
+        self.vars["J_Mañana"].set(1 in jornadas_ids)
+        self.vars["J_Tarde"].set(2 in jornadas_ids)
+        self.vars["J_Noche"].set(3 in jornadas_ids)
+
+    def _normalize_horario_desc(self, value: object) -> str:
+        """
+        Acepta que el repo/grilla traiga:
+        - texto ("2 jornadas disponibles")
+        - o número/str numérica (2 / "2")
+        y lo convierte al texto exacto del combobox.
+        """
+        if value is None:
+            return ""
+
+        s = str(value).strip()
+
+        # Si ya es una de las opciones del combo
+        if s in self.horario_desc_to_id:
+            return s
+
+        # Si viene numérico: 1/2/3
+        try:
+            n = int(s)
+            return self.horario_id_to_desc.get(n, "")
+        except Exception:
+            return ""
+
+    # ------------------------------------------------
     # UI
-    # -----------------------------
+    # ------------------------------------------------
     def _build_form(self, parent: ttk.LabelFrame):
         self.vars["Curso_Cod"] = tk.StringVar(value="")
         self.vars["Descripcion"] = tk.StringVar(value="")
-        self.vars["Horario"] = tk.StringVar(value="")
+        self.vars["Horario_Tipo"] = tk.StringVar(value="")
         self.vars["Precio_Matricula"] = tk.StringVar(value="")
         self.vars["Estado"] = tk.StringVar(value="")
+
+        # Jornadas
+        self.vars["J_Mañana"] = tk.BooleanVar(value=False)
+        self.vars["J_Tarde"] = tk.BooleanVar(value=False)
+        self.vars["J_Noche"] = tk.BooleanVar(value=False)
 
         r = 0
 
@@ -61,14 +126,42 @@ class ProgramasTab(MaintenanceTab):
 
         add_entry("ID", "Curso_Cod", readonly=True)
         add_entry("Descripción", "Descripcion")
-        add_entry("Horario", "Horario")
+
+        ttk.Label(parent, text="Horario:").grid(row=r, column=0, sticky="w", pady=6)
+        self.cb_horario = ttk.Combobox(
+            parent,
+            textvariable=self.vars["Horario_Tipo"],
+            state="readonly",
+            width=26,
+        )
+        self.cb_horario["values"] = list(self.horario_desc_to_id.keys())
+        self.cb_horario.grid(row=r, column=1, sticky="ew", padx=(10, 0), pady=6)
+        r += 1
+
+        ttk.Label(parent, text="Jornadas:").grid(row=r, column=0, sticky="w", pady=6)
+        wrap = ttk.Frame(parent)
+        wrap.grid(row=r, column=1, sticky="w", padx=(10, 0), pady=6)
+
+        ttk.Checkbutton(wrap, text="Mañana", variable=self.vars["J_Mañana"]).grid(row=0, column=0, padx=(0, 10))
+        ttk.Checkbutton(wrap, text="Tarde", variable=self.vars["J_Tarde"]).grid(row=0, column=1, padx=(0, 10))
+        ttk.Checkbutton(wrap, text="Noche", variable=self.vars["J_Noche"]).grid(row=0, column=2)
+        r += 1
+
         add_entry("Precio Matrícula", "Precio_Matricula")
 
         ttk.Label(parent, text="Estado:").grid(row=r, column=0, sticky="w", pady=6)
-        self.cb_estado = ttk.Combobox(parent, textvariable=self.vars["Estado"], state="readonly", width=26)
+        self.cb_estado = ttk.Combobox(
+            parent,
+            textvariable=self.vars["Estado"],
+            state="readonly",
+            width=26,
+        )
         self.cb_estado.grid(row=r, column=1, sticky="ew", padx=(10, 0), pady=6)
         r += 1
 
+    # ------------------------------------------------
+    # GRID
+    # ------------------------------------------------
     def _build_grid(self, parent: ttk.LabelFrame):
         parent.rowconfigure(0, weight=1)
         parent.columnconfigure(0, weight=1)
@@ -76,7 +169,7 @@ class ProgramasTab(MaintenanceTab):
         cols = ("ID", "Descripción", "Horario", "Precio", "Estado")
         self.tree = ttk.Treeview(parent, columns=cols, show="headings")
 
-        base_widths = {"ID": 60, "Descripción": 240, "Horario": 140, "Precio": 110, "Estado": 100}
+        base_widths = {"ID": 60, "Descripción": 240, "Horario": 180, "Precio": 110, "Estado": 120}
         for c in cols:
             self.tree.heading(c, text=c)
             self.tree.column(c, width=base_widths.get(c, 140), anchor="w", stretch=True)
@@ -92,36 +185,22 @@ class ProgramasTab(MaintenanceTab):
 
         self.tree.bind("<<TreeviewSelect>>", self.on_row_select)
 
-    def _autosize_columns(self):
-        if not self.tree:
-            return
-        font = tkfont.nametofont("TkDefaultFont")
-        for col in self.tree["columns"]:
-            max_w = font.measure(col) + 20
-            for item in self.tree.get_children():
-                v = self.tree.set(item, col)
-                w = font.measure(str(v)) + 20
-                if w > max_w:
-                    max_w = w
-            if col == "ID":
-                max_w = min(max_w, 70)
-            else:
-                max_w = min(max_w, 380)
-            self.tree.column(col, width=max_w)
-
-    # -----------------------------
-    # blank/reset + data
-    # -----------------------------
+    # ------------------------------------------------
+    # DATA
+    # ------------------------------------------------
     def reset_view_blank(self):
         self.vars["Curso_Cod"].set("")
         self.vars["Descripcion"].set("")
-        self.vars["Horario"].set("")
+        self.vars["Horario_Tipo"].set("")
         self.vars["Precio_Matricula"].set("")
+        self._set_jornadas_checks([])
+
         try:
             self.cb_estado["values"] = []
         except Exception:
             pass
         self.vars["Estado"].set("")
+
         if self.tree:
             for it in self.tree.get_children():
                 self.tree.delete(it)
@@ -130,7 +209,7 @@ class ProgramasTab(MaintenanceTab):
         try:
             estados = get_lookups(self.db_user, self.db_pass)
         except Exception as e:
-            messagebox.showerror("DB", f"No se pudieron cargar estados:\n{e}")
+            handle_exception(self, e, context="Cargar estados (Programas)")
             estados = []
 
         self.estado_desc_to_cod = {desc: cod for cod, desc in estados}
@@ -143,25 +222,25 @@ class ProgramasTab(MaintenanceTab):
     def refresh_grid(self):
         if not self.tree:
             return
+
         for it in self.tree.get_children():
             self.tree.delete(it)
+
         try:
-            rows = listar_programas(self.db_user, self.db_pass)
+            rows = listar_programas(self.db_user, self.db_pass, codigo_usuario=self.codigo_usuario)
         except Exception as e:
-            messagebox.showerror("DB", f"No se pudo cargar Programas:\n{e}")
+            handle_exception(self, e, context="Cargar programas")
             return
 
         for r in rows:
-            # (Curso_Cod, Descripcion, Horario, Precio_Matricula, Estado_Desc)
-            self.tree.insert("", "end", values=(r[0], r[1], r[2], str(r[3]), r[4]))
+            horario_desc = self._normalize_horario_desc(r[2])
+            self.tree.insert("", "end", values=(r[0], r[1], horario_desc, str(r[3]), r[4]))
 
-        self._autosize_columns()
-
-    # -----------------------------
-    # selection
-    # -----------------------------
+    # ------------------------------------------------
+    # SELECTION
+    # ------------------------------------------------
     def _selected_id(self) -> int | None:
-        sel = self.tree.selection() if self.tree else []
+        sel = self.tree.selection()
         if not sel:
             return None
         values = self.tree.item(sel[0], "values")
@@ -171,49 +250,72 @@ class ProgramasTab(MaintenanceTab):
             return None
 
     def on_row_select(self, _evt=None):
-        sel = self.tree.selection() if self.tree else []
+        sel = self.tree.selection()
         if not sel:
             return
+
         v = self.tree.item(sel[0], "values")
+
         self.vars["Curso_Cod"].set(str(v[0]))
         self.vars["Descripcion"].set(str(v[1]))
-        self.vars["Horario"].set("" if v[2] is None else str(v[2]))
+        self.vars["Horario_Tipo"].set(self._normalize_horario_desc(v[2]))
         self.vars["Precio_Matricula"].set(str(v[3]))
         self.vars["Estado"].set(str(v[4]))
 
-    # -----------------------------
+        # Cargar jornadas reales desde DB
+        try:
+            jornadas_ids = obtener_jornadas_programa(
+                self.db_user,
+                self.db_pass,
+                int(v[0]),
+                codigo_usuario=self.codigo_usuario,
+            )
+        except Exception as e:
+            handle_exception(self, e, context="Cargar jornadas del programa")
+            jornadas_ids = []
+        self._set_jornadas_checks(jornadas_ids)
+
+    # ------------------------------------------------
     # CRUD
-    # -----------------------------
+    # ------------------------------------------------
     def on_nuevo(self):
         self.ensure_loaded()
         try:
-            new_id = siguiente_curso_cod(self.db_user, self.db_pass)
+            new_id = siguiente_curso_cod(self.db_user, self.db_pass, codigo_usuario=self.codigo_usuario)
             self.vars["Curso_Cod"].set(str(new_id))
         except Exception as e:
-            messagebox.showerror("DB", f"No se pudo obtener el siguiente ID:\n{e}")
+            handle_exception(self, e, context="Generar ID (Programas)")
             self.vars["Curso_Cod"].set("")
 
         self.vars["Descripcion"].set("")
-        self.vars["Horario"].set("")
+        self.vars["Horario_Tipo"].set("")
         self.vars["Precio_Matricula"].set("")
+        self._set_jornadas_checks([])
+
         if self.cb_estado["values"]:
             self.vars["Estado"].set(self.cb_estado["values"][0])
 
-        if self.tree:
-            self.tree.selection_remove(self.tree.selection())
+        self.tree.selection_remove(self.tree.selection())
 
     def on_guardar(self):
         self.ensure_loaded()
 
         id_txt = self.vars["Curso_Cod"].get().strip()
         if not id_txt.isdigit():
-            messagebox.showwarning("Validación", "Debe presionar 'Nuevo' para generar el ID antes de guardar.")
+            show_warning(self, "Validación", "Debe presionar 'Nuevo' para generar el ID antes de guardar.")
             return
 
         estado_desc = self.vars["Estado"].get().strip()
+        horario_desc = self.vars["Horario_Tipo"].get().strip()
+
         if estado_desc not in self.estado_desc_to_cod:
-            messagebox.showwarning("Validación", "Estado inválido.")
+            show_warning(self, "Validación", "Estado inválido.")
             return
+
+        # Normalizar por si quedó "1"/"2"/"3"
+        horario_desc = self._normalize_horario_desc(horario_desc)
+        horario_id = self.horario_desc_to_id.get(horario_desc)
+        jornadas_ids = self._get_jornadas_ids()
 
         try:
             crear_programa(
@@ -221,32 +323,37 @@ class ProgramasTab(MaintenanceTab):
                 self.db_pass,
                 curso_cod=int(id_txt),
                 descripcion=self.vars["Descripcion"].get(),
-                horario=self.vars["Horario"].get(),
+                horario_tipo_id=horario_id,
+                jornadas_ids=jornadas_ids,
                 precio_matricula=self.vars["Precio_Matricula"].get(),
                 estado_codigo=self.estado_desc_to_cod[estado_desc],
+                codigo_usuario=self.codigo_usuario,
             )
-        except ValidationError as ve:
-            messagebox.showwarning("Validación", str(ve))
-            return
         except Exception as e:
-            messagebox.showerror("DB", f"No se pudo guardar el programa:\n{e}")
+            handle_exception(self, e, context="Guardar programa")
             return
 
         self.refresh_grid()
         self.on_nuevo()
-        messagebox.showinfo("Éxito", "Programa guardado correctamente.")
+        show_info(self, "Éxito", "Programa guardado correctamente.")
 
     def on_actualizar(self):
         self.ensure_loaded()
         curso_cod = self._selected_id()
         if not curso_cod:
-            messagebox.showwarning("Actualizar", "Seleccione un programa del listado para actualizar.")
+            show_warning(self, "Actualizar", "Seleccione un programa del listado para actualizar.")
             return
 
         estado_desc = self.vars["Estado"].get().strip()
+        horario_desc = self.vars["Horario_Tipo"].get().strip()
+
         if estado_desc not in self.estado_desc_to_cod:
-            messagebox.showwarning("Validación", "Estado inválido.")
+            show_warning(self, "Validación", "Estado inválido.")
             return
+
+        horario_desc = self._normalize_horario_desc(horario_desc)
+        horario_id = self.horario_desc_to_id.get(horario_desc)
+        jornadas_ids = self._get_jornadas_ids()
 
         try:
             actualizar_programa(
@@ -254,39 +361,35 @@ class ProgramasTab(MaintenanceTab):
                 self.db_pass,
                 curso_cod=curso_cod,
                 descripcion=self.vars["Descripcion"].get(),
-                horario=self.vars["Horario"].get(),
+                horario_tipo_id=horario_id,
+                jornadas_ids=jornadas_ids,
                 precio_matricula=self.vars["Precio_Matricula"].get(),
                 estado_codigo=self.estado_desc_to_cod[estado_desc],
+                codigo_usuario=self.codigo_usuario,
             )
-        except ValidationError as ve:
-            messagebox.showwarning("Validación", str(ve))
-            return
         except Exception as e:
-            messagebox.showerror("DB", f"No se pudo actualizar el programa:\n{e}")
+            handle_exception(self, e, context="Actualizar programa")
             return
 
         self.refresh_grid()
-        messagebox.showinfo("Éxito", "Programa actualizado correctamente.")
+        show_info(self, "Éxito", "Programa actualizado correctamente.")
 
     def on_eliminar(self):
         self.ensure_loaded()
         curso_cod = self._selected_id()
         if not curso_cod:
-            messagebox.showwarning("Eliminar", "Seleccione un programa del listado para eliminar.")
+            show_warning(self, "Eliminar", "Seleccione un programa del listado para eliminar.")
             return
 
-        if not messagebox.askyesno("Confirmar", f"¿Eliminar el programa ID {curso_cod}?"):
+        if not show_confirm(self, "Confirmar", f"¿Pasar a INACTIVO el programa ID {curso_cod}?"):
             return
 
         try:
-            eliminar_programa(self.db_user, self.db_pass, curso_cod)
-        except ValidationError as ve:
-            messagebox.showwarning("Validación", str(ve))
-            return
+            eliminar_programa(self.db_user, self.db_pass, curso_cod, codigo_usuario=self.codigo_usuario)
         except Exception as e:
-            messagebox.showerror("DB", f"No se pudo eliminar el programa:\n{e}")
+            handle_exception(self, e, context="Eliminar programa")
             return
 
         self.refresh_grid()
         self.on_nuevo()
-        messagebox.showinfo("Éxito", "Programa eliminado correctamente.")
+        show_info(self, "Éxito", "Programa pasado a INACTIVO correctamente.")

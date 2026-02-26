@@ -2,24 +2,33 @@
 from __future__ import annotations
 
 import tkinter as tk
-from tkinter import ttk, messagebox
 import tkinter.font as tkfont
+from tkinter import ttk
 
 from app.ui.mantenimientos.base_tab import MaintenanceTab
-from app.endpoints.estudiantes_endpoints import (
+from app.endpoints.mantenimiento.estudiantes_endpoints import (
     get_lookups,
     listar_estudiantes,
+    siguiente_carnet,
     crear_estudiante,
     actualizar_estudiante,
     eliminar_estudiante,
 )
-from app.services.estudiantes_service import ValidationError
+
+from app.core.error_handler import (
+    handle_exception,
+    show_info,
+    show_warning,
+)
+
+from app.ui.components.confirm_dialog import show_confirm
 
 
 class EstudiantesTab(MaintenanceTab):
-    def __init__(self, parent, db_user: str, db_pass: str):
+    def __init__(self, parent, db_user: str, db_pass: str, codigo_usuario: int):
         self.db_user = db_user
         self.db_pass = db_pass
+        self.codigo_usuario = codigo_usuario
 
         self.estado_desc_to_cod: dict[str, int] = {}
         self.estado_cod_to_desc: dict[int, str] = {}
@@ -49,16 +58,19 @@ class EstudiantesTab(MaintenanceTab):
 
         r = 0
 
-        def add_entry(label: str, key: str):
+        def add_entry(label: str, key: str, readonly: bool = False):
             nonlocal r
             ttk.Label(parent, text=f"{label}:").grid(row=r, column=0, sticky="w", pady=6)
             ent = ttk.Entry(parent, textvariable=self.vars[key])
             ent.grid(row=r, column=1, sticky="ew", padx=(10, 0), pady=6)
+            if readonly:
+                ent.state(["readonly"])
             r += 1
             return ent
 
-        # Carnet: editable en Nuevo, readonly al seleccionar
-        self.ent_carnet = add_entry("Carnet", "Carnet")
+        # Carnet: SIEMPRE readonly (se autogenera con "Nuevo")
+        self.ent_carnet = add_entry("Carnet", "Carnet", readonly=True)
+
         add_entry("Identificación", "Identificacion")
         add_entry("Nombre Completo", "Nombre_Completo")
         add_entry("Dirección", "Direccion")
@@ -87,7 +99,6 @@ class EstudiantesTab(MaintenanceTab):
 
         for c in cols:
             self.tree.heading(c, text=c)
-            
             self.tree.column(c, width=base_widths.get(c, 140), anchor="w", stretch=True)
 
         vsb = ttk.Scrollbar(parent, orient="vertical", command=self.tree.yview)
@@ -112,7 +123,6 @@ class EstudiantesTab(MaintenanceTab):
                 if w > max_w:
                     max_w = w
 
-            # límites
             if col == "Carnet":
                 max_w = min(max_w, 140)
             elif col in ("Teléfono", "Estado"):
@@ -138,18 +148,16 @@ class EstudiantesTab(MaintenanceTab):
             pass
         self.vars["Estado"].set("")
 
-        if getattr(self, "ent_carnet", None) is not None:
-            self.ent_carnet.state(["!readonly"])
-
         if self.tree:
             for it in self.tree.get_children():
                 self.tree.delete(it)
 
     def _load_lookups(self):
         try:
+            # ✅ FIX: el endpoint solo recibe (db_user, db_pass)
             estados = get_lookups(self.db_user, self.db_pass)
         except Exception as e:
-            messagebox.showerror("DB", f"No se pudieron cargar estados:\n{e}")
+            handle_exception(self, e, context="Cargar estados (Estudiantes)")
             estados = []
 
         self.estado_desc_to_cod = {desc: cod for cod, desc in estados}
@@ -166,13 +174,12 @@ class EstudiantesTab(MaintenanceTab):
             self.tree.delete(it)
 
         try:
-            rows = listar_estudiantes(self.db_user, self.db_pass)
+            rows = listar_estudiantes(self.db_user, self.db_pass, codigo_usuario=self.codigo_usuario)
         except Exception as e:
-            messagebox.showerror("DB", f"No se pudo cargar Estudiantes:\n{e}")
+            handle_exception(self, e, context="Cargar estudiantes")
             return
 
         for r in rows:
-            # (Carnet, Identificacion, Nombre_Completo, Direccion, Telefono, Estado_Desc)
             self.tree.insert("", "end", values=(r[0], r[1], r[2], r[3] or "", r[4] or "", r[5]))
 
         self._autosize_columns()
@@ -205,18 +212,21 @@ class EstudiantesTab(MaintenanceTab):
         self.vars["Telefono"].set(str(v[4]))
         self.vars["Estado"].set(str(v[5]))
 
-        # Carnet readonly al editar existente
-        if getattr(self, "ent_carnet", None) is not None:
-            self.ent_carnet.state(["readonly"])
-
     # -----------------------------
     # CRUD
     # -----------------------------
     def on_nuevo(self):
         self.ensure_loaded()
 
-        # limpiar y habilitar carnet para nuevo
-        self.vars["Carnet"].set("")
+        # Autogenera el carnet (CUC-000X) y lo deja readonly
+        try:
+            # ✅ FIX: el endpoint no recibe codigo_usuario aquí
+            new_carnet = siguiente_carnet(self.db_user, self.db_pass)
+            self.vars["Carnet"].set(str(new_carnet))
+        except Exception as e:
+            handle_exception(self, e, context="Generar Carnet (Estudiantes)")
+            self.vars["Carnet"].set("")
+
         self.vars["Identificacion"].set("")
         self.vars["Nombre_Completo"].set("")
         self.vars["Direccion"].set("")
@@ -224,10 +234,6 @@ class EstudiantesTab(MaintenanceTab):
 
         if self.cb_estado["values"]:
             self.vars["Estado"].set(self.cb_estado["values"][0])
-
-        if getattr(self, "ent_carnet", None) is not None:
-            self.ent_carnet.state(["!readonly"])
-            self.ent_carnet.focus_set()
 
         if self.tree:
             self.tree.selection_remove(self.tree.selection())
@@ -237,42 +243,45 @@ class EstudiantesTab(MaintenanceTab):
 
         estado_desc = self.vars["Estado"].get().strip()
         if estado_desc not in self.estado_desc_to_cod:
-            messagebox.showwarning("Validación", "Estado inválido.")
+            show_warning(self, "Validación", "Estado inválido.")
+            return
+
+        carnet = self.vars["Carnet"].get().strip()
+        if not carnet:
+            show_warning(self, "Validación", "Debe presionar 'Nuevo' para generar el Carnet antes de guardar.")
             return
 
         try:
             crear_estudiante(
                 self.db_user,
                 self.db_pass,
-                carnet=self.vars["Carnet"].get(),
+                carnet=carnet,
                 identificacion=self.vars["Identificacion"].get(),
                 nombre_completo=self.vars["Nombre_Completo"].get(),
                 direccion=self.vars["Direccion"].get(),
                 telefono=self.vars["Telefono"].get(),
                 estado_codigo=self.estado_desc_to_cod[estado_desc],
+                codigo_usuario=self.codigo_usuario,
             )
-        except ValidationError as ve:
-            messagebox.showwarning("Validación", str(ve))
-            return
         except Exception as e:
-            messagebox.showerror("DB", f"No se pudo guardar el estudiante:\n{e}")
+            handle_exception(self, e, context="Guardar estudiante")
             return
 
         self.refresh_grid()
         self.on_nuevo()
-        messagebox.showinfo("Éxito", "Estudiante guardado correctamente.")
+        show_info(self, "Éxito", "Estudiante guardado correctamente.")
 
     def on_actualizar(self):
         self.ensure_loaded()
 
         carnet = self._selected_carnet()
         if not carnet:
-            messagebox.showwarning("Actualizar", "Seleccione un estudiante del listado para actualizar.")
+            show_warning(self, "Actualizar", "Seleccione un estudiante del listado para actualizar.")
             return
 
         estado_desc = self.vars["Estado"].get().strip()
         if estado_desc not in self.estado_desc_to_cod:
-            messagebox.showwarning("Validación", "Estado inválido.")
+            show_warning(self, "Validación", "Estado inválido.")
             return
 
         try:
@@ -285,37 +294,32 @@ class EstudiantesTab(MaintenanceTab):
                 direccion=self.vars["Direccion"].get(),
                 telefono=self.vars["Telefono"].get(),
                 estado_codigo=self.estado_desc_to_cod[estado_desc],
+                codigo_usuario=self.codigo_usuario,
             )
-        except ValidationError as ve:
-            messagebox.showwarning("Validación", str(ve))
-            return
         except Exception as e:
-            messagebox.showerror("DB", f"No se pudo actualizar el estudiante:\n{e}")
+            handle_exception(self, e, context="Actualizar estudiante")
             return
 
         self.refresh_grid()
-        messagebox.showinfo("Éxito", "Estudiante actualizado correctamente.")
+        show_info(self, "Éxito", "Estudiante actualizado correctamente.")
 
     def on_eliminar(self):
         self.ensure_loaded()
 
         carnet = self._selected_carnet()
         if not carnet:
-            messagebox.showwarning("Eliminar", "Seleccione un estudiante del listado para eliminar.")
+            show_warning(self, "Eliminar", "Seleccione un estudiante del listado para eliminar.")
             return
 
-        if not messagebox.askyesno("Confirmar", f"¿Eliminar el estudiante Carnet {carnet}?"):
+        if not show_confirm(self, "Confirmar", f"¿Pasar a INACTIVO el estudiante Carnet {carnet}?"):
             return
 
         try:
-            eliminar_estudiante(self.db_user, self.db_pass, carnet)
-        except ValidationError as ve:
-            messagebox.showwarning("Validación", str(ve))
-            return
+            eliminar_estudiante(self.db_user, self.db_pass, carnet, codigo_usuario=self.codigo_usuario)
         except Exception as e:
-            messagebox.showerror("DB", f"No se pudo eliminar el estudiante:\n{e}")
+            handle_exception(self, e, context="Eliminar estudiante")
             return
 
         self.refresh_grid()
         self.on_nuevo()
-        messagebox.showinfo("Éxito", "Estudiante eliminado correctamente.")
+        show_info(self, "Éxito", "Estudiante pasado a INACTIVO correctamente.")

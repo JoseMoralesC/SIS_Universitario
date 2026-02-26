@@ -1,87 +1,65 @@
-# app/ui/main_menu.py
-# Menú Principal + Mantenimientos con fichas.
-# Estructura/Shell
-# Docentes (CRUD REAL) vive en app/ui/mantenimientos/docentes_tab.py con lazy-load.
-
+# app/ui/views/main_menu_view.py
 from __future__ import annotations
 
 import tkinter as tk
-from app.ui.theme import apply_theme
 from tkinter import ttk, messagebox
-from app.ui.mantenimientos.base_tab import MaintenanceTab
+
 from app.ui.mantenimientos.docentes_tab import DocentesTab
 from app.ui.mantenimientos.cursos_tab import CursosTab
 from app.ui.mantenimientos.estudiantes_tab import EstudiantesTab
 from app.ui.mantenimientos.programas_tab import ProgramasTab
 from app.ui.mantenimientos.becas_tab import BecasTab
 from app.ui.mantenimientos.becados_tab import BecadosTab
-from app.ui.theme import apply_theme
 
 
-class MainMenuWindow(tk.Toplevel):
-    def __init__(self, master: tk.Misc, usuario: str | None, db_user: str, db_pass: str, on_back_to_welcome=None):
-        super().__init__(master)
-        apply_theme(self)
-        self._on_back_to_welcome = on_back_to_welcome
+class MainMenuView(ttk.Frame):
+    """
+    Versión embebida del MainMenu.
+    Vive dentro de WelcomeWindow (o cualquier parent Frame).
+    """
+
+    def __init__(self, parent, usuario: str | None, db_user: str, db_pass: str, codigo_usuario: int, on_exit_request=None):
+        super().__init__(parent)
 
         self.usuario = usuario
         self.db_user = db_user
         self.db_pass = db_pass
-
-        self.title("Sistema Administrativo Docente – Menú Moderno")
-        self.minsize(1100, 620)
-
-        style = ttk.Style(self)
-        try:
-            style.theme_use("clam")
-        except Exception:
-            pass
-
-        style.configure("TNotebook.Tab", padding=(6, 4))
-        style.configure("Sidebar.TFrame", background="#1f2a35")
-        style.configure("SidebarTitle.TLabel", background="#1f2a35", foreground="white", font=("Segoe UI", 14, "bold"))
-        style.configure("SidebarUser.TLabel", background="#1f2a35", foreground="#c7d2e0", font=("Segoe UI", 10))
+        self.codigo_usuario = codigo_usuario
+        self.on_exit_request = on_exit_request  # callback para salir/volver a welcome
 
         self._build_ui()
 
     def _build_ui(self):
+
+
         self.columnconfigure(1, weight=1)
         self.rowconfigure(0, weight=1)
 
-        # -----------------------------
-        # Sidebar (con scroll)
-        # -----------------------------
+        # Sidebar (con scroll) - COPIA EXACTA de tu main_menu.py
         sidebar = ttk.Frame(self, style="Sidebar.TFrame", width=220)
         sidebar.grid(row=0, column=0, sticky="ns")
         sidebar.grid_propagate(False)
 
-        # Canvas para scroll vertical
         sb_canvas = tk.Canvas(sidebar, bg="#1f2a35", highlightthickness=0)
         sb_canvas.pack(side="left", fill="both", expand=False)
 
         sb_scroll = ttk.Scrollbar(sidebar, orient="vertical", command=sb_canvas.yview)
         sb_scroll.pack(side="right", fill="y")
-
         sb_canvas.configure(yscrollcommand=sb_scroll.set)
 
-        # Frame real donde van los widgets
         sb_inner = ttk.Frame(sb_canvas, style="Sidebar.TFrame")
-        sb_window = sb_canvas.create_window((0, 0), window=sb_inner, anchor="nw")
+        sb_canvas.create_window((0, 0), window=sb_inner, anchor="nw")
 
         def _sb_on_configure(_evt=None):
             sb_canvas.configure(scrollregion=sb_canvas.bbox("all"))
 
         sb_inner.bind("<Configure>", _sb_on_configure)
 
-
-        # Scroll con rueda del mouse cuando el puntero está sobre el sidebar
         def _sb_on_mousewheel(event):
-            # Windows: event.delta viene en múltiplos de 120
             sb_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
 
         sb_canvas.bind_all("<MouseWheel>", _sb_on_mousewheel)
 
-        # --- Contenido del sidebar ---
         ttk.Label(sb_inner, text="Admin Docente", style="SidebarTitle.TLabel").grid(
             row=0, column=0, sticky="w", padx=16, pady=(18, 8)
         )
@@ -137,15 +115,15 @@ class MainMenuWindow(tk.Toplevel):
             command=self.on_exit,
         )
         btn_salir.grid(row=10, column=0, sticky="ew", padx=14, pady=(18, 14))
+
+        # Ajuste ancho
         self.update_idletasks()
         req_w = sb_inner.winfo_reqwidth()
         target_w = req_w + 8
         sidebar.configure(width=target_w)
         sb_canvas.configure(width=target_w)
 
-        # -----------------------------
         # Área derecha
-        # -----------------------------
         self.content = ttk.Frame(self)
         self.content.grid(row=0, column=1, sticky="nsew")
         self.content.rowconfigure(0, weight=1)
@@ -160,41 +138,94 @@ class MainMenuWindow(tk.Toplevel):
         self.notebook = ttk.Notebook(self.view_mantenimientos)
         self.notebook.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
 
-        #  Tab Inicio (sin DB) para que mantenimiento no cargue docentes por defecto
-        self.tab_inicio = ttk.Frame(self.notebook)
-        msg = ttk.Label(
-            self.tab_inicio,
-            text=(
-                "¡Bienvenido a Mantenimientos!\n\n"
-                "Desde aquí podrás administrar la información del sistema de forma ordenada y rápida.\n\n"
-                "• Selecciona una pestaña para acceder a su formulario y listado.\n"
-                "• Los datos se cargan cuando entras a cada sección, para mantener un mejor rendimiento.\n"
-                "• Si alguna pestaña aún está en construcción, se habilitará más adelante automáticamente."
-            ),
-            anchor="center",
-            font=("Segoe UI", 13),
+        # ---- TAB: Home / Decorativo (PRO) ----
+        self.tab_home = ttk.Frame(self.notebook)
+
+        # Layout 2 columnas
+        wrap = ttk.Frame(self.tab_home)
+        wrap.pack(fill="both", expand=True, padx=24, pady=24)
+        wrap.columnconfigure(0, weight=0)  # imagen
+        wrap.columnconfigure(1, weight=1)  # texto
+        wrap.rowconfigure(0, weight=1)
+
+        # Imagen (assets)
+        # Cambiá el filename por el que vos vayas a usar en /assets
+        img_label = ttk.Label(wrap)
+        img_label.grid(row=0, column=0, sticky="n", padx=(0, 26), pady=(6, 0))
+
+        # Texto
+        txt = ttk.Frame(wrap)
+        txt.grid(row=0, column=1, sticky="nsew")
+        txt.columnconfigure(0, weight=1)
+
+        ttk.Label(
+            txt,
+            text="Panel de Mantenimientos",
+            font=("Segoe UI", 18, "bold"),
+        ).grid(row=0, column=0, sticky="w", pady=(0, 10))
+
+        ttk.Label(
+            txt,
+            text="Administra la información del sistema de forma rápida y ordenada.",
+            font=("Segoe UI", 12),
+        ).grid(row=1, column=0, sticky="w", pady=(0, 14))
+
+        bullets = (
+            "• Selecciona una pestaña para ver su formulario y listado.\n"
+            "• Los datos se cargan al ingresar a cada sección para mejorar el rendimiento.\n"
+            "• Usa Nuevo / Guardar / Actualizar / Eliminar según corresponda.\n"
+            "• Si una pestaña está en construcción, se habilitará más adelante."
         )
-        msg.pack(expand=True, fill="both", padx=20, pady=20)
+        ttk.Label(
+            txt,
+            text=bullets,
+            font=("Segoe UI", 12),
+            justify="left",
+        ).grid(row=2, column=0, sticky="w")
 
-        # Tabs 
-        self.tab_docentes = DocentesTab(self.notebook, db_user=self.db_user, db_pass=self.db_pass)
-        self.tab_cursos = CursosTab(self.notebook, db_user=self.db_user, db_pass=self.db_pass)
-        self.tab_estudiantes = EstudiantesTab(self.notebook, db_user=self.db_user, db_pass=self.db_pass)
-        self.tab_programas = ProgramasTab(self.notebook, db_user=self.db_user, db_pass=self.db_pass)
-        self.tab_becas = BecasTab(self.notebook, db_user=self.db_user, db_pass=self.db_pass)
-        self.tab_becados = BecadosTab(self.notebook, db_user=self.db_user, db_pass=self.db_pass)
+        ttk.Label(
+            txt,
+            text="Sugerencia: mantén el sistema actualizado para evitar inconsistencias.",
+            font=("Segoe UI", 10, "italic"),
+        ).grid(row=3, column=0, sticky="w", pady=(16, 0))
 
-        self.notebook.add(self.tab_inicio, text="Inicio")
+        # Cargar imagen si Pillow existe
+        try:
+            import os
+            from PIL import Image, ImageTk
+
+            app_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))  # app
+            assets_dir = os.path.join(app_dir, "assets")
+            img_path = os.path.join(assets_dir, "background.png")
+            
+            if os.path.exists(img_path):
+                im = Image.open(img_path)
+                im.thumbnail((320, 380))  # tamaño pro para tu layout
+                self._home_img_ref = ImageTk.PhotoImage(im)
+                img_label.configure(image=self._home_img_ref)
+            else:
+                img_label.configure(text="(Imagen no encontrada en assets)", font=("Segoe UI", 10))
+        except Exception:
+            img_label.configure(text="(Pillow no disponible)", font=("Segoe UI", 10))
+
+        
+        self.tab_docentes = DocentesTab(self.notebook, db_user=self.db_user, db_pass=self.db_pass, codigo_usuario=self.codigo_usuario)
+        self.tab_cursos = CursosTab(self.notebook, db_user=self.db_user, db_pass=self.db_pass, codigo_usuario=self.codigo_usuario)
+        self.tab_estudiantes = EstudiantesTab(self.notebook, db_user=self.db_user, db_pass=self.db_pass, codigo_usuario=self.codigo_usuario)
+        self.tab_programas = ProgramasTab(self.notebook, db_user=self.db_user, db_pass=self.db_pass, codigo_usuario=self.codigo_usuario)
+        self.tab_becas = BecasTab(self.notebook, db_user=self.db_user, db_pass=self.db_pass, codigo_usuario=self.codigo_usuario)
+        self.tab_becados = BecadosTab(self.notebook, db_user=self.db_user, db_pass=self.db_pass, codigo_usuario=self.codigo_usuario)
+
+        self.notebook.add(self.tab_home, text="Inicio")
         self.notebook.add(self.tab_docentes, text="Docentes")
         self.notebook.add(self.tab_cursos, text="Cursos")
         self.notebook.add(self.tab_estudiantes, text="Estudiantes")
         self.notebook.add(self.tab_programas, text="Programas")
         self.notebook.add(self.tab_becas, text="Becas")
         self.notebook.add(self.tab_becados, text="Becados")
-        
 
-        #  Lazy-load: solo cuando el usuario entra a Docentes
         self.notebook.bind("<<NotebookTabChanged>>", self._on_tab_changed)
+
 
         # Placeholder otras opciones
         self.view_placeholder = ttk.Frame(self.content)
@@ -210,7 +241,6 @@ class MainMenuWindow(tk.Toplevel):
         )
         self.placeholder_label.grid(row=0, column=0, sticky="nsew")
 
-        # mostrar por defecto
         self.on_menu_click("mantenimiento")
 
     def _on_tab_changed(self, _evt=None):
@@ -223,10 +253,10 @@ class MainMenuWindow(tk.Toplevel):
             self.tab_programas.ensure_loaded()
         elif current == str(self.tab_estudiantes):
             self.tab_estudiantes.ensure_loaded()
-        elif current == str(self.tab_becas):
-            self.tab_becas.ensure_loaded()
         elif current == str(self.tab_becados):
             self.tab_becados.ensure_loaded()
+        elif current == str(self.tab_becas):
+            self.tab_becas.ensure_loaded()    
 
     def on_menu_click(self, key: str):
         for k, b in self.menu_buttons.items():
@@ -235,7 +265,8 @@ class MainMenuWindow(tk.Toplevel):
         if key == "mantenimiento":
             self.view_placeholder.grid_remove()
             self.view_mantenimientos.grid()
-            self.notebook.select(self.tab_inicio)
+            self.notebook.select(self.tab_home)
+            self.tab_inicio = self.tab_home
         else:
             self.view_mantenimientos.grid_remove()
             self.view_placeholder.grid()
@@ -246,102 +277,7 @@ class MainMenuWindow(tk.Toplevel):
     def on_exit(self):
         salir_todo = messagebox.askyesno(
             "Salir",
-            "¿Deseas salir del sistema?\n\n"
-            "SI: se cierra todo el programa.\n"
-            "NO: se cierra el menú y vuelves al Welcome."
+            "¿Deseas salir del sistema?\n\nSI: se cierra todo.\nNO: vuelves al Welcome."
         )
-
-        if salir_todo:
-            try:
-                self.master.destroy()   # Welcome (Tk) como master
-            except Exception:
-                self.destroy()
-            return
-
-        # NO: no destruir de una (para poder animar)
-        if callable(getattr(self, "_on_back_to_welcome", None)):
-            try:
-                # Intento nuevo: pasar self para que Welcome lo anime hacia afuera
-                self._on_back_to_welcome(self)
-            except TypeError:
-                # Compatibilidad: si el callback viejo no acepta parámetro
-                self.destroy()
-                self._on_back_to_welcome()
-        else:
-            self.destroy()
-            try:
-                self.master.deiconify()
-            except Exception:
-                pass
-
-
-def run_main_menu(
-    usuario: str | None,
-    db_user: str,
-    db_pass: str,
-    parent: tk.Misc | None = None,
-    on_back_to_welcome=None,
-    fullscreen: bool = True,
-):
-    # Modo integrado: el parent es WelcomeWindow (Tk ya existente)
-    if parent is not None:
-        win = MainMenuWindow(
-            master=parent,
-            usuario=usuario,
-            db_user=db_user,
-            db_pass=db_pass,
-            on_back_to_welcome=on_back_to_welcome
-        )
-
-        # Si cierran con la X, usar misma lógica de salida
-        try:
-            win.protocol("WM_DELETE_WINDOW", win.on_exit)
-        except Exception:
-            pass
-
-        if fullscreen:
-            # Pantalla completa (Windows)
-            try:
-                win.state("zoomed")
-            except Exception:
-                pass
-
-            # Fallback: tamaño completo
-            try:
-                sw = win.winfo_screenwidth()
-                sh = win.winfo_screenheight()
-                win.geometry(f"{sw}x{sh}+0+0")
-            except Exception:
-                pass
-
-        win.focus_force()
-        return win
-
-    # Modo standalone: crea root oculto para soportar Toplevel
-    root = tk.Tk()
-    root.withdraw()
-
-    win = MainMenuWindow(master=root, usuario=usuario, db_user=db_user, db_pass=db_pass, on_back_to_welcome=None)
-
-    try:
-        win.protocol("WM_DELETE_WINDOW", win.on_exit)
-    except Exception:
-        pass
-
-    if fullscreen:
-        try:
-            win.state("zoomed")
-        except Exception:
-            pass
-
-        try:
-            sw = win.winfo_screenwidth()
-            sh = win.winfo_screenheight()
-            win.geometry(f"{sw}x{sh}+0+0")
-        except Exception:
-            pass
-
-    win.focus_force()
-    root.mainloop()
-    return None
-    
+        if callable(self.on_exit_request):
+            self.on_exit_request(salir_todo)

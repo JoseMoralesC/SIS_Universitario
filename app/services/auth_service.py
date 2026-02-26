@@ -5,10 +5,9 @@ import pyodbc
 from app.core.db import connect
 from app.repositories.usuarios_repo import existe_usuario_en_tabla
 
-class AuthError(Exception):
-    pass
+from app.core.exceptions import ValidationError
 
-class UsuarioNoRegistradoError(AuthError):
+class UsuarioNoRegistradoError(ValidationError):
     pass
 
 def login_sql_y_validar_tabla(usuario: str, contra: str) -> None:
@@ -21,7 +20,7 @@ def login_sql_y_validar_tabla(usuario: str, contra: str) -> None:
         conn = connect(usuario, contra)
     except pyodbc.Error as e:
         # credenciales malas / server / driver / etc.
-        raise AuthError(str(e))
+        raise ValidationError(str(e))
 
     try:
         if not existe_usuario_en_tabla(conn, usuario):
