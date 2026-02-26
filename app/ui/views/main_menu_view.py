@@ -1,9 +1,11 @@
 # app/ui/views/main_menu_view.py
 from __future__ import annotations
 
+import os
 import tkinter as tk
 from tkinter import ttk, messagebox
 
+from app.ui.components.toast import Toast
 from app.ui.mantenimientos.docentes_tab import DocentesTab
 from app.ui.mantenimientos.cursos_tab import CursosTab
 from app.ui.mantenimientos.estudiantes_tab import EstudiantesTab
@@ -27,15 +29,18 @@ class MainMenuView(ttk.Frame):
         self.codigo_usuario = codigo_usuario
         self.on_exit_request = on_exit_request  # callback para salir/volver a welcome
 
+        # refs para background (evita garbage-collector)
+        self._home_bg_original = None
+        self._home_bg_photo = None
+        self._home_bg_canvas = None
+
         self._build_ui()
 
     def _build_ui(self):
-
-
         self.columnconfigure(1, weight=1)
         self.rowconfigure(0, weight=1)
 
-        # Sidebar (con scroll) - COPIA EXACTA de tu main_menu.py
+        # Sidebar (con scroll)
         sidebar = ttk.Frame(self, style="Sidebar.TFrame", width=220)
         sidebar.grid(row=0, column=0, sticky="ns")
         sidebar.grid_propagate(False)
@@ -116,7 +121,7 @@ class MainMenuView(ttk.Frame):
         )
         btn_salir.grid(row=10, column=0, sticky="ew", padx=14, pady=(18, 14))
 
-        # Ajuste ancho
+        # Ajuste ancho sidebar
         self.update_idletasks()
         req_w = sb_inner.winfo_reqwidth()
         target_w = req_w + 8
@@ -138,77 +143,90 @@ class MainMenuView(ttk.Frame):
         self.notebook = ttk.Notebook(self.view_mantenimientos)
         self.notebook.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
 
-        # ---- TAB: Home / Decorativo (PRO) ----
+        # =====================================================
+        # TAB: Inicio (Background real a tamaño completo)
+        # =====================================================
         self.tab_home = ttk.Frame(self.notebook)
-
-        # Layout 2 columnas
-        wrap = ttk.Frame(self.tab_home)
-        wrap.pack(fill="both", expand=True, padx=24, pady=24)
-        wrap.columnconfigure(0, weight=0)  # imagen
-        wrap.columnconfigure(1, weight=1)  # texto
-        wrap.rowconfigure(0, weight=1)
-
-        # Imagen (assets)
-        # Cambiá el filename por el que vos vayas a usar en /assets
-        img_label = ttk.Label(wrap)
-        img_label.grid(row=0, column=0, sticky="n", padx=(0, 26), pady=(6, 0))
-
-        # Texto
-        txt = ttk.Frame(wrap)
-        txt.grid(row=0, column=1, sticky="nsew")
-        txt.columnconfigure(0, weight=1)
-
-        ttk.Label(
-            txt,
-            text="Panel de Mantenimientos",
-            font=("Segoe UI", 18, "bold"),
-        ).grid(row=0, column=0, sticky="w", pady=(0, 10))
-
-        ttk.Label(
-            txt,
-            text="Administra la información del sistema de forma rápida y ordenada.",
-            font=("Segoe UI", 12),
-        ).grid(row=1, column=0, sticky="w", pady=(0, 14))
-
-        bullets = (
-            "• Selecciona una pestaña para ver su formulario y listado.\n"
-            "• Los datos se cargan al ingresar a cada sección para mejorar el rendimiento.\n"
-            "• Usa Nuevo / Guardar / Actualizar / Eliminar según corresponda.\n"
-            "• Si una pestaña está en construcción, se habilitará más adelante."
+        Toast(
+            parent=self,
+            title="Panel de Mantenimientos",
+            message=(
+                "Administra la información del sistema de forma rápida y ordenada.\n\n"
+                "• Selecciona una pestaña para ver su formulario y listado.\n"
+                "• Los datos se cargan al ingresar a cada sección.\n"
+                "• Usa Nuevo / Guardar / Actualizar / Eliminar según corresponda."
+            ),
+            duration_ms=7000,
+            slide_in_from="right",
+            slide_out_to="right",
+            step=20,
+            delay_ms=18,   # 7 segundos
         )
-        ttk.Label(
-            txt,
-            text=bullets,
-            font=("Segoe UI", 12),
-            justify="left",
-        ).grid(row=2, column=0, sticky="w")
 
-        ttk.Label(
-            txt,
-            text="Sugerencia: mantén el sistema actualizado para evitar inconsistencias.",
-            font=("Segoe UI", 10, "italic"),
-        ).grid(row=3, column=0, sticky="w", pady=(16, 0))
+        # Canvas que actúa como fondo (ocupa todo el tab)
+        home_canvas = tk.Canvas(self.tab_home, highlightthickness=0, bd=0)
+        home_canvas.pack(fill="both", expand=True)
+        self._home_bg_canvas = home_canvas
 
-        # Cargar imagen si Pillow existe
+        # Cargar imagen original (si Pillow existe)
+        self._home_bg_original = None
         try:
-            import os
-            from PIL import Image, ImageTk
+            from PIL import Image, ImageTk  # type: ignore
 
             app_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))  # app
             assets_dir = os.path.join(app_dir, "assets")
             img_path = os.path.join(assets_dir, "background.png")
-            
-            if os.path.exists(img_path):
-                im = Image.open(img_path)
-                im.thumbnail((320, 380))  # tamaño pro para tu layout
-                self._home_img_ref = ImageTk.PhotoImage(im)
-                img_label.configure(image=self._home_img_ref)
-            else:
-                img_label.configure(text="(Imagen no encontrada en assets)", font=("Segoe UI", 10))
-        except Exception:
-            img_label.configure(text="(Pillow no disponible)", font=("Segoe UI", 10))
 
-        
+            if os.path.exists(img_path):
+                self._home_bg_original = Image.open(img_path).convert("RGB")
+            else:
+                # si no existe, dejamos fondo liso y un mensaje arriba
+                self._home_bg_original = None
+        except Exception:
+            self._home_bg_original = None
+
+        def _resize_home_bg(event):
+            """
+            Redimensiona el background para cubrir todo el área disponible.
+            """
+            if self._home_bg_canvas is None:
+                return
+            w, h = max(1, int(event.width)), max(1, int(event.height))
+
+            # Si no hay imagen, solo deja el canvas con color
+            if self._home_bg_original is None:
+                self._home_bg_canvas.configure(bg="#2b2b2b")
+                self._home_bg_canvas.delete("bg")
+                return
+
+            try:
+                from PIL import ImageTk  # type: ignore
+
+                resized = self._home_bg_original.resize((w, h))
+                self._home_bg_photo = ImageTk.PhotoImage(resized)
+
+                self._home_bg_canvas.delete("bg")
+                self._home_bg_canvas.create_image(0, 0, image=self._home_bg_photo, anchor="nw", tags="bg")
+                self._home_bg_canvas.tag_lower("bg")
+            except Exception:
+                # fallback
+                self._home_bg_canvas.configure(bg="#2b2b2b")
+                self._home_bg_canvas.delete("bg")
+
+        home_canvas.bind("<Configure>", _resize_home_bg)
+
+        # Contenido encima del background
+        overlay = ttk.Frame(home_canvas)
+        # Lo “montamos” como window dentro del canvas
+        home_canvas.create_window((0, 0), window=overlay, anchor="nw")
+
+        # Layout interno (márgenes + bloque readable)
+        overlay.columnconfigure(0, weight=1)
+        overlay.rowconfigure(0, weight=1)
+
+
+
+        # ---- Resto de tabs CRUD ----
         self.tab_docentes = DocentesTab(self.notebook, db_user=self.db_user, db_pass=self.db_pass, codigo_usuario=self.codigo_usuario)
         self.tab_cursos = CursosTab(self.notebook, db_user=self.db_user, db_pass=self.db_pass, codigo_usuario=self.codigo_usuario)
         self.tab_estudiantes = EstudiantesTab(self.notebook, db_user=self.db_user, db_pass=self.db_pass, codigo_usuario=self.codigo_usuario)
@@ -225,7 +243,6 @@ class MainMenuView(ttk.Frame):
         self.notebook.add(self.tab_becados, text="Becados")
 
         self.notebook.bind("<<NotebookTabChanged>>", self._on_tab_changed)
-
 
         # Placeholder otras opciones
         self.view_placeholder = ttk.Frame(self.content)
@@ -256,7 +273,7 @@ class MainMenuView(ttk.Frame):
         elif current == str(self.tab_becados):
             self.tab_becados.ensure_loaded()
         elif current == str(self.tab_becas):
-            self.tab_becas.ensure_loaded()    
+            self.tab_becas.ensure_loaded()
 
     def on_menu_click(self, key: str):
         for k, b in self.menu_buttons.items():
