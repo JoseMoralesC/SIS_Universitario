@@ -139,7 +139,7 @@ class WelcomeWindow(tk.Tk):
         status_line("Servidor", "SQL Server Express")
         status_line("Base de datos", "Universidad")
         status_line("Modo", "Académico")
-        status_line("Versión", "1.0")
+        status_line("Versión", "3.0")
 
         # Botón iniciar sesión
         btn_login = tk.Button(
@@ -212,7 +212,7 @@ class WelcomeWindow(tk.Tk):
         cards.rowconfigure((0, 1), weight=1)
 
         self._card(cards, 0, 0, "Mantenimientos", "CRUD de Docentes, Cursos,\nEstudiantes y Programas.")
-        self._card(cards, 0, 1, "Matrículas", "Gestión de matrículas.\n(En construcción)")
+        self._card(cards, 0, 1, "Matrículas", "Gestión de matrículas.\nMatriculas en curso, historial, etc.")
         self._card(cards, 1, 0, "Asistencias", "Control de asistencias.\n(En construcción)")
         self._card(cards, 1, 1, "Reportes", "Consultas y reportes.\n(En construcción)")
 
@@ -378,11 +378,7 @@ class WelcomeWindow(tk.Tk):
 
 
 class LoginPanel(ttk.Frame):
-    """
-    Panel de login embebido (sin Toplevel).
-    - UI renovada pero coherente con tu estética.
-    - Avatar automático según usuario escrito.
-    """
+
 
     def __init__(self, parent, on_success, on_cancel):
         super().__init__(parent, style="LP.TFrame")

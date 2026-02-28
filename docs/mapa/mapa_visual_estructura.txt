@@ -12,53 +12,113 @@ Correo:
 
 SIS_Universitario/
 ├── app/
-│   ├── __init__.py
-│   │
-│   ├── core/
-│   │   ├── __init__.py
-│   │   ├── config.py              # servidor, db, driver ODBC, etc.
-│   │   ├── db.py                  # conexión pyodbc (y luego SQLAlchemy si quieres)
-│   │   ├── security.py            # validaciones de login (SQL + tabla Usuarios)
-│   │   └── errors.py              # mensajes/errores consistentes
-│   │
-│   ├── repositories/
-│   │   ├── __init__.py
-│   │   └── usuarios_repo.py       # queries: existe_usuario_tabla(), traer_foto_ruta(), etc.
-│   │
-│   ├── services/
-│   │   ├── __init__.py
-│   │   └── auth_service.py        # lógica: autenticar(), reglas del doc
-│   │
-│   ├── ui/
-│   │   ├── __init__.py
-│   │   ├── login_window.py        # Tkinter o PySide6 (según elijas)
-│   │   └── assets/
-│   │       └── users/             # imágenes por usuario (simuladas)
-│   │
-│   └── modules/                   # (A futuro) por dominio
-│       ├── estudiantes/
-│       ├── diplomados/
-│       ├── cursos/
-│       ├── matricula/
-│       ├── notas/
-│       ├── asistencia/
-│       └── reportes/
+│ ├── init.py
+│ │
+│ ├── assets/
+│ │ ├── background.png
+│ │ └── users/
+│ │ ├── Administrador.jpg
+│ │ ├── Auditor.jpg
+│ │ ├── Operador.jpg
+│ │ └── default.png
+│ │
+│ ├── core/
+│ │ ├── init.py
+│ │ ├── auditoria.py
+│ │ ├── config.py
+│ │ ├── db.py
+│ │ ├── error_handler.py
+│ │ ├── exceptions.py
+│ │ └── session.py
+│ │
+│ ├── endpoints/
+│ │ ├── mantenimiento/
+│ │ │ ├── becados_endpoints.py
+│ │ │ ├── becas_endpoints.py
+│ │ │ ├── cursos_endpoints.py
+│ │ │ ├── docentes_endpoints.py
+│ │ │ ├── estudiantes_endpoints.py
+│ │ │ └── programas_endpoints.py
+│ │ └── matriculas/
+│ │ ├── init.py
+│ │ └── matriculas_endpoints.py
+│ │
+│ ├── repositories/
+│ │ ├── init.py
+│ │ ├── auditoria_repo.py
+│ │ ├── usuarios_repo.py
+│ │ ├── mantenimiento/
+│ │ │ ├── becados_repo.py
+│ │ │ ├── becas_repo.py
+│ │ │ ├── cursos_repo.py
+│ │ │ ├── docentes_repo.py
+│ │ │ ├── estado_general_repo.py
+│ │ │ ├── estudiantes_repo.py
+│ │ │ ├── profesiones_repo.py
+│ │ │ └── programas_repo.py
+│ │ └── matriculas/
+│ │ ├── init.py
+│ │ └── matriculas_repo.py
+│ │
+│ ├── services/
+│ │ ├── init.py
+│ │ ├── auth_service.py
+│ │ ├── mantenimiento/
+│ │ │ ├── becados_service.py
+│ │ │ ├── becas_service.py
+│ │ │ ├── cursos_service.py
+│ │ │ ├── docentes_service.py
+│ │ │ ├── estudiantes_service.py
+│ │ │ └── programas_service.py
+│ │ └── matriculas/
+│ │ ├── init.py
+│ │ └── matriculas_service.py
+│ │
+│ ├── ui/
+│ │ ├── init.py
+│ │ ├── theme.py
+│ │ ├── login_window.py
+│ │ ├── welcome_window.py
+│ │ ├── main_menu.py
+│ │ ├── transitions/
+│ │ │ └── window_slide.py
+│ │ ├── components/
+│ │ │ ├── init.py
+│ │ │ ├── confirm_dialog.py
+│ │ │ ├── error_dialog.py
+│ │ │ └── toast.py
+│ │ ├── mantenimientos/
+│ │ │ ├── init.py
+│ │ │ ├── base_tab.py
+│ │ │ ├── becados_tab.py
+│ │ │ ├── becas_tab.py
+│ │ │ ├── cursos_tab.py
+│ │ │ ├── docentes_tab.py
+│ │ │ ├── estudiantes_tab.py
+│ │ │ └── programas_tab.py
+│ │ ├── matriculas/
+│ │ │ └── init.py
+│ │ └── views/
+│ │ ├── init.py
+│ │ ├── main_menu_view.py
+│ │ ├── mantenimientos_view.py
+│ │ └── matriculas_view.py
+│ │
+│ └── modules/
+│ └── (reservado / a futuro)
 │
-├── database/
-│   ├── scripts/
-│   │   ├── 01_create_db_universidad.sql
-│   │   ├── 02_tables_base.sql
-│   │   └── 03_seed_usuarios_prueba.sql
-│   └── diagramas/
-│       └── ERD.png
+├── databases/
+│ └── scripts/
+│ ├── 009_auditoria_setup.sql
+│ ├── 01_create_table_usuarios.sql
+│ ├── 02_create_table_tipo_usuario.sql
+│ ├── 03_create_table_estado_usuario.sql
+│ └── 04_insert_usuarios_Usuarios.sql
 │
 ├── docs/
-│   ├── enunciado/
-│   │   └── Enunciado del Proyecto.docx
-│   └── avances/
-│       └── Entregable_1.md
+│ └── mapa/
+│ └── mapa_visual_estructura.txt
 │
-├── main.py                         # punto de entrada: abre login
+├── main.py
 ├── requirements.txt
-└── README.md
-└── .gitignore
+└── README.TXT

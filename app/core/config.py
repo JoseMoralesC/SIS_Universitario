@@ -1,6 +1,6 @@
 # app/core/config.py
 
-DB_SERVER = r"DESKTOP-OE64NS1\SQLEXPRESS02" 
+DB_SERVER = r"TACHER-THR\SQLEXPRESS02" 
 DB_NAME = "Universidad"
 DB_DRIVER = "ODBC Driver 17 for SQL Server"  
 

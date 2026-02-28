@@ -290,6 +290,193 @@ Se mantiene una separación clara de capas y responsabilidades.
 
 El código sigue un enfoque modular y mantenible.
 
+----------------------------------------------------------------
+ENTREGABLE No. 3
+----------------------------------------------------------------
+
+Descripción General del Entregable No. 3
+
+El Entregable No. 3 amplía el sistema SIS-Universitario incorporando la gestión completa del proceso de Matrículas Académicas, implementando reglas reales de negocio, validaciones preventivas y funcionalidades de consulta y reporte, manteniendo la arquitectura modular definida desde los entregables anteriores.
+
+Este entregable consolida la separación por capas (UI, Endpoints, Services y Repositories) y refuerza la escalabilidad del sistema para futuros módulos académicos.
+
+Alcance del Entregable No. 3
+
+- Implementación del módulo de Gestión de Matrículas.
+- Registro de matrículas por curso, docente y período académico.
+- Generación automática del estado inicial de la matrícula según reglas del sistema.
+- Prevención de duplicados mediante validaciones en base de datos y en la interfaz gráfica.
+- Filtro dinámico de estudiantes elegibles para matrícula.
+- Consulta de matrículas por curso.
+- Generación de reportes de estudiantes matriculados por curso.
+- Integración completa con el sistema de auditoría de movimientos.
+
+Gestión de Matrículas
+
+El módulo de Matrículas permite:
+
+- Seleccionar Curso / Programa.
+- Visualizar únicamente los Docentes asociados al curso seleccionado.
+- Visualizar únicamente los Estudiantes elegibles, excluyendo aquellos ya matriculados en el período activo.
+- Registrar matrículas válidas respetando las reglas académicas definidas.
+- Cambiar el estado de una matrícula existente.
+- Eliminar matrículas con confirmación del usuario.
+
+Consultas y Reportes
+
+El sistema incluye:
+
+- Consulta por curso con visualización en grilla.
+- Reporte de estudiantes matriculados por curso.
+- Actualización dinámica de los datos mostrados según la interacción del usuario.
+- Manejo adecuado de casos sin resultados.
+
+Interfaz Gráfica y Experiencia de Usuario
+
+La interfaz del módulo de Matrículas incorpora:
+
+- Flujo lógico de selección: Curso → Docente → Estudiante.
+- Combobox dependientes y dinámicos.
+- Prevención de errores desde la interfaz.
+- Grillas con scroll vertical y horizontal.
+- Navegación mediante pestañas (Listado, Consulta por Curso, Reportes).
+
+Arquitectura y Diseño
+
+El Entregable No. 3 mantiene y refuerza la arquitectura modular del sistema:
+
+- UI: manejo de vistas, validaciones visuales y experiencia de usuario.
+- Endpoints: orquestación de operaciones y control transaccional.
+- Services: validaciones de negocio y reglas académicas.
+- Repositories: acceso directo y controlado a la base de datos.
+- Core: auditoría, sesión y configuración general.
+
+Estado del Proyecto
+
+Con la finalización del Entregable No. 3:
+
+- El sistema cumple con los requisitos académicos solicitados.
+- La base del sistema es estable, modular y escalable.
+- El proyecto queda preparado para la incorporación de nuevos módulos como:
+  - Matrícula por materias
+  - Notas académicas
+  - Asistencia
+  - Reportes avanzados
+
+Estructura del Proyecto (Entregable No. 3)
+SIS_Universitario/
+├── app/
+│ ├── init.py
+│ │
+│ ├── assets/
+│ │ ├── background.png
+│ │ └── users/
+│ │ ├── Administrador.jpg
+│ │ ├── Auditor.jpg
+│ │ ├── Operador.jpg
+│ │ └── default.png
+│ │
+│ ├── core/
+│ │ ├── init.py
+│ │ ├── auditoria.py
+│ │ ├── config.py
+│ │ ├── db.py
+│ │ ├── error_handler.py
+│ │ ├── exceptions.py
+│ │ └── session.py
+│ │
+│ ├── endpoints/
+│ │ ├── mantenimiento/
+│ │ │ ├── becados_endpoints.py
+│ │ │ ├── becas_endpoints.py
+│ │ │ ├── cursos_endpoints.py
+│ │ │ ├── docentes_endpoints.py
+│ │ │ ├── estudiantes_endpoints.py
+│ │ │ └── programas_endpoints.py
+│ │ └── matriculas/
+│ │ ├── init.py
+│ │ └── matriculas_endpoints.py
+│ │
+│ ├── repositories/
+│ │ ├── init.py
+│ │ ├── auditoria_repo.py
+│ │ ├── usuarios_repo.py
+│ │ ├── mantenimiento/
+│ │ │ ├── becados_repo.py
+│ │ │ ├── becas_repo.py
+│ │ │ ├── cursos_repo.py
+│ │ │ ├── docentes_repo.py
+│ │ │ ├── estado_general_repo.py
+│ │ │ ├── estudiantes_repo.py
+│ │ │ ├── profesiones_repo.py
+│ │ │ └── programas_repo.py
+│ │ └── matriculas/
+│ │ ├── init.py
+│ │ └── matriculas_repo.py
+│ │
+│ ├── services/
+│ │ ├── init.py
+│ │ ├── auth_service.py
+│ │ ├── mantenimiento/
+│ │ │ ├── becados_service.py
+│ │ │ ├── becas_service.py
+│ │ │ ├── cursos_service.py
+│ │ │ ├── docentes_service.py
+│ │ │ ├── estudiantes_service.py
+│ │ │ └── programas_service.py
+│ │ └── matriculas/
+│ │ ├── init.py
+│ │ └── matriculas_service.py
+│ │
+│ ├── ui/
+│ │ ├── init.py
+│ │ ├── theme.py
+│ │ ├── login_window.py
+│ │ ├── welcome_window.py
+│ │ ├── main_menu.py
+│ │ ├── transitions/
+│ │ │ └── window_slide.py
+│ │ ├── components/
+│ │ │ ├── init.py
+│ │ │ ├── confirm_dialog.py
+│ │ │ ├── error_dialog.py
+│ │ │ └── toast.py
+│ │ ├── mantenimientos/
+│ │ │ ├── init.py
+│ │ │ ├── base_tab.py
+│ │ │ ├── becados_tab.py
+│ │ │ ├── becas_tab.py
+│ │ │ ├── cursos_tab.py
+│ │ │ ├── docentes_tab.py
+│ │ │ ├── estudiantes_tab.py
+│ │ │ └── programas_tab.py
+│ │ ├── matriculas/
+│ │ │ └── init.py
+│ │ └── views/
+│ │ ├── init.py
+│ │ ├── main_menu_view.py
+│ │ ├── mantenimientos_view.py
+│ │ └── matriculas_view.py
+│ │
+│ └── modules/
+│ └── (reservado / a futuro)
+│
+├── databases/
+│ └── scripts/
+│ ├── 009_auditoria_setup.sql
+│ ├── 01_create_table_usuarios.sql
+│ ├── 02_create_table_tipo_usuario.sql
+│ ├── 03_create_table_estado_usuario.sql
+│ └── 04_insert_usuarios_Usuarios.sql
+│
+├── docs/
+│ └── mapa/
+│ └── mapa_visual_estructura.txt
+│
+├── main.py
+├── requirements.txt
+└── README.TXT  
+
 Autor
 
 José Rodolfo Morales Calderón

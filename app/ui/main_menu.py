@@ -204,7 +204,7 @@ class MainMenuWindow(tk.Toplevel):
 
         self.placeholder_label = ttk.Label(
             self.view_placeholder,
-            text="Módulo en construcción.\n(Para Entregable #2, el foco es: Mantenimientos)",
+            text="Módulo en construcción.\n(Para Entregable #3, el foco es: Matrículas, Asistencias y Reportes. '\nMantenimientos ya está completo desde el Entregable #2 y vercionado como 3.0)",
             anchor="center",
             font=("Segoe UI", 14),
         )
@@ -240,7 +240,7 @@ class MainMenuWindow(tk.Toplevel):
             self.view_mantenimientos.grid_remove()
             self.view_placeholder.grid()
             self.placeholder_label.configure(
-                text=f"Módulo '{key}' en construcción.\n(Entregable #2 se centra en Mantenimientos)"
+                text=f"Módulo '{key}' en construcción.\n(Para Entregable #3, el foco es: Matrículas, Asistencias y Reportes. '\nMantenimientos ya está completo desde el Entregable #2 y vercionado como 3.0)"
             )
 
     def on_exit(self):

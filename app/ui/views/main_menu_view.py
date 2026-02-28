@@ -1,22 +1,15 @@
 # app/ui/views/main_menu_view.py
 from __future__ import annotations
 
-import os
 import tkinter as tk
 from tkinter import ttk, messagebox
 
-from app.ui.components.toast import Toast
-from app.ui.mantenimientos.docentes_tab import DocentesTab
-from app.ui.mantenimientos.cursos_tab import CursosTab
-from app.ui.mantenimientos.estudiantes_tab import EstudiantesTab
-from app.ui.mantenimientos.programas_tab import ProgramasTab
-from app.ui.mantenimientos.becas_tab import BecasTab
-from app.ui.mantenimientos.becados_tab import BecadosTab
+from app.ui.views.mantenimientos_view import MantenimientosView
 
 
 class MainMenuView(ttk.Frame):
     """
-    Versión embebida del MainMenu.
+    Versión embebida del MainMenu (SHELL GENERAL).
     Vive dentro de WelcomeWindow (o cualquier parent Frame).
     """
 
@@ -29,10 +22,9 @@ class MainMenuView(ttk.Frame):
         self.codigo_usuario = codigo_usuario
         self.on_exit_request = on_exit_request  # callback para salir/volver a welcome
 
-        # refs para background (evita garbage-collector)
-        self._home_bg_original = None
-        self._home_bg_photo = None
-        self._home_bg_canvas = None
+        # Matrículas (lazy-load)
+        self._matriculas_loaded = False
+        self._matriculas_view = None  # instancia real cuando exista el módulo
 
         self._build_ui()
 
@@ -134,115 +126,33 @@ class MainMenuView(ttk.Frame):
         self.content.rowconfigure(0, weight=1)
         self.content.columnconfigure(0, weight=1)
 
-        # View: Mantenimientos
-        self.view_mantenimientos = ttk.Frame(self.content)
-        self.view_mantenimientos.grid(row=0, column=0, sticky="nsew")
-        self.view_mantenimientos.rowconfigure(0, weight=1)
-        self.view_mantenimientos.columnconfigure(0, weight=1)
-
-        self.notebook = ttk.Notebook(self.view_mantenimientos)
-        self.notebook.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
-
         # =====================================================
-        # TAB: Inicio (Background real a tamaño completo)
+        # View: Mantenimientos (módulo)
         # =====================================================
-        self.tab_home = ttk.Frame(self.notebook)
-        Toast(
-            parent=self,
-            title="Panel de Mantenimientos",
-            message=(
-                "Administra la información del sistema de forma rápida y ordenada.\n\n"
-                "• Selecciona una pestaña para ver su formulario y listado.\n"
-                "• Los datos se cargan al ingresar a cada sección.\n"
-                "• Usa Nuevo / Guardar / Actualizar / Eliminar según corresponda."
-            ),
-            duration_ms=7000,
-            slide_in_from="right",
-            slide_out_to="right",
-            step=20,
-            delay_ms=18,   # 7 segundos
+        self.view_mantenimientos = MantenimientosView(
+            self.content,
+            usuario=self.usuario,
+            db_user=self.db_user,
+            db_pass=self.db_pass,
+            codigo_usuario=self.codigo_usuario,
         )
+        self.view_mantenimientos.grid(row=0, column=0, sticky="nsew")
 
-        # Canvas que actúa como fondo (ocupa todo el tab)
-        home_canvas = tk.Canvas(self.tab_home, highlightthickness=0, bd=0)
-        home_canvas.pack(fill="both", expand=True)
-        self._home_bg_canvas = home_canvas
+        # =====================================================
+        # View: Matrículas (lazy-load)
+        # =====================================================
+        self.view_matriculas = ttk.Frame(self.content)
+        self.view_matriculas.grid(row=0, column=0, sticky="nsew")
+        self.view_matriculas.rowconfigure(0, weight=1)
+        self.view_matriculas.columnconfigure(0, weight=1)
 
-        # Cargar imagen original (si Pillow existe)
-        self._home_bg_original = None
-        try:
-            from PIL import Image, ImageTk  # type: ignore
-
-            app_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))  # app
-            assets_dir = os.path.join(app_dir, "assets")
-            img_path = os.path.join(assets_dir, "background.png")
-
-            if os.path.exists(img_path):
-                self._home_bg_original = Image.open(img_path).convert("RGB")
-            else:
-                # si no existe, dejamos fondo liso y un mensaje arriba
-                self._home_bg_original = None
-        except Exception:
-            self._home_bg_original = None
-
-        def _resize_home_bg(event):
-            """
-            Redimensiona el background para cubrir todo el área disponible.
-            """
-            if self._home_bg_canvas is None:
-                return
-            w, h = max(1, int(event.width)), max(1, int(event.height))
-
-            # Si no hay imagen, solo deja el canvas con color
-            if self._home_bg_original is None:
-                self._home_bg_canvas.configure(bg="#2b2b2b")
-                self._home_bg_canvas.delete("bg")
-                return
-
-            try:
-                from PIL import ImageTk  # type: ignore
-
-                resized = self._home_bg_original.resize((w, h))
-                self._home_bg_photo = ImageTk.PhotoImage(resized)
-
-                self._home_bg_canvas.delete("bg")
-                self._home_bg_canvas.create_image(0, 0, image=self._home_bg_photo, anchor="nw", tags="bg")
-                self._home_bg_canvas.tag_lower("bg")
-            except Exception:
-                # fallback
-                self._home_bg_canvas.configure(bg="#2b2b2b")
-                self._home_bg_canvas.delete("bg")
-
-        home_canvas.bind("<Configure>", _resize_home_bg)
-
-        # Contenido encima del background
-        overlay = ttk.Frame(home_canvas)
-        # Lo “montamos” como window dentro del canvas
-        home_canvas.create_window((0, 0), window=overlay, anchor="nw")
-
-        # Layout interno (márgenes + bloque readable)
-        overlay.columnconfigure(0, weight=1)
-        overlay.rowconfigure(0, weight=1)
-
-
-
-        # ---- Resto de tabs CRUD ----
-        self.tab_docentes = DocentesTab(self.notebook, db_user=self.db_user, db_pass=self.db_pass, codigo_usuario=self.codigo_usuario)
-        self.tab_cursos = CursosTab(self.notebook, db_user=self.db_user, db_pass=self.db_pass, codigo_usuario=self.codigo_usuario)
-        self.tab_estudiantes = EstudiantesTab(self.notebook, db_user=self.db_user, db_pass=self.db_pass, codigo_usuario=self.codigo_usuario)
-        self.tab_programas = ProgramasTab(self.notebook, db_user=self.db_user, db_pass=self.db_pass, codigo_usuario=self.codigo_usuario)
-        self.tab_becas = BecasTab(self.notebook, db_user=self.db_user, db_pass=self.db_pass, codigo_usuario=self.codigo_usuario)
-        self.tab_becados = BecadosTab(self.notebook, db_user=self.db_user, db_pass=self.db_pass, codigo_usuario=self.codigo_usuario)
-
-        self.notebook.add(self.tab_home, text="Inicio")
-        self.notebook.add(self.tab_docentes, text="Docentes")
-        self.notebook.add(self.tab_cursos, text="Cursos")
-        self.notebook.add(self.tab_estudiantes, text="Estudiantes")
-        self.notebook.add(self.tab_programas, text="Programas")
-        self.notebook.add(self.tab_becas, text="Becas")
-        self.notebook.add(self.tab_becados, text="Becados")
-
-        self.notebook.bind("<<NotebookTabChanged>>", self._on_tab_changed)
+        self._matriculas_placeholder_label = ttk.Label(
+            self.view_matriculas,
+            text="Módulo Matrículas en construcción.\n(Entregable #3: Matrículas)",
+            anchor="center",
+            font=("Segoe UI", 14),
+        )
+        self._matriculas_placeholder_label.grid(row=0, column=0, sticky="nsew")
 
         # Placeholder otras opciones
         self.view_placeholder = ttk.Frame(self.content)
@@ -260,20 +170,37 @@ class MainMenuView(ttk.Frame):
 
         self.on_menu_click("mantenimiento")
 
-    def _on_tab_changed(self, _evt=None):
-        current = self.notebook.select()
-        if current == str(self.tab_docentes):
-            self.tab_docentes.ensure_loaded()
-        elif current == str(self.tab_cursos):
-            self.tab_cursos.ensure_loaded()
-        elif current == str(self.tab_programas):
-            self.tab_programas.ensure_loaded()
-        elif current == str(self.tab_estudiantes):
-            self.tab_estudiantes.ensure_loaded()
-        elif current == str(self.tab_becados):
-            self.tab_becados.ensure_loaded()
-        elif current == str(self.tab_becas):
-            self.tab_becas.ensure_loaded()
+    def _ensure_matriculas_loaded(self):
+        """
+        Carga (una sola vez) la vista real de Matrículas cuando exista el módulo.
+        Si todavía no está creada, mantiene el placeholder sin romper la app.
+        """
+        if self._matriculas_loaded:
+            return
+
+        try:
+            from app.ui.views.matriculas_view import MatriculasView  # type: ignore
+        except Exception:
+            self._matriculas_loaded = True
+            self._matriculas_view = None
+            return
+
+        try:
+            if self._matriculas_placeholder_label is not None:
+                self._matriculas_placeholder_label.destroy()
+        except Exception:
+            pass
+
+        self._matriculas_view = MatriculasView(
+            self.view_matriculas,
+            usuario=self.usuario,
+            db_user=self.db_user,
+            db_pass=self.db_pass,
+            codigo_usuario=self.codigo_usuario,
+        )
+        self._matriculas_view.grid(row=0, column=0, sticky="nsew")
+
+        self._matriculas_loaded = True
 
     def on_menu_click(self, key: str):
         for k, b in self.menu_buttons.items():
@@ -281,14 +208,22 @@ class MainMenuView(ttk.Frame):
 
         if key == "mantenimiento":
             self.view_placeholder.grid_remove()
+            self.view_matriculas.grid_remove()
             self.view_mantenimientos.grid()
-            self.notebook.select(self.tab_home)
-            self.tab_inicio = self.tab_home
+            self.view_mantenimientos.select_home()
+
+        elif key == "matriculas":
+            self.view_mantenimientos.grid_remove()
+            self.view_placeholder.grid_remove()
+            self.view_matriculas.grid()
+            self._ensure_matriculas_loaded()
+
         else:
             self.view_mantenimientos.grid_remove()
+            self.view_matriculas.grid_remove()
             self.view_placeholder.grid()
             self.placeholder_label.configure(
-                text=f"Módulo '{key}' en construcción.\n(Entregable #2 se centra en Mantenimientos)"
+                text=f"Módulo '{key}' en construcción.\nPara Entregable #3, el foco es: Matrículas, Asistencias y Reportes. \nMantenimientos ya está completo desde el Entregable #2 y vercionado como 3.0"
             )
 
     def on_exit(self):
