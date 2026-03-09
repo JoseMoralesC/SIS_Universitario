@@ -6,8 +6,9 @@
 from __future__ import annotations
 
 import tkinter as tk
-from app.ui.theme import apply_theme
 from tkinter import ttk, messagebox
+
+from app.ui.theme import apply_theme
 from app.ui.mantenimientos.base_tab import MaintenanceTab
 from app.ui.mantenimientos.docentes_tab import DocentesTab
 from app.ui.mantenimientos.cursos_tab import CursosTab
@@ -15,11 +16,19 @@ from app.ui.mantenimientos.estudiantes_tab import EstudiantesTab
 from app.ui.mantenimientos.programas_tab import ProgramasTab
 from app.ui.mantenimientos.becas_tab import BecasTab
 from app.ui.mantenimientos.becados_tab import BecadosTab
-from app.ui.theme import apply_theme
+from app.ui.views.matriculas_materia_view import MatriculasMateriaView
 
 
 class MainMenuWindow(tk.Toplevel):
-    def __init__(self, master: tk.Misc, usuario: str | None, db_user: str, db_pass: str, on_back_to_welcome=None):
+    def __init__(
+        self,
+        master: tk.Misc,
+        usuario: str | None,
+        db_user: str,
+        db_pass: str,
+        codigo_usuario: int | None = None,
+        on_back_to_welcome=None,
+    ):
         super().__init__(master)
         apply_theme(self)
         self._on_back_to_welcome = on_back_to_welcome
@@ -27,6 +36,7 @@ class MainMenuWindow(tk.Toplevel):
         self.usuario = usuario
         self.db_user = db_user
         self.db_pass = db_pass
+        self.codigo_usuario = codigo_usuario
 
         self.title("Sistema Administrativo Docente – Menú Moderno")
         self.minsize(1100, 620)
@@ -39,8 +49,18 @@ class MainMenuWindow(tk.Toplevel):
 
         style.configure("TNotebook.Tab", padding=(6, 4))
         style.configure("Sidebar.TFrame", background="#1f2a35")
-        style.configure("SidebarTitle.TLabel", background="#1f2a35", foreground="white", font=("Segoe UI", 14, "bold"))
-        style.configure("SidebarUser.TLabel", background="#1f2a35", foreground="#c7d2e0", font=("Segoe UI", 10))
+        style.configure(
+            "SidebarTitle.TLabel",
+            background="#1f2a35",
+            foreground="white",
+            font=("Segoe UI", 14, "bold"),
+        )
+        style.configure(
+            "SidebarUser.TLabel",
+            background="#1f2a35",
+            foreground="#c7d2e0",
+            font=("Segoe UI", 10),
+        )
 
         self._build_ui()
 
@@ -66,30 +86,32 @@ class MainMenuWindow(tk.Toplevel):
 
         # Frame real donde van los widgets
         sb_inner = ttk.Frame(sb_canvas, style="Sidebar.TFrame")
-        sb_window = sb_canvas.create_window((0, 0), window=sb_inner, anchor="nw")
+        sb_canvas.create_window((0, 0), window=sb_inner, anchor="nw")
 
         def _sb_on_configure(_evt=None):
             sb_canvas.configure(scrollregion=sb_canvas.bbox("all"))
 
         sb_inner.bind("<Configure>", _sb_on_configure)
 
-
         # Scroll con rueda del mouse cuando el puntero está sobre el sidebar
         def _sb_on_mousewheel(event):
-            # Windows: event.delta viene en múltiplos de 120
             sb_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
 
         sb_canvas.bind_all("<MouseWheel>", _sb_on_mousewheel)
 
         # --- Contenido del sidebar ---
-        ttk.Label(sb_inner, text="Admin Docente", style="SidebarTitle.TLabel").grid(
-            row=0, column=0, sticky="w", padx=16, pady=(18, 8)
-        )
+        ttk.Label(
+            sb_inner,
+            text="Admin Docente",
+            style="SidebarTitle.TLabel",
+        ).grid(row=0, column=0, sticky="w", padx=16, pady=(18, 8))
 
         user_txt = f"Usuario: {self.usuario}" if self.usuario else "Usuario: (no autenticado)"
-        ttk.Label(sb_inner, text=user_txt, style="SidebarUser.TLabel").grid(
-            row=1, column=0, sticky="w", padx=16, pady=(0, 16)
-        )
+        ttk.Label(
+            sb_inner,
+            text=user_txt,
+            style="SidebarUser.TLabel",
+        ).grid(row=1, column=0, sticky="w", padx=16, pady=(0, 16))
 
         self.menu_buttons: dict[str, tk.Button] = {}
 
@@ -137,6 +159,7 @@ class MainMenuWindow(tk.Toplevel):
             command=self.on_exit,
         )
         btn_salir.grid(row=10, column=0, sticky="ew", padx=14, pady=(18, 14))
+
         self.update_idletasks()
         req_w = sb_inner.winfo_reqwidth()
         target_w = req_w + 8
@@ -151,7 +174,9 @@ class MainMenuWindow(tk.Toplevel):
         self.content.rowconfigure(0, weight=1)
         self.content.columnconfigure(0, weight=1)
 
-        # View: Mantenimientos
+        # =====================================================
+        # VIEW: MANTENIMIENTOS
+        # =====================================================
         self.view_mantenimientos = ttk.Frame(self.content)
         self.view_mantenimientos.grid(row=0, column=0, sticky="nsew")
         self.view_mantenimientos.rowconfigure(0, weight=1)
@@ -160,7 +185,6 @@ class MainMenuWindow(tk.Toplevel):
         self.notebook = ttk.Notebook(self.view_mantenimientos)
         self.notebook.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
 
-        #  Tab Inicio (sin DB) para que mantenimiento no cargue docentes por defecto
         self.tab_inicio = ttk.Frame(self.notebook)
         msg = ttk.Label(
             self.tab_inicio,
@@ -176,13 +200,36 @@ class MainMenuWindow(tk.Toplevel):
         )
         msg.pack(expand=True, fill="both", padx=20, pady=20)
 
-        # Tabs 
-        self.tab_docentes = DocentesTab(self.notebook, db_user=self.db_user, db_pass=self.db_pass)
-        self.tab_cursos = CursosTab(self.notebook, db_user=self.db_user, db_pass=self.db_pass)
-        self.tab_estudiantes = EstudiantesTab(self.notebook, db_user=self.db_user, db_pass=self.db_pass)
-        self.tab_programas = ProgramasTab(self.notebook, db_user=self.db_user, db_pass=self.db_pass)
-        self.tab_becas = BecasTab(self.notebook, db_user=self.db_user, db_pass=self.db_pass)
-        self.tab_becados = BecadosTab(self.notebook, db_user=self.db_user, db_pass=self.db_pass)
+        self.tab_docentes = DocentesTab(
+            self.notebook,
+            db_user=self.db_user,
+            db_pass=self.db_pass,
+        )
+        self.tab_cursos = CursosTab(
+            self.notebook,
+            db_user=self.db_user,
+            db_pass=self.db_pass,
+        )
+        self.tab_estudiantes = EstudiantesTab(
+            self.notebook,
+            db_user=self.db_user,
+            db_pass=self.db_pass,
+        )
+        self.tab_programas = ProgramasTab(
+            self.notebook,
+            db_user=self.db_user,
+            db_pass=self.db_pass,
+        )
+        self.tab_becas = BecasTab(
+            self.notebook,
+            db_user=self.db_user,
+            db_pass=self.db_pass,
+        )
+        self.tab_becados = BecadosTab(
+            self.notebook,
+            db_user=self.db_user,
+            db_pass=self.db_pass,
+        )
 
         self.notebook.add(self.tab_inicio, text="Inicio")
         self.notebook.add(self.tab_docentes, text="Docentes")
@@ -191,12 +238,24 @@ class MainMenuWindow(tk.Toplevel):
         self.notebook.add(self.tab_programas, text="Programas")
         self.notebook.add(self.tab_becas, text="Becas")
         self.notebook.add(self.tab_becados, text="Becados")
-        
 
-        #  Lazy-load: solo cuando el usuario entra a Docentes
         self.notebook.bind("<<NotebookTabChanged>>", self._on_tab_changed)
 
-        # Placeholder otras opciones
+        # =====================================================
+        # VIEW: MATRÍCULA POR MATERIAS
+        # =====================================================
+        self.view_matriculas_materia = MatriculasMateriaView(
+            self.content,
+            db_user=self.db_user,
+            db_pass=self.db_pass,
+            codigo_usuario=self.codigo_usuario,
+        )
+        self.view_matriculas_materia.grid(row=0, column=0, sticky="nsew")
+        self.view_matriculas_materia.grid_remove()
+
+        # =====================================================
+        # VIEW: PLACEHOLDER OTRAS OPCIONES
+        # =====================================================
         self.view_placeholder = ttk.Frame(self.content)
         self.view_placeholder.grid(row=0, column=0, sticky="nsew")
         self.view_placeholder.rowconfigure(0, weight=1)
@@ -204,7 +263,11 @@ class MainMenuWindow(tk.Toplevel):
 
         self.placeholder_label = ttk.Label(
             self.view_placeholder,
-            text="Módulo en construcción.\n(Para Entregable #3, el foco es: Matrículas, Asistencias y Reportes. '\nMantenimientos ya está completo desde el Entregable #2 y vercionado como 3.0)",
+            text=(
+                "Módulo en construcción.\n"
+                "(Para Entregable #3, el foco es: Matrículas, Asistencias y Reportes.\n"
+                "Mantenimientos ya está completo desde el Entregable #2 y versionado como 3.0)"
+            ),
             anchor="center",
             font=("Segoe UI", 14),
         )
@@ -215,6 +278,7 @@ class MainMenuWindow(tk.Toplevel):
 
     def _on_tab_changed(self, _evt=None):
         current = self.notebook.select()
+
         if current == str(self.tab_docentes):
             self.tab_docentes.ensure_loaded()
         elif current == str(self.tab_cursos):
@@ -228,19 +292,33 @@ class MainMenuWindow(tk.Toplevel):
         elif current == str(self.tab_becados):
             self.tab_becados.ensure_loaded()
 
+    def _hide_all_views(self):
+        self.view_mantenimientos.grid_remove()
+        self.view_matriculas_materia.grid_remove()
+        self.view_placeholder.grid_remove()
+
     def on_menu_click(self, key: str):
         for k, b in self.menu_buttons.items():
             b.configure(bg="#2f445d" if k == key else "#223142")
 
+        self._hide_all_views()
+
         if key == "mantenimiento":
-            self.view_placeholder.grid_remove()
             self.view_mantenimientos.grid()
             self.notebook.select(self.tab_inicio)
+
+        elif key == "matricula_materias":
+            self.view_matriculas_materia.grid()
+            self.view_matriculas_materia.ensure_loaded()
+
         else:
-            self.view_mantenimientos.grid_remove()
             self.view_placeholder.grid()
             self.placeholder_label.configure(
-                text=f"Módulo '{key}' en construcción.\n(Para Entregable #3, el foco es: Matrículas, Asistencias y Reportes. '\nMantenimientos ya está completo desde el Entregable #2 y vercionado como 3.0)"
+                text=(
+                    f"Módulo '{key}' en construcción.\n"
+                    "(Para Entregable #3, el foco es: Matrículas, Asistencias y Reportes.\n"
+                    "Mantenimientos ya está completo desde el Entregable #2 y versionado como 3.0)"
+                )
             )
 
     def on_exit(self):
@@ -253,18 +331,15 @@ class MainMenuWindow(tk.Toplevel):
 
         if salir_todo:
             try:
-                self.master.destroy()   # Welcome (Tk) como master
+                self.master.destroy()
             except Exception:
                 self.destroy()
             return
 
-        # NO: no destruir de una (para poder animar)
         if callable(getattr(self, "_on_back_to_welcome", None)):
             try:
-                # Intento nuevo: pasar self para que Welcome lo anime hacia afuera
                 self._on_back_to_welcome(self)
             except TypeError:
-                # Compatibilidad: si el callback viejo no acepta parámetro
                 self.destroy()
                 self._on_back_to_welcome()
         else:
@@ -279,6 +354,7 @@ def run_main_menu(
     usuario: str | None,
     db_user: str,
     db_pass: str,
+    codigo_usuario: int | None = None,
     parent: tk.Misc | None = None,
     on_back_to_welcome=None,
     fullscreen: bool = True,
@@ -290,23 +366,21 @@ def run_main_menu(
             usuario=usuario,
             db_user=db_user,
             db_pass=db_pass,
-            on_back_to_welcome=on_back_to_welcome
+            codigo_usuario=codigo_usuario,
+            on_back_to_welcome=on_back_to_welcome,
         )
 
-        # Si cierran con la X, usar misma lógica de salida
         try:
             win.protocol("WM_DELETE_WINDOW", win.on_exit)
         except Exception:
             pass
 
         if fullscreen:
-            # Pantalla completa (Windows)
             try:
                 win.state("zoomed")
             except Exception:
                 pass
 
-            # Fallback: tamaño completo
             try:
                 sw = win.winfo_screenwidth()
                 sh = win.winfo_screenheight()
@@ -321,7 +395,14 @@ def run_main_menu(
     root = tk.Tk()
     root.withdraw()
 
-    win = MainMenuWindow(master=root, usuario=usuario, db_user=db_user, db_pass=db_pass, on_back_to_welcome=None)
+    win = MainMenuWindow(
+        master=root,
+        usuario=usuario,
+        db_user=db_user,
+        db_pass=db_pass,
+        codigo_usuario=codigo_usuario,
+        on_back_to_welcome=None,
+    )
 
     try:
         win.protocol("WM_DELETE_WINDOW", win.on_exit)
@@ -344,4 +425,3 @@ def run_main_menu(
     win.focus_force()
     root.mainloop()
     return None
-    

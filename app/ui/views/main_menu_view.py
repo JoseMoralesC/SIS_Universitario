@@ -13,7 +13,15 @@ class MainMenuView(ttk.Frame):
     Vive dentro de WelcomeWindow (o cualquier parent Frame).
     """
 
-    def __init__(self, parent, usuario: str | None, db_user: str, db_pass: str, codigo_usuario: int, on_exit_request=None):
+    def __init__(
+        self,
+        parent,
+        usuario: str | None,
+        db_user: str,
+        db_pass: str,
+        codigo_usuario: int,
+        on_exit_request=None
+    ):
         super().__init__(parent)
 
         self.usuario = usuario
@@ -24,7 +32,11 @@ class MainMenuView(ttk.Frame):
 
         # Matrículas (lazy-load)
         self._matriculas_loaded = False
-        self._matriculas_view = None  # instancia real cuando exista el módulo
+        self._matriculas_view = None
+
+        # Matrícula por materias (lazy-load)
+        self._matricula_materias_loaded = False
+        self._matricula_materias_view = None
 
         self._build_ui()
 
@@ -32,7 +44,9 @@ class MainMenuView(ttk.Frame):
         self.columnconfigure(1, weight=1)
         self.rowconfigure(0, weight=1)
 
+        # =====================================================
         # Sidebar (con scroll)
+        # =====================================================
         sidebar = ttk.Frame(self, style="Sidebar.TFrame", width=220)
         sidebar.grid(row=0, column=0, sticky="ns")
         sidebar.grid_propagate(False)
@@ -57,14 +71,18 @@ class MainMenuView(ttk.Frame):
 
         sb_canvas.bind_all("<MouseWheel>", _sb_on_mousewheel)
 
-        ttk.Label(sb_inner, text="Admin Docente", style="SidebarTitle.TLabel").grid(
-            row=0, column=0, sticky="w", padx=16, pady=(18, 8)
-        )
+        ttk.Label(
+            sb_inner,
+            text="Admin Docente",
+            style="SidebarTitle.TLabel"
+        ).grid(row=0, column=0, sticky="w", padx=16, pady=(18, 8))
 
         user_txt = f"Usuario: {self.usuario}" if self.usuario else "Usuario: (no autenticado)"
-        ttk.Label(sb_inner, text=user_txt, style="SidebarUser.TLabel").grid(
-            row=1, column=0, sticky="w", padx=16, pady=(0, 16)
-        )
+        ttk.Label(
+            sb_inner,
+            text=user_txt,
+            style="SidebarUser.TLabel"
+        ).grid(row=1, column=0, sticky="w", padx=16, pady=(0, 16))
 
         self.menu_buttons: dict[str, tk.Button] = {}
 
@@ -120,14 +138,16 @@ class MainMenuView(ttk.Frame):
         sidebar.configure(width=target_w)
         sb_canvas.configure(width=target_w)
 
+        # =====================================================
         # Área derecha
+        # =====================================================
         self.content = ttk.Frame(self)
         self.content.grid(row=0, column=1, sticky="nsew")
         self.content.rowconfigure(0, weight=1)
         self.content.columnconfigure(0, weight=1)
 
         # =====================================================
-        # View: Mantenimientos (módulo)
+        # View: Mantenimientos
         # =====================================================
         self.view_mantenimientos = MantenimientosView(
             self.content,
@@ -154,7 +174,25 @@ class MainMenuView(ttk.Frame):
         )
         self._matriculas_placeholder_label.grid(row=0, column=0, sticky="nsew")
 
-        # Placeholder otras opciones
+        # =====================================================
+        # View: Matrícula por Materias (lazy-load)
+        # =====================================================
+        self.view_matricula_materias = ttk.Frame(self.content)
+        self.view_matricula_materias.grid(row=0, column=0, sticky="nsew")
+        self.view_matricula_materias.rowconfigure(0, weight=1)
+        self.view_matricula_materias.columnconfigure(0, weight=1)
+
+        self._matricula_materias_placeholder_label = ttk.Label(
+            self.view_matricula_materias,
+            text="Módulo Matrícula por Materias en construcción.\n(Backend listo, pendiente de integración UI embebida)",
+            anchor="center",
+            font=("Segoe UI", 14),
+        )
+        self._matricula_materias_placeholder_label.grid(row=0, column=0, sticky="nsew")
+
+        # =====================================================
+        # Placeholder general otras opciones
+        # =====================================================
         self.view_placeholder = ttk.Frame(self.content)
         self.view_placeholder.grid(row=0, column=0, sticky="nsew")
         self.view_placeholder.rowconfigure(0, weight=1)
@@ -170,9 +208,15 @@ class MainMenuView(ttk.Frame):
 
         self.on_menu_click("mantenimiento")
 
+    def _hide_all_views(self):
+        self.view_mantenimientos.grid_remove()
+        self.view_matriculas.grid_remove()
+        self.view_matricula_materias.grid_remove()
+        self.view_placeholder.grid_remove()
+
     def _ensure_matriculas_loaded(self):
         """
-        Carga (una sola vez) la vista real de Matrículas cuando exista el módulo.
+        Carga (una sola vez) la vista real de Matrículas.
         Si todavía no está creada, mantiene el placeholder sin romper la app.
         """
         if self._matriculas_loaded:
@@ -188,6 +232,7 @@ class MainMenuView(ttk.Frame):
         try:
             if self._matriculas_placeholder_label is not None:
                 self._matriculas_placeholder_label.destroy()
+                self._matriculas_placeholder_label = None
         except Exception:
             pass
 
@@ -202,28 +247,69 @@ class MainMenuView(ttk.Frame):
 
         self._matriculas_loaded = True
 
+    def _ensure_matricula_materias_loaded(self):
+        """
+        Carga (una sola vez) la vista real de Matrícula por Materias.
+        Si falla el import o la construcción, muestra el error real.
+        """
+        if self._matricula_materias_loaded:
+            return
+
+        try:
+            from app.ui.views.matriculas_materia_view import MatriculasMateriaView  # type: ignore
+
+            try:
+                if self._matricula_materias_placeholder_label is not None:
+                    self._matricula_materias_placeholder_label.destroy()
+                    self._matricula_materias_placeholder_label = None
+            except Exception:
+                pass
+
+            self._matricula_materias_view = MatriculasMateriaView(
+                self.view_matricula_materias,
+                usuario=self.usuario,
+                db_user=self.db_user,
+                db_pass=self.db_pass,
+                codigo_usuario=self.codigo_usuario,
+            )
+            self._matricula_materias_view.grid(row=0, column=0, sticky="nsew")
+
+            self._matricula_materias_loaded = True
+
+        except Exception as e:
+            self._matricula_materias_loaded = False
+            self._matricula_materias_view = None
+            messagebox.showerror(
+                "Error cargando Matrícula por Materias",
+                f"No se pudo cargar el módulo.\n\nDetalle:\n{e}"
+            )
+
     def on_menu_click(self, key: str):
         for k, b in self.menu_buttons.items():
             b.configure(bg="#2f445d" if k == key else "#223142")
 
+        self._hide_all_views()
+
         if key == "mantenimiento":
-            self.view_placeholder.grid_remove()
-            self.view_matriculas.grid_remove()
             self.view_mantenimientos.grid()
             self.view_mantenimientos.select_home()
 
         elif key == "matriculas":
-            self.view_mantenimientos.grid_remove()
-            self.view_placeholder.grid_remove()
             self.view_matriculas.grid()
             self._ensure_matriculas_loaded()
 
+        elif key == "matricula_materias":
+            self.view_matricula_materias.grid()
+            self._ensure_matricula_materias_loaded()
+
         else:
-            self.view_mantenimientos.grid_remove()
-            self.view_matriculas.grid_remove()
             self.view_placeholder.grid()
             self.placeholder_label.configure(
-                text=f"Módulo '{key}' en construcción.\nPara Entregable #3, el foco es: Matrículas, Asistencias y Reportes. \nMantenimientos ya está completo desde el Entregable #2 y vercionado como 3.0"
+                text=(
+                    f"Módulo '{key}' en construcción.\n"
+                    "Para Entregable #3, el foco es: Matrículas, Asistencias y Reportes.\n"
+                    "Mantenimientos ya está completo desde el Entregable #2 y versionado como 3.0"
+                )
             )
 
     def on_exit(self):
