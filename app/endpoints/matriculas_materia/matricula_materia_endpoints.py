@@ -59,7 +59,17 @@ def fetch_estudiantes_activos_matricula_materia(
 def fetch_periodos_activos_matricula_materia(
     db_user: str,
     db_pass: str,
-) -> list[int]:
+) -> list:
+    """
+    Compatibilidad temporal:
+
+    Puede devolver cualquiera de estas formas, según lo que implemente el service:
+    - [2026, 2027]
+    - [("2026-I", 2026), ("2026-II", 2026)]
+    - [(1, "2026-I", 2026), (2, "2026-II", 2026)]
+
+    El tab ya está preparado para interpretar cualquiera de esas variantes.
+    """
     conn = _open_conn(db_user, db_pass)
     try:
         service = MatriculaMateriaService(conn)
@@ -205,6 +215,7 @@ def assign_matricula_materia(
 ) -> str:
     """
     Crear matrícula por materia.
+    Compatibilidad temporal: 'periodo' sigue llegando como AÑO lógico.
     """
     conn = _open_conn(db_user, db_pass)
 
@@ -340,6 +351,8 @@ def validar_rango_actual_beca(
     Utilitario para UI.
     Permite saber si el estudiante ya cumple el mínimo
     requerido por la beca y cuántas materias puede agregar.
+
+    Compatibilidad temporal: 'periodo' sigue llegando como AÑO lógico.
     """
     conn = _open_conn(db_user, db_pass)
 

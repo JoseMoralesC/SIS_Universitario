@@ -1,4 +1,3 @@
-# app/ui/views/matriculas_view.py
 from __future__ import annotations
 
 import calendar as _cal
@@ -6,8 +5,11 @@ import datetime as _dt
 import tkinter as tk
 from tkinter import ttk, messagebox
 
-# Import por módulo (evita UnboundLocalError por nombres pisados)
 from app.endpoints.matriculas import matriculas_endpoints as m_ep
+
+from app.ui.matriculas.listado_matriculas_tab import ListadoMatriculasTab
+from app.ui.matriculas.consulta_matriculas_tab import ConsultaMatriculasTab
+from app.ui.matriculas.reporte_estudiantes_tab import ReporteEstudiantesTab
 
 
 class _CalendarPopup(tk.Toplevel):
@@ -35,7 +37,6 @@ class _CalendarPopup(tk.Toplevel):
         self._build_ui()
         self._render()
 
-        # centrar aproximado
         try:
             self.update_idletasks()
             px = parent.winfo_rootx() + 80
@@ -62,7 +63,6 @@ class _CalendarPopup(tk.Toplevel):
         self.grid_frame = ttk.Frame(root)
         self.grid_frame.grid(row=1, column=0, sticky="nsew", pady=(10, 0))
 
-        # headers días
         days = ["Lu", "Ma", "Mi", "Ju", "Vi", "Sa", "Do"]
         for c, d in enumerate(days):
             ttk.Label(self.grid_frame, text=d, anchor="center", width=4, font=("Segoe UI", 9, "bold")).grid(
@@ -186,18 +186,15 @@ class MatriculasView(ttk.Frame):
             row=0, column=0, columnspan=2, sticky="w", pady=(0, 12)
         )
 
-        # 1) Curso / Programa
         ttk.Label(left, text="Curso/Programa").grid(row=1, column=0, sticky="w", pady=4)
         self.cb_curso = ttk.Combobox(left, state="readonly", width=42)
         self.cb_curso.grid(row=1, column=1, sticky="ew", pady=4)
         self.cb_curso.bind("<<ComboboxSelected>>", self._on_curso_changed)
 
-        # 2) Docente
         ttk.Label(left, text="Docente").grid(row=2, column=0, sticky="w", pady=4)
         self.cb_docente = ttk.Combobox(left, state="readonly", width=42)
         self.cb_docente.grid(row=2, column=1, sticky="ew", pady=4)
 
-        # 3) Estudiante
         ttk.Label(left, text="Estudiante").grid(row=3, column=0, sticky="w", pady=4)
         self.cb_estudiante = ttk.Combobox(left, state="readonly", width=42)
         self.cb_estudiante.grid(row=3, column=1, sticky="ew", pady=4)
@@ -206,6 +203,7 @@ class MatriculasView(ttk.Frame):
         fecha_row = ttk.Frame(left)
         fecha_row.grid(row=4, column=1, sticky="ew", pady=4)
         fecha_row.columnconfigure(0, weight=1)
+
         self.ent_fecha = ttk.Entry(fecha_row)
         self.ent_fecha.grid(row=0, column=0, sticky="ew")
         ttk.Button(fecha_row, text="📅", width=3, command=self._open_calendar).grid(row=0, column=1, padx=(6, 0))
@@ -246,71 +244,19 @@ class MatriculasView(ttk.Frame):
         self.nb = ttk.Notebook(right)
         self.nb.grid(row=0, column=0, sticky="nsew")
 
-        self.tree_list = self._make_tree_matriculas(self.nb)
-        self.nb.add(self.tree_list["frame"], text="Listado Matrículas")
+        self.tab_listado = ListadoMatriculasTab(self.nb)
+        self.nb.add(self.tab_listado, text="Listado Matrículas")
 
-        self.tree_consulta = self._make_tree_matriculas(self.nb)
-        self.nb.add(self.tree_consulta["frame"], text="Consulta por Curso")
+        self.tab_consulta = ConsultaMatriculasTab(self.nb)
+        self.nb.add(self.tab_consulta, text="Consulta por Curso")
 
-        self.tree_reporte = self._make_tree_reporte(self.nb)
-        self.nb.add(self.tree_reporte["frame"], text="Reporte Estudiantes")
+        self.tab_reporte = ReporteEstudiantesTab(self.nb)
+        self.nb.add(self.tab_reporte, text="Reporte Estudiantes")
 
-        self.tree_list["tree"].bind("<<TreeviewSelect>>", lambda e: self._on_row_select(self.tree_list["tree"]))
-        self.tree_consulta["tree"].bind("<<TreeviewSelect>>", lambda e: self._on_row_select(self.tree_consulta["tree"]))
+        self.tab_listado.bind_select(lambda e: self._on_row_select(self.tab_listado.tree))
+        self.tab_consulta.bind_select(lambda e: self._on_row_select(self.tab_consulta.tree))
 
         self.ensure_loaded()
-
-    def _make_tree_matriculas(self, parent) -> dict:
-        frame = ttk.Frame(parent, padding=8)
-        frame.rowconfigure(0, weight=1)
-        frame.columnconfigure(0, weight=1)
-
-        cols = ("Matricula_ID", "Estudiante", "Curso", "Docente", "Fecha", "Estado")
-        tree = ttk.Treeview(frame, columns=cols, show="headings", height=18)
-
-        for c in cols:
-            tree.heading(c, text=c)
-            tree.column(c, width=160, anchor="w")  # ancho base
-
-        tree.column("Matricula_ID", width=160, anchor="center")
-        tree.column("Fecha", width=110, anchor="center")
-        tree.column("Estado", width=110, anchor="center")
-
-        vsb = ttk.Scrollbar(frame, orient="vertical", command=tree.yview)
-        hsb = ttk.Scrollbar(frame, orient="horizontal", command=tree.xview)
-        tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
-
-        tree.grid(row=0, column=0, sticky="nsew")
-        vsb.grid(row=0, column=1, sticky="ns")
-        hsb.grid(row=1, column=0, sticky="ew")
-
-        return {"frame": frame, "tree": tree}
-
-    def _make_tree_reporte(self, parent) -> dict:
-        frame = ttk.Frame(parent, padding=8)
-        frame.rowconfigure(0, weight=1)
-        frame.columnconfigure(0, weight=1)
-
-        cols = ("Periodo", "Carnet", "Estudiante", "Estado")
-        tree = ttk.Treeview(frame, columns=cols, show="headings", height=18)
-
-        for c in cols:
-            tree.heading(c, text=c)
-            tree.column(c, width=220, anchor="w")
-
-        tree.column("Periodo", width=90, anchor="center")
-        tree.column("Carnet", width=140, anchor="center")
-        tree.column("Estado", width=120, anchor="center")
-
-        vsb = ttk.Scrollbar(frame, orient="vertical", command=tree.yview)
-        hsb = ttk.Scrollbar(frame, orient="horizontal", command=tree.xview)
-        tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
-
-        tree.grid(row=0, column=0, sticky="nsew")
-        vsb.grid(row=0, column=1, sticky="ns")
-        hsb.grid(row=1, column=0, sticky="ew")
-
-        return {"frame": frame, "tree": tree}
 
     # ------------------------------------------------------------------
     # Carga / refresh
@@ -328,14 +274,15 @@ class MatriculasView(ttk.Frame):
         self._estados = []
         self._docentes_por_curso = []
 
-        data = m_ep.get_lookups(db_user=self.db_user, db_pass=self.db_pass, codigo_usuario=self.codigo_usuario)
+        data = m_ep.get_lookups(
+            db_user=self.db_user,
+            db_pass=self.db_pass,
+            codigo_usuario=self.codigo_usuario,
+        )
 
         self._estados = data.get("estados", []) or []
-        
         self._cursos = data.get("cursos", []) or []
 
-        # Cargar values pero NO seleccionar nada (combos limpios)
-        
         self.cb_curso["values"] = [f"{cod} - {desc}" for cod, desc in self._cursos]
         self.cb_estudiante["values"] = []
         self.cb_estudiante.set("")
@@ -365,18 +312,9 @@ class MatriculasView(ttk.Frame):
             messagebox.showerror("Error", f"No se pudo cargar matrículas:\n{e}")
             rows = []
 
-        self._fill_tree(self.tree_list["tree"], rows)
+        self.tab_listado.fill_rows(rows)
         self.nb.select(0)
         self._selected_key = None
-
-    def _fill_tree(self, tree: ttk.Treeview, rows: list[tuple]):
-        for i in tree.get_children():
-            tree.delete(i)
-        for r in rows:
-            try:
-                tree.insert("", "end", values=r)
-            except Exception:
-                pass
 
     # ------------------------------------------------------------------
     # Eventos / helpers
@@ -399,7 +337,6 @@ class MatriculasView(ttk.Frame):
             self.cb_estudiante.set("")
             return
 
-        # Docentes por curso
         docentes = m_ep.get_docentes_por_curso(
             db_user=self.db_user,
             db_pass=self.db_pass,
@@ -409,7 +346,6 @@ class MatriculasView(ttk.Frame):
         self.cb_docente["values"] = [f"{c} - {n}" for c, n in docentes]
         self.cb_docente.set("")
 
-        # 🔥 Estudiantes elegibles (NO matriculados)
         periodo = _dt.date.today().year
         elegibles = m_ep.get_estudiantes_elegibles(
             db_user=self.db_user,
@@ -420,7 +356,7 @@ class MatriculasView(ttk.Frame):
         )
 
         self.cb_estudiante["values"] = [f"{c} - {n}" for c, n in elegibles]
-        self.cb_estudiante.set("")  # limpio
+        self.cb_estudiante.set("")
 
     def _on_row_select(self, tree: ttk.Treeview):
         sel = tree.selection()
@@ -452,9 +388,9 @@ class MatriculasView(ttk.Frame):
     def _active_tree_for_actions(self) -> ttk.Treeview | None:
         idx = int(self.nb.index(self.nb.select()))
         if idx == 0:
-            return self.tree_list["tree"]
+            return self.tab_listado.tree
         if idx == 1:
-            return self.tree_consulta["tree"]
+            return self.tab_consulta.tree
         return None
 
     @staticmethod
@@ -638,18 +574,16 @@ class MatriculasView(ttk.Frame):
             messagebox.showerror("Error", f"No se pudo consultar por curso:\n{e}")
             rows = []
 
-        self._fill_tree(self.tree_consulta["tree"], rows)
+        self.tab_consulta.fill_rows(rows)
         self.nb.select(1)
         self._selected_key = None
 
     def on_reporte(self):
-        # 1) Validar curso seleccionado
         cur = self._parse_cod_from_combo(self.cb_curso.get())
         if not cur:
             messagebox.showwarning("Falta curso", "Selecciona un Curso/Programa para generar el reporte.")
             return
 
-        # 2) Intentar consultar y si hay error, mostrarlo (NO silencioso)
         try:
             data = m_ep.reporte_estudiantes_por_curso(
                 db_user=self.db_user,
@@ -661,19 +595,8 @@ class MatriculasView(ttk.Frame):
             messagebox.showerror("Error en reporte", f"No se pudo generar el reporte.\n\nDetalle: {ex}")
             data = []
 
-        # 3) Llenar el tree del reporte
-        tree = self.tree_reporte["tree"]
-        for i in tree.get_children():
-            tree.delete(i)
-
-        for it in data or []:
-            tree.insert("", "end", values=it)
-
-        # 4) Cambiar SIEMPRE al tab del reporte aunque venga vacío
+        self.tab_reporte.fill_rows(data or [])
         self.nb.select(2)
 
-        # 5) Aviso si no hay resultados
         if not data:
             messagebox.showinfo("Reporte", "No hay matrículas para el curso seleccionado.")
-
-        

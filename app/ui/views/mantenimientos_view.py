@@ -12,6 +12,7 @@ from app.ui.mantenimientos.estudiantes_tab import EstudiantesTab
 from app.ui.mantenimientos.programas_tab import ProgramasTab
 from app.ui.mantenimientos.becas_tab import BecasTab
 from app.ui.mantenimientos.becados_tab import BecadosTab
+from app.ui.mantenimientos.periodos_tab import PeriodosTab
 
 
 class MantenimientosView(ttk.Frame):
@@ -119,6 +120,7 @@ class MantenimientosView(ttk.Frame):
         self.tab_programas = ProgramasTab(self.notebook, db_user=self.db_user, db_pass=self.db_pass, codigo_usuario=self.codigo_usuario)
         self.tab_becas = BecasTab(self.notebook, db_user=self.db_user, db_pass=self.db_pass, codigo_usuario=self.codigo_usuario)
         self.tab_becados = BecadosTab(self.notebook, db_user=self.db_user, db_pass=self.db_pass, codigo_usuario=self.codigo_usuario)
+        self.tab_periodos = PeriodosTab(self.notebook, db_user=self.db_user, db_pass=self.db_pass)
 
         self.notebook.add(self.tab_home, text="Inicio")
         self.notebook.add(self.tab_docentes, text="Docentes")
@@ -127,6 +129,7 @@ class MantenimientosView(ttk.Frame):
         self.notebook.add(self.tab_programas, text="Programas")
         self.notebook.add(self.tab_becas, text="Becas")
         self.notebook.add(self.tab_becados, text="Becados")
+        self.notebook.add(self.tab_periodos, text="Períodos")
 
         self.notebook.bind("<<NotebookTabChanged>>", self._on_tab_changed)
 
@@ -144,6 +147,8 @@ class MantenimientosView(ttk.Frame):
             self.tab_becados.ensure_loaded()
         elif current == str(self.tab_becas):
             self.tab_becas.ensure_loaded()
+        elif current == str(self.tab_periodos):
+            self.tab_periodos.ensure_loaded()
 
     def select_home(self):
         """

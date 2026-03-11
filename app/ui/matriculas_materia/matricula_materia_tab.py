@@ -1,4 +1,3 @@
-# app/ui/matriculas_materia/matricula_materia_tab.py
 from __future__ import annotations
 
 import tkinter as tk
@@ -38,7 +37,10 @@ class MatriculaMateriaTab(ttk.Frame):
         self._loaded = False
 
         self._estudiante_display_to_carnet: dict[str, str] = {}
-        self._periodos: list[int] = []
+
+        # Compatibilidad:
+        # display visible -> anio lógico
+        self._periodo_display_to_anio: dict[str, int] = {}
 
         self._materia_display_to_cod: dict[str, int] = {}
         self._docente_display_to_cod: dict[str, int] = {}
@@ -83,17 +85,16 @@ class MatriculaMateriaTab(ttk.Frame):
         self._ensure_vars()
 
         self.columnconfigure(0, weight=1)
-        self.rowconfigure(1, weight=1)
+        self.rowconfigure(2, weight=1)
 
         # =====================================================
-        # FORMULARIO ARRIBA
+        # FORMULARIO SUPERIOR - CONTEXTO + RESTRICCIONES
         # =====================================================
         self.top = ttk.LabelFrame(self, text="Formulario", padding=(12, 10))
         self.top.grid(row=0, column=0, sticky="ew", padx=12, pady=(12, 8))
 
         self.top.columnconfigure(0, weight=1)
         self.top.columnconfigure(1, weight=1)
-        self.top.columnconfigure(2, weight=1)
 
         # -------------------------
         # Bloque 1: Contexto
@@ -147,7 +148,7 @@ class MatriculaMateriaTab(ttk.Frame):
         # Bloque 2: Restricciones
         # -------------------------
         self.frm_restricciones = ttk.LabelFrame(self.top, text="Restricciones de carga", padding=(10, 8))
-        self.frm_restricciones.grid(row=0, column=1, sticky="nsew", padx=8, pady=4)
+        self.frm_restricciones.grid(row=0, column=1, sticky="nsew", padx=(8, 0), pady=4)
 
         self.frm_restricciones.columnconfigure(1, weight=1)
 
@@ -191,40 +192,40 @@ class MatriculaMateriaTab(ttk.Frame):
         )
         self.ent_estado_beca.grid(row=4, column=1, sticky="ew", pady=4)
 
-        # -------------------------
-        # Bloque 3: Acción
-        # -------------------------
-        self.frm_accion = ttk.LabelFrame(self.top, text="Asignación", padding=(10, 8))
-        self.frm_accion.grid(row=0, column=2, sticky="nsew", padx=(8, 0), pady=4)
+        # =====================================================
+        # FORMULARIO INTERMEDIO - ASIGNACIÓN
+        # =====================================================
+        self.middle = ttk.LabelFrame(self, text="Asignación", padding=(12, 10))
+        self.middle.grid(row=1, column=0, sticky="ew", padx=12, pady=(0, 8))
 
-        self.frm_accion.columnconfigure(1, weight=1)
+        self.middle.columnconfigure(1, weight=1)
 
-        ttk.Label(self.frm_accion, text="Materia:").grid(row=0, column=0, sticky="w", pady=4)
+        ttk.Label(self.middle, text="Materia:").grid(row=0, column=0, sticky="w", pady=4)
         self.cbo_materia = ttk.Combobox(
-            self.frm_accion,
+            self.middle,
             textvariable=self.vars["materia"],
             state="disabled",
         )
         self.cbo_materia.grid(row=0, column=1, sticky="ew", pady=4)
         self.cbo_materia.bind("<<ComboboxSelected>>", self._on_materia_changed)
 
-        ttk.Label(self.frm_accion, text="Docente:").grid(row=1, column=0, sticky="w", pady=4)
+        ttk.Label(self.middle, text="Docente:").grid(row=1, column=0, sticky="w", pady=4)
         self.cbo_docente = ttk.Combobox(
-            self.frm_accion,
+            self.middle,
             textvariable=self.vars["docente"],
             state="disabled",
         )
         self.cbo_docente.grid(row=1, column=1, sticky="ew", pady=4)
 
-        ttk.Label(self.frm_accion, text="Estado (auto):").grid(row=2, column=0, sticky="w", pady=4)
+        ttk.Label(self.middle, text="Estado (auto):").grid(row=2, column=0, sticky="w", pady=4)
         self.ent_estado = ttk.Entry(
-            self.frm_accion,
+            self.middle,
             textvariable=self.vars["estado"],
             state="readonly",
         )
         self.ent_estado.grid(row=2, column=1, sticky="ew", pady=4)
 
-        btns = ttk.Frame(self.frm_accion)
+        btns = ttk.Frame(self.middle)
         btns.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(10, 0))
         for i in range(4):
             btns.columnconfigure(i, weight=1, uniform="crud")
@@ -243,7 +244,7 @@ class MatriculaMateriaTab(ttk.Frame):
         # GRID ABAJO
         # =====================================================
         self.bottom = ttk.LabelFrame(self, text="Listado", padding=(10, 10))
-        self.bottom.grid(row=1, column=0, sticky="nsew", padx=12, pady=(0, 12))
+        self.bottom.grid(row=2, column=0, sticky="nsew", padx=12, pady=(0, 12))
 
         self.bottom.rowconfigure(0, weight=1)
         self.bottom.columnconfigure(0, weight=1)
@@ -395,14 +396,53 @@ class MatriculaMateriaTab(ttk.Frame):
                 display = f"{carnet} - {nombre}"
                 self._estudiante_display_to_carnet[display] = str(carnet)
 
-            self._periodos = [int(p) for p in periodos]
+            # Compatibilidad:
+            # Si el endpoint devuelve solo años -> mostrar año
+            # Si devuelve periodo nuevo + año -> mostrar periodo nuevo, usar año lógicamente
+            self._periodo_display_to_anio = {}
+
+            for p in periodos:
+                try:
+                    if isinstance(p, (tuple, list)):
+                        if len(p) >= 3:
+                            # ejemplo esperado:
+                            # (periodo_id, periodo_codigo, anio)
+                            periodo_codigo = str(p[1]).strip()
+                            anio = int(p[2])
+                            display = periodo_codigo or str(anio)
+                            self._periodo_display_to_anio[display] = anio
+                        elif len(p) == 2:
+                            # posible compatibilidad:
+                            # (periodo_codigo, anio) o (anio, periodo_codigo)
+                            a = p[0]
+                            b = p[1]
+
+                            if isinstance(a, str) and not str(a).isdigit():
+                                display = str(a).strip()
+                                anio = int(b)
+                            elif isinstance(b, str) and not str(b).isdigit():
+                                display = str(b).strip()
+                                anio = int(a)
+                            else:
+                                anio = int(a)
+                                display = str(anio)
+
+                            self._periodo_display_to_anio[display] = anio
+                        elif len(p) == 1:
+                            anio = int(p[0])
+                            self._periodo_display_to_anio[str(anio)] = anio
+                    else:
+                        anio = int(p)
+                        self._periodo_display_to_anio[str(anio)] = anio
+                except Exception:
+                    continue
 
             self._estado_display_to_cod = {}
             for codigo, desc in estados:
                 self._estado_display_to_cod[str(desc)] = int(codigo)
 
             self.cbo_estudiante["values"] = list(self._estudiante_display_to_carnet.keys())
-            self.cbo_periodo["values"] = [str(p) for p in self._periodos]
+            self.cbo_periodo["values"] = list(self._periodo_display_to_anio.keys())
 
         except Exception as e:
             handle_exception(self, e, context="Carga inicial Matrícula por Materia")
@@ -415,13 +455,25 @@ class MatriculaMateriaTab(ttk.Frame):
         return self._estudiante_display_to_carnet.get(display)
 
     def _get_periodo_selected(self) -> int | None:
-        txt = (self.vars["periodo"].get() or "").strip()
-        if not txt:
+        """
+        Lógica temporal:
+        devuelve el AÑO aunque visualmente el usuario vea 2026-I, 2026-II, etc.
+        """
+        display = (self.vars["periodo"].get() or "").strip()
+        if not display:
             return None
+
+        anio = self._periodo_display_to_anio.get(display)
+        if anio is not None:
+            return int(anio)
+
         try:
-            return int(txt)
+            return int(display)
         except Exception:
             return None
+
+    def _get_periodo_display_selected(self) -> str:
+        return (self.vars["periodo"].get() or "").strip()
 
     def _get_materia_selected(self) -> int | None:
         display = (self.vars["materia"].get() or "").strip()
@@ -489,7 +541,7 @@ class MatriculaMateriaTab(ttk.Frame):
         estudiante_display = (self.vars["estudiante"].get() or "").strip()
         estudiante_nombre = estudiante_display.split(" - ", 1)[1].strip() if " - " in estudiante_display else estudiante_display
         curso_txt = (self.vars["curso"].get() or "").strip()
-        periodo = self._get_periodo_selected() or ""
+        periodo_txt = self._get_periodo_display_selected() or (self._get_periodo_selected() or "")
 
         for r in rows:
             try:
@@ -500,7 +552,7 @@ class MatriculaMateriaTab(ttk.Frame):
                     estudiante_nombre,
                     curso_txt,
                     materia_txt,
-                    periodo,
+                    periodo_txt,
                     docente_txt,
                     estado_txt,
                     fecha_txt,

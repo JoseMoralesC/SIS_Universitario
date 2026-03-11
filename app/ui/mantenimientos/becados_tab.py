@@ -4,7 +4,6 @@ import datetime as _dt
 import tkinter as tk
 from tkinter import ttk
 
-from app.ui.mantenimientos.base_tab import MaintenanceTab
 from app.endpoints.mantenimiento.becados_endpoints import (
     get_lookups,
     listar_becados,
@@ -17,8 +16,10 @@ from app.core.error_handler import handle_exception, show_info, show_warning
 from app.ui.components.confirm_dialog import show_confirm
 
 
-class BecadosTab(MaintenanceTab):
+class BecadosTab(ttk.Frame):
     def __init__(self, parent, db_user: str, db_pass: str, codigo_usuario: int):
+        super().__init__(parent)
+
         self.db_user = db_user
         self.db_pass = db_pass
         self.codigo_usuario = codigo_usuario
@@ -37,8 +38,10 @@ class BecadosTab(MaintenanceTab):
         self._orig_est_display: str | None = None
 
         self._loaded = False
+        self.vars: dict[str, tk.StringVar] = {}
+        self.tree: ttk.Treeview | None = None
 
-        super().__init__(parent, "Becados")
+        self._build_ui()
         self.reset_view_blank()
 
     def ensure_loaded(self):
@@ -111,40 +114,92 @@ class BecadosTab(MaintenanceTab):
         except Exception:
             pass
 
+    def _build_ui(self):
+        self._ensure_vars()
+
+        # Layout principal: form arriba / grid abajo
+        self.columnconfigure(0, weight=1)
+        self.rowconfigure(0, weight=0)
+        self.rowconfigure(1, weight=1)
+
+        self.top = ttk.LabelFrame(self, text="Formulario", padding=12)
+        self.bottom = ttk.LabelFrame(self, text="Listado", padding=10)
+
+        self.top.grid(row=0, column=0, sticky="ew", padx=12, pady=(12, 8))
+        self.bottom.grid(row=1, column=0, sticky="nsew", padx=12, pady=(8, 12))
+
+        self.top.columnconfigure(0, weight=1)
+        self.bottom.columnconfigure(0, weight=1)
+        self.bottom.rowconfigure(0, weight=1)
+
+        self.form_frame = ttk.LabelFrame(
+            self.top,
+            text="Asignación de Becas a Estudiantes",
+            padding=12,
+        )
+        self.form_frame.grid(row=0, column=0, sticky="ew")
+
+        self._build_form(self.form_frame)
+        self._build_grid(self.bottom)
+
     def _build_form(self, parent: ttk.LabelFrame):
         self._ensure_vars()
 
         lbl_font = ("Segoe UI", 10)
         entry_font = ("Segoe UI", 10)
 
-        title = ttk.Label(parent, text="Asignación de Becas a Estudiantes", font=("Segoe UI", 12, "bold"))
-        title.grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 8))
+        row = 0
 
-        ttk.Label(parent, text="ID Registro:", font=lbl_font).grid(row=1, column=0, sticky="w", pady=4)
+        ttk.Label(parent, text="ID Registro:", font=lbl_font).grid(row=row, column=0, sticky="w", pady=4, padx=(0, 8))
         self.entry_id = ttk.Entry(parent, textvariable=self.vars["id_becado"], font=entry_font, state="readonly", width=18)
-        self.entry_id.grid(row=1, column=1, sticky="ew", pady=4)
+        self.entry_id.grid(row=row, column=1, sticky="ew", pady=4)
+        row += 1
 
-        ttk.Label(parent, text="Estudiante:", font=lbl_font).grid(row=2, column=0, sticky="w", pady=4)
+        ttk.Label(parent, text="Estudiante:", font=lbl_font).grid(row=row, column=0, sticky="w", pady=4, padx=(0, 8))
         self.cbo_est = ttk.Combobox(parent, textvariable=self.vars["estudiante"], state="readonly")
-        self.cbo_est.grid(row=2, column=1, sticky="ew", pady=4)
+        self.cbo_est.grid(row=row, column=1, sticky="ew", pady=4)
         self.cbo_est.bind("<<ComboboxSelected>>", self._on_estudiante_selected)
+        row += 1
 
-        ttk.Label(parent, text="Carnet:", font=lbl_font).grid(row=3, column=0, sticky="w", pady=4)
+        ttk.Label(parent, text="Carnet:", font=lbl_font).grid(row=row, column=0, sticky="w", pady=4, padx=(0, 8))
         self.entry_carnet = ttk.Entry(parent, textvariable=self.vars["carnet_view"], font=entry_font, state="readonly", width=18)
-        self.entry_carnet.grid(row=3, column=1, sticky="ew", pady=4)
+        self.entry_carnet.grid(row=row, column=1, sticky="ew", pady=4)
+        row += 1
 
-        ttk.Label(parent, text="Tipo de Beca:", font=lbl_font).grid(row=4, column=0, sticky="w", pady=4)
+        ttk.Label(parent, text="Tipo de Beca:", font=lbl_font).grid(row=row, column=0, sticky="w", pady=4, padx=(0, 8))
         self.cbo_beca = ttk.Combobox(parent, textvariable=self.vars["beca"], state="readonly")
-        self.cbo_beca.grid(row=4, column=1, sticky="ew", pady=4)
+        self.cbo_beca.grid(row=row, column=1, sticky="ew", pady=4)
         self.cbo_beca.bind("<<ComboboxSelected>>", self._on_beca_selected)
+        row += 1
 
-        ttk.Label(parent, text="% Descuento:", font=lbl_font).grid(row=5, column=0, sticky="w", pady=4)
+        ttk.Label(parent, text="% Descuento:", font=lbl_font).grid(row=row, column=0, sticky="w", pady=4, padx=(0, 8))
         self.entry_pct = ttk.Entry(parent, textvariable=self.vars["porcentaje"], font=entry_font, state="readonly", width=18)
-        self.entry_pct.grid(row=5, column=1, sticky="ew", pady=4)
+        self.entry_pct.grid(row=row, column=1, sticky="ew", pady=4)
+        row += 1
 
-        ttk.Label(parent, text="Fecha Aplicación (YYYY-MM-DD):", font=lbl_font).grid(row=6, column=0, sticky="w", pady=4)
+        ttk.Label(parent, text="Fecha Aplicación (YYYY-MM-DD):", font=lbl_font).grid(row=row, column=0, sticky="w", pady=4, padx=(0, 8))
         self.entry_fecha = ttk.Entry(parent, textvariable=self.vars["fecha_aplicacion"], font=entry_font, state="readonly")
-        self.entry_fecha.grid(row=6, column=1, sticky="ew", pady=4)
+        self.entry_fecha.grid(row=row, column=1, sticky="ew", pady=4)
+        row += 1
+
+        ttk.Separator(parent).grid(row=row, column=0, columnspan=2, sticky="ew", pady=10)
+        row += 1
+
+        btns = ttk.Frame(parent)
+        btns.grid(row=row, column=0, columnspan=2, sticky="ew")
+
+        for i in range(4):
+            btns.columnconfigure(i, weight=1)
+
+        self.btn_nuevo = ttk.Button(btns, text="Nuevo", command=self.on_nuevo)
+        self.btn_guardar = ttk.Button(btns, text="Guardar", command=self.on_guardar)
+        self.btn_actualizar = ttk.Button(btns, text="Actualizar", command=self.on_actualizar)
+        self.btn_eliminar = ttk.Button(btns, text="Eliminar", command=self.on_eliminar)
+
+        self.btn_nuevo.grid(row=0, column=0, sticky="ew", padx=6, pady=6)
+        self.btn_guardar.grid(row=0, column=1, sticky="ew", padx=6, pady=6)
+        self.btn_actualizar.grid(row=0, column=2, sticky="ew", padx=6, pady=6)
+        self.btn_eliminar.grid(row=0, column=3, sticky="ew", padx=6, pady=6)
 
         parent.columnconfigure(1, weight=1)
 
@@ -164,10 +219,18 @@ class BecadosTab(MaintenanceTab):
         self.tree.column("beca", width=160, minwidth=120, anchor="w", stretch=True)
         self.tree.column("fecha_aplicacion", width=120, minwidth=110, anchor="center", stretch=False)
 
-        self.tree.pack(fill="both", expand=True)
-        self.tree.bind("<<TreeviewSelect>>", self._on_row_selected)
+        vsb = ttk.Scrollbar(parent, orient="vertical", command=self.tree.yview)
+        hsb = ttk.Scrollbar(parent, orient="horizontal", command=self.tree.xview)
+        self.tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
 
-        self.refresh_grid()
+        self.tree.grid(row=0, column=0, sticky="nsew")
+        vsb.grid(row=0, column=1, sticky="ns")
+        hsb.grid(row=1, column=0, sticky="ew")
+
+        parent.columnconfigure(0, weight=1)
+        parent.rowconfigure(0, weight=1)
+
+        self.tree.bind("<<TreeviewSelect>>", self._on_row_selected)
 
     # -----------------------------
     # Lookups

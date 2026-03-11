@@ -1,4 +1,3 @@
-# app/repositories/matriculas_materia/materia_horario_repo.py
 from __future__ import annotations
 
 import pyodbc
@@ -89,6 +88,53 @@ def fetch_materias_activas(conn: pyodbc.Connection) -> list[tuple[int, str]]:
         ORDER BY Materia_Cod;
         """,
         (int(activo),),
+    )
+
+    return [(int(r[0]), str(r[1])) for r in cur.fetchall()]
+
+
+def fetch_cursos_activos(conn: pyodbc.Connection) -> list[tuple[int, str]]:
+    activo = get_estado_codigo_by_desc(conn, "Activo")
+
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT Curso_Cod, Descripcion
+        FROM dbo.Cursos_Programas
+        WHERE Estado_Codigo = ?
+        ORDER BY Curso_Cod;
+        """,
+        (int(activo),),
+    )
+
+    return [(int(r[0]), str(r[1])) for r in cur.fetchall()]
+
+
+def fetch_materias_por_curso_con_docente(
+    conn: pyodbc.Connection,
+    curso_cod: int,
+) -> list[tuple[int, str]]:
+    activo = get_estado_codigo_by_desc(conn, "Activo")
+
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT DISTINCT
+            m.Materia_Cod,
+            m.Descripcion
+        FROM dbo.Docente_Materia dm
+        INNER JOIN dbo.Materias m
+            ON m.Materia_Cod = dm.Materia_Cod
+        WHERE m.Curso_Cod = ?
+          AND m.Estado_Codigo = ?
+          AND dm.Estado_Codigo = ?
+        ORDER BY m.Materia_Cod;
+        """,
+        (
+            int(curso_cod),
+            int(activo),
+            int(activo),
+        ),
     )
 
     return [(int(r[0]), str(r[1])) for r in cur.fetchall()]

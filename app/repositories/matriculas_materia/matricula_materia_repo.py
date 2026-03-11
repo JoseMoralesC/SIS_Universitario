@@ -1,4 +1,3 @@
-# app/repositories/matriculas_materia/matricula_materia_repo.py
 from __future__ import annotations
 
 import pyodbc
@@ -139,6 +138,7 @@ def estudiante_matriculado_en_curso_de_materia(
     """
     Verifica que el estudiante esté matriculado en el curso/carrera
     al que pertenece la materia, dentro del mismo periodo.
+    Compatibilidad temporal: sigue usando el año en mc.Periodo.
     """
     activo = get_estado_codigo_by_desc(conn, "Activo")
     cur = conn.cursor()
@@ -271,19 +271,37 @@ def fetch_estudiantes_activos(conn: pyodbc.Connection) -> list[tuple[str, str]]:
     return [(str(r[0]), str(r[1])) for r in cur.fetchall()]
 
 
-def fetch_periodos_matricula_curso_activos(conn: pyodbc.Connection) -> list[int]:
+def fetch_periodos_matricula_curso_activos(conn: pyodbc.Connection) -> list[tuple[int, str, int]]:
+    """
+    Retorna períodos activos en formato:
+    (Periodo_Id, Periodo_Codigo, Anio)
+
+    Compatibilidad:
+    - visualmente permite mostrar 2026-I / 2026-II / 2026-III
+    - lógicamente el tab puede seguir usando el año
+    """
     activo = get_estado_codigo_by_desc(conn, "Activo")
     cur = conn.cursor()
     cur.execute(
         """
-        SELECT DISTINCT Periodo
-        FROM dbo.Matricula_Curso
-        WHERE Estado_Codigo = ?
-        ORDER BY Periodo DESC;
+        SELECT DISTINCT
+            p.Periodo_Id,
+            p.Periodo_Codigo,
+            p.Anio,
+            p.Numero_Periodo
+        FROM dbo.Matricula_Curso mc
+        INNER JOIN dbo.Periodos p
+            ON p.Periodo_Id = mc.Periodo_Id
+        WHERE mc.Estado_Codigo = ?
+          AND p.Estado_Codigo = ?
+        ORDER BY p.Anio DESC, p.Numero_Periodo ASC;
         """,
-        (int(activo),),
+        (int(activo), int(activo)),
     )
-    return [int(r[0]) for r in cur.fetchall()]
+    return [
+        (int(r[0]), str(r[1]), int(r[2]))
+        for r in cur.fetchall()
+    ]
 
 
 def fetch_materias_disponibles_estudiante(

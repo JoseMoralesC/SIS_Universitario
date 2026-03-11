@@ -1,4 +1,3 @@
-# app/services/matriculas_materia/matricula_materia_service.py
 from __future__ import annotations
 
 import pyodbc
@@ -170,8 +169,47 @@ class MatriculaMateriaService:
     def obtener_estudiantes_activos(self) -> list[tuple[str, str]]:
         return fetch_estudiantes_activos(self.conn)
 
-    def obtener_periodos_activos(self) -> list[int]:
-        return fetch_periodos_matricula_curso_activos(self.conn)
+    def obtener_periodos_activos(self) -> list:
+        """
+        Compatibilidad temporal para transición de período:
+
+        Puede devolver cualquiera de estas estructuras:
+        - [2026, 2027]
+        - [("2026-I", 2026), ("2026-II", 2026)]
+        - [(1, "2026-I", 2026), (2, "2026-II", 2026)]
+
+        El tab de UI ya sabe interpretar estas variantes.
+        """
+        rows = fetch_periodos_matricula_curso_activos(self.conn)
+
+        normalized: list = []
+
+        for r in rows:
+            try:
+                if isinstance(r, (tuple, list)):
+                    if len(r) >= 3:
+                        periodo_id = int(r[0])
+                        periodo_codigo = str(r[1]).strip()
+                        anio = int(r[2])
+                        normalized.append((periodo_id, periodo_codigo, anio))
+                    elif len(r) == 2:
+                        a = r[0]
+                        b = r[1]
+
+                        if isinstance(a, str) and not str(a).isdigit():
+                            normalized.append((str(a).strip(), int(b)))
+                        elif isinstance(b, str) and not str(b).isdigit():
+                            normalized.append((str(b).strip(), int(a)))
+                        else:
+                            normalized.append(int(a))
+                    elif len(r) == 1:
+                        normalized.append(int(r[0]))
+                else:
+                    normalized.append(int(r))
+            except Exception:
+                continue
+
+        return normalized
 
     def obtener_estados(self) -> list[tuple[int, str]]:
         return fetch_estados(self.conn)

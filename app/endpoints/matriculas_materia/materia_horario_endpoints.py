@@ -1,4 +1,3 @@
-# app/endpoints/matriculas_materia/materia_horario_endpoints.py
 from __future__ import annotations
 
 from app.core.db import connect
@@ -64,6 +63,29 @@ def fetch_materias_activas_materia_horario(db_user: str, db_pass: str) -> list[t
     try:
         service = MateriaHorarioService(conn)
         return service.obtener_materias_activas()
+    finally:
+        conn.close()
+
+
+def fetch_cursos_activos_materia_horario(db_user: str, db_pass: str) -> list[tuple[int, str]]:
+    conn = _open_conn(db_user, db_pass)
+    try:
+        service = MateriaHorarioService(conn)
+        return service.obtener_cursos_activos()
+    finally:
+        conn.close()
+
+
+def fetch_materias_por_curso_con_docente_materia_horario(
+    db_user: str,
+    db_pass: str,
+    curso_cod: int,
+) -> list[tuple[int, str]]:
+    conn = _open_conn(db_user, db_pass)
+    try:
+        service = MateriaHorarioService(conn)
+        curso_cod = _to_int(curso_cod, "Curso")
+        return service.obtener_materias_por_curso_con_docente(curso_cod)
     finally:
         conn.close()
 

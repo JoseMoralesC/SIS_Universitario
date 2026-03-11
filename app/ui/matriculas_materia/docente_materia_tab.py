@@ -51,26 +51,42 @@ class DocenteMateriaTab(ttk.Frame):
     def _build_ui(self):
         self._ensure_vars()
 
-        self.columnconfigure(0, weight=2)
-        self.columnconfigure(1, weight=3)
-        self.rowconfigure(0, weight=1)
+        # Layout principal: formulario arriba / listado abajo
+        self.columnconfigure(0, weight=1)
+        self.rowconfigure(0, weight=0)
+        self.rowconfigure(1, weight=1)
 
-        self.left = ttk.LabelFrame(self, text="Asignación Docente - Materia", padding=12)
-        self.right = ttk.LabelFrame(self, text="Listado", padding=10)
+        self.top = ttk.LabelFrame(self, text="Formulario", padding=12)
+        self.bottom = ttk.LabelFrame(self, text="Listado", padding=10)
 
-        self.left.grid(row=0, column=0, sticky="nsew", padx=(12, 8), pady=12)
-        self.right.grid(row=0, column=1, sticky="nsew", padx=(8, 12), pady=12)
+        self.top.grid(row=0, column=0, sticky="ew", padx=12, pady=(12, 8))
+        self.bottom.grid(row=1, column=0, sticky="nsew", padx=12, pady=(8, 12))
 
-        self.left.columnconfigure(1, weight=1)
-        self.right.columnconfigure(0, weight=1)
-        self.right.rowconfigure(0, weight=1)
+        self.top.columnconfigure(0, weight=1)
+        self.bottom.columnconfigure(0, weight=1)
+        self.bottom.rowconfigure(0, weight=1)
+
+        # -------------------------------------------------
+        # Bloque superior interno
+        # -------------------------------------------------
+        self.form_frame = ttk.LabelFrame(
+            self.top,
+            text="Asignación Docente - Materia",
+            padding=12,
+        )
+        self.form_frame.grid(row=0, column=0, sticky="ew")
+
+        self.form_frame.columnconfigure(0, weight=0)
+        self.form_frame.columnconfigure(1, weight=1)
 
         row = 0
 
-        ttk.Label(self.left, text="Curso:").grid(row=row, column=0, sticky="w", pady=4)
+        ttk.Label(self.form_frame, text="Curso:").grid(
+            row=row, column=0, sticky="w", pady=4, padx=(0, 8)
+        )
 
         self.cbo_curso = ttk.Combobox(
-            self.left,
+            self.form_frame,
             textvariable=self.vars["curso"],
             state="readonly",
         )
@@ -78,30 +94,36 @@ class DocenteMateriaTab(ttk.Frame):
         self.cbo_curso.bind("<<ComboboxSelected>>", self._on_curso_changed)
         row += 1
 
-        ttk.Label(self.left, text="Docente:").grid(row=row, column=0, sticky="w", pady=4)
+        ttk.Label(self.form_frame, text="Docente:").grid(
+            row=row, column=0, sticky="w", pady=4, padx=(0, 8)
+        )
 
         self.cbo_docente = ttk.Combobox(
-            self.left,
+            self.form_frame,
             textvariable=self.vars["docente"],
             state="disabled",
         )
         self.cbo_docente.grid(row=row, column=1, sticky="ew", pady=4)
         row += 1
 
-        ttk.Label(self.left, text="Materia:").grid(row=row, column=0, sticky="w", pady=4)
+        ttk.Label(self.form_frame, text="Materia:").grid(
+            row=row, column=0, sticky="w", pady=4, padx=(0, 8)
+        )
 
         self.cbo_materia = ttk.Combobox(
-            self.left,
+            self.form_frame,
             textvariable=self.vars["materia"],
             state="disabled",
         )
         self.cbo_materia.grid(row=row, column=1, sticky="ew", pady=4)
         row += 1
 
-        ttk.Separator(self.left).grid(row=row, column=0, columnspan=2, sticky="ew", pady=10)
+        ttk.Separator(self.form_frame).grid(
+            row=row, column=0, columnspan=2, sticky="ew", pady=10
+        )
         row += 1
 
-        btns = ttk.Frame(self.left)
+        btns = ttk.Frame(self.form_frame)
         btns.grid(row=row, column=0, columnspan=2, sticky="ew")
 
         for i in range(4):
@@ -117,25 +139,27 @@ class DocenteMateriaTab(ttk.Frame):
         self.btn_actualizar.grid(row=0, column=2, sticky="ew", padx=6, pady=6)
         self.btn_eliminar.grid(row=0, column=3, sticky="ew", padx=6, pady=6)
 
-        # =====================================================
-        # GRID
-        # =====================================================
+        # -------------------------------------------------
+        # GRID abajo
+        # -------------------------------------------------
         self.tree = ttk.Treeview(
-            self.right,
-            columns=("docente", "materia", "estado"),
+            self.bottom,
+            columns=("docente", "curso", "materia", "estado"),
             show="headings",
         )
 
         self.tree.heading("docente", text="Docente")
+        self.tree.heading("curso", text="Curso")
         self.tree.heading("materia", text="Materia")
         self.tree.heading("estado", text="Estado")
 
         self.tree.column("docente", width=220)
-        self.tree.column("materia", width=220)
+        self.tree.column("curso", width=260)
+        self.tree.column("materia", width=260)
         self.tree.column("estado", width=120, anchor="center")
 
-        vsb = ttk.Scrollbar(self.right, orient="vertical", command=self.tree.yview)
-        hsb = ttk.Scrollbar(self.right, orient="horizontal", command=self.tree.xview)
+        vsb = ttk.Scrollbar(self.bottom, orient="vertical", command=self.tree.yview)
+        hsb = ttk.Scrollbar(self.bottom, orient="horizontal", command=self.tree.xview)
 
         self.tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
 
@@ -187,6 +211,59 @@ class DocenteMateriaTab(ttk.Frame):
             handle_exception(self, e, context="Carga inicial Docente - Materia")
 
     # =====================================================
+    # Helpers
+    # =====================================================
+    def _extract_materia_cod_from_repo_row(self, row: tuple) -> int | None:
+        try:
+            # row del repo:
+            # 0 = id_logico
+            # 1 = curso
+            # 2 = materia
+            # 3 = docente
+            # 4 = estado
+            # 5 = fecha
+            materia_display = str(row[2]).strip()
+            head = materia_display.split("-", 1)[0].strip()
+            return int(head)
+        except Exception:
+            return None
+
+    def _map_repo_row_to_tree_row(self, row: tuple) -> tuple:
+        # row del repo:
+        # 0 = id_logico
+        # 1 = curso
+        # 2 = materia
+        # 3 = docente
+        # 4 = estado
+        # 5 = fecha
+        return (
+            str(row[3]),  # docente
+            str(row[1]),  # curso
+            str(row[2]),  # materia
+            str(row[4]),  # estado
+        )
+
+    def _filter_rows_by_selected_course(self, rows: list[tuple]) -> list[tuple]:
+        curso_display = self.vars["curso"].get()
+        curso_cod = self._curso_display_to_cod.get(curso_display)
+
+        if not curso_cod:
+            return rows
+
+        allowed_materia_codes = set(self._materia_display_to_cod.values())
+        if not allowed_materia_codes:
+            return []
+
+        filtered: list[tuple] = []
+
+        for row in rows:
+            materia_cod = self._extract_materia_cod_from_repo_row(row)
+            if materia_cod in allowed_materia_codes:
+                filtered.append(row)
+
+        return filtered
+
+    # =====================================================
     # Eventos
     # =====================================================
     def _on_curso_changed(self, _evt=None):
@@ -201,7 +278,11 @@ class DocenteMateriaTab(ttk.Frame):
             self.cbo_docente.configure(state="disabled")
             self.cbo_materia.configure(state="disabled")
 
+            self._docente_display_to_cod = {}
+            self._materia_display_to_cod = {}
+
             if not curso_cod:
+                self.refresh_grid()
                 return
 
             docentes = dm_ep.fetch_docentes_por_curso_docente_materia(
@@ -214,9 +295,6 @@ class DocenteMateriaTab(ttk.Frame):
                 self.db_pass,
                 curso_cod,
             )
-
-            self._docente_display_to_cod = {}
-            self._materia_display_to_cod = {}
 
             docentes_values: list[str] = []
             materias_values: list[str] = []
@@ -253,6 +331,8 @@ class DocenteMateriaTab(ttk.Frame):
                     "No hay materias disponibles para el curso seleccionado.",
                 )
 
+            self.refresh_grid()
+
         except Exception as e:
             handle_exception(self, e, context="Cambio de curso Docente - Materia")
 
@@ -266,11 +346,13 @@ class DocenteMateriaTab(ttk.Frame):
                 self.db_pass,
             )
 
+            rows = self._filter_rows_by_selected_course(rows)
+
             for item in self.tree.get_children():
                 self.tree.delete(item)
 
             for r in rows:
-                self.tree.insert("", "end", values=r)
+                self.tree.insert("", "end", values=self._map_repo_row_to_tree_row(r))
 
         except Exception as e:
             handle_exception(self, e, context="Listado Docente - Materia")
@@ -280,6 +362,7 @@ class DocenteMateriaTab(ttk.Frame):
     # =====================================================
     def on_nuevo(self):
         self.reset_view_blank()
+        self.refresh_grid()
 
     def on_guardar(self):
         try:

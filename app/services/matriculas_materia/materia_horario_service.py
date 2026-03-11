@@ -1,4 +1,3 @@
-# app/services/matriculas_materia/materia_horario_service.py
 from __future__ import annotations
 
 import pyodbc
@@ -6,9 +5,11 @@ import pyodbc
 from app.repositories.matriculas_materia.materia_horario_repo import (
     exists_horario,
     exists_materia,
+    fetch_cursos_activos,
     fetch_dias_semana,
     fetch_jornadas,
     fetch_materias_activas,
+    fetch_materias_por_curso_con_docente,
     get_estado_codigo_by_desc,
     insert_materia_horario,
     list_materia_horarios,
@@ -61,6 +62,13 @@ class MateriaHorarioService:
                 "El sábado únicamente permite las jornadas 1 y 2."
             )
 
+    def _asegurar_curso_valido(self, curso_cod: int) -> int:
+        curso_cod = self._normalizar_int(curso_cod, "Curso")
+        cursos_activos = {codigo for codigo, _ in fetch_cursos_activos(self.conn)}
+        if curso_cod not in cursos_activos:
+            raise ValueError("El curso indicado no existe o no está activo.")
+        return curso_cod
+
     # =====================================================
     # Lookups
     # =====================================================
@@ -72,6 +80,13 @@ class MateriaHorarioService:
 
     def obtener_materias_activas(self) -> list[tuple[int, str]]:
         return fetch_materias_activas(self.conn)
+
+    def obtener_cursos_activos(self) -> list[tuple[int, str]]:
+        return fetch_cursos_activos(self.conn)
+
+    def obtener_materias_por_curso_con_docente(self, curso_cod: int) -> list[tuple[int, str]]:
+        curso_cod = self._asegurar_curso_valido(curso_cod)
+        return fetch_materias_por_curso_con_docente(self.conn, curso_cod)
 
     # =====================================================
     # Grid
