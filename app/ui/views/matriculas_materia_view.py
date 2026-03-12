@@ -1,4 +1,3 @@
-# app/ui/views/matriculas_materia_view.py
 from __future__ import annotations
 
 import tkinter as tk
@@ -7,17 +6,21 @@ from tkinter import ttk
 from app.ui.matriculas_materia.docente_materia_tab import DocenteMateriaTab
 from app.ui.matriculas_materia.materia_horario_tab import MateriaHorarioTab
 from app.ui.matriculas_materia.matricula_materia_tab import MatriculaMateriaTab
+from app.ui.matriculas_materia.consulta_matricula_estudiante_tab import (
+    ConsultaMatriculaEstudianteTab,
+)
 
 
 class MatriculasMateriaView(ttk.Frame):
     """
     View principal del módulo de Matrículas por Materia.
 
-    Contiene las 3 tabs del Entregable #4:
+    Contiene las tabs del Entregable #4:
 
     1) Docente ↔ Materia
     2) Materia ↔ Horario
     3) Estudiante ↔ Materia
+    4) Consulta de matrícula por estudiante
     """
 
     def __init__(
@@ -82,6 +85,12 @@ class MatriculasMateriaView(ttk.Frame):
             self.codigo_usuario,
         )
 
+        self.tab_consulta_matricula = ConsultaMatriculaEstudianteTab(
+            self.notebook,
+            self.db_user,
+            self.db_pass,
+        )
+
         # =====================================================
         # Add tabs
         # =====================================================
@@ -99,6 +108,11 @@ class MatriculasMateriaView(ttk.Frame):
         self.notebook.add(
             self.tab_matricula_materia,
             text="Matrícula por Materia",
+        )
+
+        self.notebook.add(
+            self.tab_consulta_matricula,
+            text="Consulta por Estudiante",
         )
 
         # Evento cambio de tab
@@ -124,6 +138,10 @@ class MatriculasMateriaView(ttk.Frame):
 
             if hasattr(self.tab_matricula_materia, "ensure_loaded"):
                 self.tab_matricula_materia.ensure_loaded()
+
+            if hasattr(self.tab_consulta_matricula, "ensure_loaded"):
+                self.tab_consulta_matricula.ensure_loaded()
+
         finally:
             self._tabs_loaded = True
 
