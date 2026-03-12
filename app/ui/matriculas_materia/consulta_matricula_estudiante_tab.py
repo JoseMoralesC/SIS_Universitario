@@ -7,6 +7,12 @@ from app.core.error_handler import handle_exception, show_warning
 from app.endpoints.matriculas_materia import (
     consulta_matricula_estudiante_endpoints as consulta_ep,
 )
+from app.endpoints.matriculas_materia import (
+    matricula_materia_endpoints as mm_ep,
+)
+from app.ui.matriculas_materia.completar_matricula_popup import (
+    CompletarMatriculaPopup,
+)
 
 
 class ConsultaMatriculaEstudianteTab(ttk.Frame):
@@ -18,13 +24,21 @@ class ConsultaMatriculaEstudianteTab(ttk.Frame):
     2) Seleccionar curso
     3) Seleccionar estudiante
     4) Consultar matrícula
+    5) Completar matrícula / pago
     """
 
-    def __init__(self, parent, db_user: str, db_pass: str):
+    def __init__(
+        self,
+        parent,
+        db_user: str,
+        db_pass: str,
+        codigo_usuario: int,
+    ):
         super().__init__(parent)
 
         self.db_user = db_user
         self.db_pass = db_pass
+        self.codigo_usuario = codigo_usuario
 
         self.periodos = []
         self.cursos = []
@@ -301,14 +315,105 @@ class ConsultaMatriculaEstudianteTab(ttk.Frame):
         self.grid.delete(*self.grid.get_children())
 
     # =========================================================
+    # VALIDACIÓN BECA / RANGO
+    # =========================================================
+    def _validar_minimo_beca_para_pago(self, carnet: str, periodo_anio: int) -> tuple[bool, str]:
+        """
+        Regla:
+        - No becados: pueden continuar sin restricción de mínimo de beca.
+        - Becados: deben cumplir el mínimo de materias exigido por su rango/beca.
+        """
+        restr = mm_ep.fetch_restricciones_beca(
+            self.db_user,
+            self.db_pass,
+            carnet,
+        )
+        rango = mm_ep.validar_rango_actual_beca(
+            self.db_user,
+            self.db_pass,
+            carnet,
+            periodo_anio,
+        )
+
+        minimo = int(restr.get("minimo_materias", 1))
+        total_actual = int(rango.get("total_actual", 0))
+        cumple_min = bool(rango.get("cumple_minimo_actual", False))
+        beca_norm = (restr.get("beca") or "").strip().lower()
+
+        # No becado -> puede continuar
+        if beca_norm in ("", "basica", "sin beca", "ninguna", "no"):
+            return True, ""
+
+        # Becado -> debe cumplir mínimo
+        if cumple_min:
+            return True, ""
+
+        faltan = max(0, minimo - total_actual)
+        return (
+            False,
+            f"El estudiante no cumple el mínimo requerido por su beca.\n"
+            f"Mínimo exigido: {minimo}\n"
+            f"Materias actuales: {total_actual}\n"
+            f"Le faltan {faltan} materia(s) para poder continuar al pago.",
+        )
+
+    # =========================================================
     # COMPLETAR MATRÍCULA
     # =========================================================
     def _completar_matricula(self):
+
+        try:
+            idx_periodo = self.cbo_periodo.current()
+            idx_curso = self.cbo_curso.current()
+            idx_estudiante = self.cbo_estudiante.current()
+
+            if idx_periodo < 0 or idx_curso < 0 or idx_estudiante < 0:
+                show_warning(
+                    self,
+                    "Completar matrícula",
+                    "Debe seleccionar período, curso y estudiante.",
+                )
+                return
+
+            periodo = self.periodos[idx_periodo]
+            curso = self.cursos[idx_curso]
+            estudiante = self.estudiantes[idx_estudiante]
+
+            ok_pago, mensaje = self._validar_minimo_beca_para_pago(
+                estudiante["carnet"],
+                periodo["anio"],
+            )
+            if not ok_pago:
+                show_warning(
+                    self,
+                    "Requisito de beca no cumplido",
+                    mensaje,
+                )
+                return
+
+            CompletarMatriculaPopup(
+                self,
+                self.db_user,
+                self.db_pass,
+                self.codigo_usuario,
+                on_pago_realizado=self._refresh_after_pago,
+                carnet=estudiante["carnet"],
+                curso_cod=curso["curso_cod"],
+                periodo_id=periodo["periodo_id"],
+                anio=periodo["anio"],
+                estudiante_label=estudiante["label"],
+                curso_label=curso["label"],
+                periodo_label=periodo["label"],
+            )
+
+        except Exception as e:
+            handle_exception(self, e, context="Abrir completar matrícula")
+
+    def _refresh_after_pago(self):
         """
-        Aquí luego conectaremos el módulo de facturación.
+        Refresca el grid después de completar el pago.
         """
-        show_warning(
-            self,
-            "Completar matrícula",
-            "Módulo de facturación aún no implementado.",
-        )
+        try:
+            self._consultar()
+        except Exception:
+            pass        

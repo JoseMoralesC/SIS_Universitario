@@ -89,6 +89,7 @@ class MatriculasMateriaView(ttk.Frame):
             self.notebook,
             self.db_user,
             self.db_pass,
+            self.codigo_usuario,
         )
 
         # =====================================================
