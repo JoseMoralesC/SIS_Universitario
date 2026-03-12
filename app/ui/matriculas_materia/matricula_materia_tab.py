@@ -15,14 +15,15 @@ class MatriculaMateriaTab(ttk.Frame):
     Tab UI - Entregable #4
     Matrícula de estudiantes por materia.
 
-    Flujo:
-    1) Seleccionar estudiante
-    2) Seleccionar período
-    3) Cargar matrícula de curso activa + beca + restricciones
-    4) Cargar materias disponibles
-    5) Seleccionar materia
-    6) Cargar docentes disponibles para esa materia
-    7) Guardar matrícula por materia
+    Flujo actualizado:
+    1) Seleccionar curso/carrera
+    2) Cargar estudiantes que sí tienen matrícula activa en ese curso
+    3) Mostrar período activo (solo lectura)
+    4) Cargar matrícula de curso activa + beca + restricciones
+    5) Cargar materias disponibles
+    6) Seleccionar materia
+    7) Cargar docentes disponibles para esa materia
+    8) Guardar matrícula por materia
     """
 
     def __init__(self, parent, db_user: str, db_pass: str, codigo_usuario: int):
@@ -37,6 +38,10 @@ class MatriculaMateriaTab(ttk.Frame):
         self._loaded = False
 
         self._estudiante_display_to_carnet: dict[str, str] = {}
+        self._all_estudiantes_display_to_carnet: dict[str, str] = {}
+
+        # curso visible -> código
+        self._curso_display_to_cod: dict[str, int] = {}
 
         # Compatibilidad:
         # display visible -> anio lógico
@@ -65,9 +70,9 @@ class MatriculaMateriaTab(ttk.Frame):
     # Vars
     # =====================================================
     def _ensure_vars(self):
+        self.vars.setdefault("curso", tk.StringVar())
         self.vars.setdefault("estudiante", tk.StringVar())
         self.vars.setdefault("periodo", tk.StringVar())
-        self.vars.setdefault("curso", tk.StringVar())
         self.vars.setdefault("beca", tk.StringVar())
         self.vars.setdefault("minimo", tk.StringVar())
         self.vars.setdefault("maximo", tk.StringVar())
@@ -110,31 +115,31 @@ class MatriculaMateriaTab(ttk.Frame):
             font=("Segoe UI", 12, "bold"),
         ).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 8))
 
-        ttk.Label(self.frm_contexto, text="Estudiante:").grid(row=1, column=0, sticky="w", pady=4)
+        ttk.Label(self.frm_contexto, text="Curso/Carrera:").grid(row=1, column=0, sticky="w", pady=4)
+        self.cbo_curso = ttk.Combobox(
+            self.frm_contexto,
+            textvariable=self.vars["curso"],
+            state="readonly",
+        )
+        self.cbo_curso.grid(row=1, column=1, sticky="ew", pady=4)
+        self.cbo_curso.bind("<<ComboboxSelected>>", self._on_curso_changed)
+
+        ttk.Label(self.frm_contexto, text="Estudiante:").grid(row=2, column=0, sticky="w", pady=4)
         self.cbo_estudiante = ttk.Combobox(
             self.frm_contexto,
             textvariable=self.vars["estudiante"],
             state="readonly",
         )
-        self.cbo_estudiante.grid(row=1, column=1, sticky="ew", pady=4)
+        self.cbo_estudiante.grid(row=2, column=1, sticky="ew", pady=4)
         self.cbo_estudiante.bind("<<ComboboxSelected>>", self._on_contexto_changed)
 
-        ttk.Label(self.frm_contexto, text="Período:").grid(row=2, column=0, sticky="w", pady=4)
-        self.cbo_periodo = ttk.Combobox(
+        ttk.Label(self.frm_contexto, text="Período:").grid(row=3, column=0, sticky="w", pady=4)
+        self.ent_periodo = ttk.Entry(
             self.frm_contexto,
             textvariable=self.vars["periodo"],
             state="readonly",
         )
-        self.cbo_periodo.grid(row=2, column=1, sticky="ew", pady=4)
-        self.cbo_periodo.bind("<<ComboboxSelected>>", self._on_contexto_changed)
-
-        ttk.Label(self.frm_contexto, text="Curso/Carrera:").grid(row=3, column=0, sticky="w", pady=4)
-        self.ent_curso = ttk.Entry(
-            self.frm_contexto,
-            textvariable=self.vars["curso"],
-            state="readonly",
-        )
-        self.ent_curso.grid(row=3, column=1, sticky="ew", pady=4)
+        self.ent_periodo.grid(row=3, column=1, sticky="ew", pady=4)
 
         ttk.Label(self.frm_contexto, text="Beca:").grid(row=4, column=0, sticky="w", pady=4)
         self.ent_beca = ttk.Entry(
@@ -319,9 +324,9 @@ class MatriculaMateriaTab(ttk.Frame):
 
         self._selected_matricula_id = None
 
+        self.vars["curso"].set("")
         self.vars["estudiante"].set("")
         self.vars["periodo"].set("")
-        self.vars["curso"].set("")
         self.vars["beca"].set("")
         self.vars["minimo"].set("")
         self.vars["maximo"].set("")
@@ -334,6 +339,10 @@ class MatriculaMateriaTab(ttk.Frame):
 
         self._materia_display_to_cod = {}
         self._docente_display_to_cod = {}
+
+        if hasattr(self, "cbo_estudiante"):
+            self.cbo_estudiante["values"] = []
+            self.cbo_estudiante.set("")
 
         if hasattr(self, "cbo_materia"):
             self.cbo_materia["values"] = []
@@ -351,8 +360,12 @@ class MatriculaMateriaTab(ttk.Frame):
             except Exception:
                 pass
 
-    def _reset_contexto_dependiente(self):
-        self.vars["curso"].set("")
+    def _reset_contexto_dependiente(self, keep_curso: bool = True, keep_periodo: bool = True):
+        if not keep_curso:
+            self.vars["curso"].set("")
+        if not keep_periodo:
+            self.vars["periodo"].set("")
+
         self.vars["beca"].set("")
         self.vars["minimo"].set("")
         self.vars["maximo"].set("")
@@ -391,29 +404,24 @@ class MatriculaMateriaTab(ttk.Frame):
                 self.db_pass,
             )
 
-            self._estudiante_display_to_carnet = {}
+            self._all_estudiantes_display_to_carnet = {}
             for carnet, nombre in estudiantes:
                 display = f"{carnet} - {nombre}"
-                self._estudiante_display_to_carnet[display] = str(carnet)
+                self._all_estudiantes_display_to_carnet[display] = str(carnet)
 
-            # Compatibilidad:
-            # Si el endpoint devuelve solo años -> mostrar año
-            # Si devuelve periodo nuevo + año -> mostrar periodo nuevo, usar año lógicamente
+            self._estudiante_display_to_carnet = {}
+
             self._periodo_display_to_anio = {}
 
             for p in periodos:
                 try:
                     if isinstance(p, (tuple, list)):
                         if len(p) >= 3:
-                            # ejemplo esperado:
-                            # (periodo_id, periodo_codigo, anio)
                             periodo_codigo = str(p[1]).strip()
                             anio = int(p[2])
                             display = periodo_codigo or str(anio)
                             self._periodo_display_to_anio[display] = anio
                         elif len(p) == 2:
-                            # posible compatibilidad:
-                            # (periodo_codigo, anio) o (anio, periodo_codigo)
                             a = p[0]
                             b = p[1]
 
@@ -441,11 +449,97 @@ class MatriculaMateriaTab(ttk.Frame):
             for codigo, desc in estados:
                 self._estado_display_to_cod[str(desc)] = int(codigo)
 
-            self.cbo_estudiante["values"] = list(self._estudiante_display_to_carnet.keys())
-            self.cbo_periodo["values"] = list(self._periodo_display_to_anio.keys())
+            # Fijar período por defecto (solo lectura)
+            periodos_display = list(self._periodo_display_to_anio.keys())
+            if periodos_display:
+                self.vars["periodo"].set(periodos_display[0])
+            else:
+                self.vars["periodo"].set("")
+
+            self._cargar_cursos_disponibles()
+            self.cbo_estudiante["values"] = []
+            self.cbo_estudiante.set("")
 
         except Exception as e:
             handle_exception(self, e, context="Carga inicial Matrícula por Materia")
+
+    def _cargar_cursos_disponibles(self):
+        """
+        Construye el combo de cursos a partir de los estudiantes que sí poseen
+        matrícula de curso activa en el período visible.
+        """
+        self._curso_display_to_cod = {}
+        values: list[str] = []
+
+        periodo = self._get_periodo_selected()
+        if not periodo:
+            self.cbo_curso["values"] = []
+            self.cbo_curso.set("")
+            return
+
+        seen: set[int] = set()
+
+        for _, carnet in self._all_estudiantes_display_to_carnet.items():
+            try:
+                matricula_curso = mm_ep.fetch_matricula_curso_estudiante(
+                    self.db_user,
+                    self.db_pass,
+                    carnet=carnet,
+                    periodo=periodo,
+                )
+                if not matricula_curso:
+                    continue
+
+                curso_cod, curso_desc = matricula_curso
+                curso_cod = int(curso_cod)
+
+                if curso_cod in seen:
+                    continue
+
+                seen.add(curso_cod)
+                display = f"{curso_cod} - {curso_desc}"
+                self._curso_display_to_cod[display] = curso_cod
+                values.append(display)
+
+            except Exception:
+                continue
+
+        values.sort()
+        self.cbo_curso["values"] = values
+        self.cbo_curso.set("")
+
+    def _cargar_estudiantes_por_curso(self, curso_cod: int, periodo: int):
+        """
+        Filtra los estudiantes que tienen matrícula de curso activa
+        en el curso seleccionado y período actual.
+        """
+        self._estudiante_display_to_carnet = {}
+        values: list[str] = []
+
+        for display, carnet in self._all_estudiantes_display_to_carnet.items():
+            try:
+                matricula_curso = mm_ep.fetch_matricula_curso_estudiante(
+                    self.db_user,
+                    self.db_pass,
+                    carnet=carnet,
+                    periodo=periodo,
+                )
+                if not matricula_curso:
+                    continue
+
+                curso_cod_est, _curso_desc = matricula_curso
+                if int(curso_cod_est) != int(curso_cod):
+                    continue
+
+                self._estudiante_display_to_carnet[display] = carnet
+                values.append(display)
+
+            except Exception:
+                continue
+
+        values.sort()
+        self.cbo_estudiante["values"] = values
+        self.cbo_estudiante.set("")
 
     # =====================================================
     # Helpers parse
@@ -474,6 +568,10 @@ class MatriculaMateriaTab(ttk.Frame):
 
     def _get_periodo_display_selected(self) -> str:
         return (self.vars["periodo"].get() or "").strip()
+
+    def _get_curso_selected(self) -> int | None:
+        display = (self.vars["curso"].get() or "").strip()
+        return self._curso_display_to_cod.get(display)
 
     def _get_materia_selected(self) -> int | None:
         display = (self.vars["materia"].get() or "").strip()
@@ -564,14 +662,35 @@ class MatriculaMateriaTab(ttk.Frame):
     # =====================================================
     # Contexto dependiente
     # =====================================================
+    def _on_curso_changed(self, _evt=None):
+        try:
+            curso_cod = self._get_curso_selected()
+            periodo = self._get_periodo_selected()
+
+            self.vars["estudiante"].set("")
+            self._reset_contexto_dependiente(keep_curso=True, keep_periodo=True)
+
+            if not curso_cod or not periodo:
+                self.cbo_estudiante["values"] = []
+                self.cbo_estudiante.set("")
+                self.refresh_grid()
+                return
+
+            self._cargar_estudiantes_por_curso(curso_cod, periodo)
+            self._refresh_grid_contextual()
+
+        except Exception as e:
+            handle_exception(self, e, context="Cambio de curso Matrícula por Materia")
+
     def _on_contexto_changed(self, _evt=None):
         try:
             carnet = self._get_carnet_selected()
             periodo = self._get_periodo_selected()
+            curso_cod_sel = self._get_curso_selected()
 
-            self._reset_contexto_dependiente()
+            self._reset_contexto_dependiente(keep_curso=True, keep_periodo=True)
 
-            if not carnet or not periodo:
+            if not carnet or not periodo or not curso_cod_sel:
                 self._refresh_grid_contextual()
                 return
 
@@ -591,8 +710,20 @@ class MatriculaMateriaTab(ttk.Frame):
                 self._refresh_grid_contextual()
                 return
 
-            curso_cod, curso_desc = matricula_curso
-            self.vars["curso"].set(f"{curso_cod} - {curso_desc}")
+            curso_cod_real, curso_desc_real = matricula_curso
+
+            if int(curso_cod_real) != int(curso_cod_sel):
+                show_warning(
+                    self,
+                    "Curso no coincide",
+                    "El estudiante seleccionado no pertenece al curso/carrera elegido.",
+                )
+                self.vars["estudiante"].set("")
+                self._refresh_grid_contextual()
+                return
+
+            # Mantener el curso seleccionado visible y normalizado
+            self.vars["curso"].set(f"{curso_cod_real} - {curso_desc_real}")
 
             beca = mm_ep.fetch_beca_estudiante(
                 self.db_user,
@@ -749,6 +880,7 @@ class MatriculaMateriaTab(ttk.Frame):
     # =====================================================
     def on_nuevo(self):
         try:
+            cur = self.vars["curso"].get()
             est = self.vars["estudiante"].get()
             per = self.vars["periodo"].get()
 
@@ -757,13 +889,15 @@ class MatriculaMateriaTab(ttk.Frame):
             if self._loaded:
                 self._load_initial_lookups()
 
-            # Mantener estudiante/período si el usuario ya estaba trabajando
-            if est:
-                self.vars["estudiante"].set(est)
             if per:
                 self.vars["periodo"].set(per)
+            if cur:
+                self.vars["curso"].set(cur)
+                self._on_curso_changed()
+            if est:
+                self.vars["estudiante"].set(est)
 
-            if est and per:
+            if cur and est and per:
                 self._on_contexto_changed()
 
         except Exception as e:
@@ -776,11 +910,14 @@ class MatriculaMateriaTab(ttk.Frame):
             materia_cod = self._get_materia_selected()
             docente_cod = self._get_docente_selected()
 
+            if not self._get_curso_selected():
+                show_warning(self, "Validación", "Selecciona un curso/carrera.")
+                return
             if not carnet:
                 show_warning(self, "Validación", "Selecciona un estudiante.")
                 return
             if not periodo:
-                show_warning(self, "Validación", "Selecciona un período.")
+                show_warning(self, "Validación", "No hay período activo disponible.")
                 return
             if not materia_cod:
                 show_warning(self, "Validación", "Selecciona una materia.")
@@ -802,7 +939,6 @@ class MatriculaMateriaTab(ttk.Frame):
 
             show_info(self, "Matrícula por Materia", msg)
 
-            # Mantener contexto y limpiar dependientes
             self.vars["materia"].set("")
             self.vars["docente"].set("")
             self.cbo_docente["values"] = []

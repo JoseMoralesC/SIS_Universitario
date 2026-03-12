@@ -198,3 +198,4 @@ def soft_delete_becado(conn: pyodbc.Connection, *, id_becado: int) -> None:
         int(id_becado),
     )
     conn.commit()
+    

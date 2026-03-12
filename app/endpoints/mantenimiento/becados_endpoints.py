@@ -26,7 +26,7 @@ from app.core.exceptions import ValidationError
 def get_lookups(db_user: str, db_pass: str, codigo_usuario: int | None = None):
     conn = connect(db_user, db_pass)
     try:
-        estudiantes = fetch_estudiantes_disponibles_lookup(conn)   # solo no becados (activos)
+        estudiantes = fetch_estudiantes_disponibles_lookup(conn)
         becas = fetch_becas_lookup(conn)
         return {"estudiantes": estudiantes, "becas": becas}
     finally:
@@ -55,34 +55,40 @@ def siguiente_id_becado(db_user: str, db_pass: str, codigo_usuario: int | None =
 def crear_becado(
     db_user: str,
     db_pass: str,
-    id_becado: int,
     carnet: str,
     id_beca: int,
     fecha_aplicacion: str,
     codigo_usuario: int | None = None,
 ) -> bool:
+
     conn = connect(db_user, db_pass)
     try:
+        id_becado = next_id_becado(conn)
+
         data = validar_becado_create_data(
+            id_becado=id_becado,
             carnet=carnet,
             id_beca=id_beca,
             fecha_aplicacion=fecha_aplicacion,
         )
-        validar_becado_refs(conn, carnet=data["carnet"], id_beca=data["id_beca"])
+
+        validar_becado_refs(
+            conn,
+            carnet=data["carnet"],
+            id_beca=data["id_beca"],
+        )
 
         if exists_becado_activo_by_carnet(conn, data["carnet"]):
             raise ValidationError("El estudiante ya tiene una beca activa.")
 
-        insert_becado(conn, id_becado=int(id_becado), **data)
-
-        # Auditoría
-        if codigo_usuario is not None:
-            try:
-                insert_auditoria(conn, codigo_usuario=int(codigo_usuario), movimiento_cod=Mov.BECADO_CREADO)
-            except Exception:
-                pass
-
+        insert_becado(
+            conn,
+            carnet=data["carnet"],
+            id_beca=data["id_beca"],
+            fecha_aplicacion=data["fecha_aplicacion"],
+        )
         return True
+
     finally:
         conn.close()
 
@@ -104,18 +110,30 @@ def actualizar_becado(
             id_beca=id_beca,
             fecha_aplicacion=fecha_aplicacion,
         )
-        validar_becado_existente(conn, id_becado=data["id_becado"])
-        validar_becado_refs(conn, carnet=data["carnet"], id_beca=data["id_beca"])
 
-        if exists_becado_activo_by_carnet(conn, data["carnet"], exclude_id=data["id_becado"]):
+        validar_becado_existente(conn, id_becado=data["id_becado"])
+        validar_becado_refs(
+            conn,
+            carnet=data["carnet"],
+            id_beca=data["id_beca"],
+        )
+
+        if exists_becado_activo_by_carnet(
+            conn,
+            data["carnet"],
+            exclude_id=data["id_becado"],
+        ):
             raise ValidationError("El estudiante ya tiene una beca activa.")
 
         update_becado(conn, **data)
 
-        # Auditoría
         if codigo_usuario is not None:
             try:
-                insert_auditoria(conn, codigo_usuario=int(codigo_usuario), movimiento_cod=Mov.BECADO_ACTUALIZADO)
+                insert_auditoria(
+                    conn,
+                    codigo_usuario=int(codigo_usuario),
+                    movimiento_cod=Mov.BECADO_ACTUALIZADO,
+                )
             except Exception:
                 pass
 
@@ -124,7 +142,12 @@ def actualizar_becado(
         conn.close()
 
 
-def eliminar_becado(db_user: str, db_pass: str, id_becado: int, codigo_usuario: int | None = None) -> bool:
+def eliminar_becado(
+    db_user: str,
+    db_pass: str,
+    id_becado: int,
+    codigo_usuario: int | None = None,
+) -> bool:
     """
     DELETE lógico
     """
@@ -133,10 +156,13 @@ def eliminar_becado(db_user: str, db_pass: str, id_becado: int, codigo_usuario: 
         validar_becado_existente(conn, id_becado=int(id_becado))
         soft_delete_becado(conn, id_becado=int(id_becado))
 
-        # Auditoría
         if codigo_usuario is not None:
             try:
-                insert_auditoria(conn, codigo_usuario=int(codigo_usuario), movimiento_cod=Mov.BECADO_ELIMINADO)
+                insert_auditoria(
+                    conn,
+                    codigo_usuario=int(codigo_usuario),
+                    movimiento_cod=Mov.BECADO_ELIMINADO,
+                )
             except Exception:
                 pass
 

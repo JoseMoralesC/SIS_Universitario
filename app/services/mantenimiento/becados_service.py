@@ -7,7 +7,7 @@ from app.core.exceptions import ValidationError
 from app.repositories.mantenimiento.becados_repo import (
     exists_carnet,
     exists_id_becado,
-    exists_becado_activo_by_carnet,  # <-- NUEVO NOMBRE
+    exists_becado_activo_by_carnet,
 )
 from app.repositories.mantenimiento.becas_repo import exists_id_beca
 
@@ -17,7 +17,6 @@ def _parse_date(value: str) -> str:
     if not v:
         raise ValidationError("La fecha de aplicación es requerida (YYYY-MM-DD).")
 
-    # Acepta DD/MM/YYYY
     if "/" in v:
         parts = v.split("/")
         if len(parts) == 3:
@@ -28,7 +27,6 @@ def _parse_date(value: str) -> str:
                 raise ValidationError("Fecha inválida. Use YYYY-MM-DD o DD/MM/YYYY.")
             return d.isoformat()
 
-    # Acepta YYYY-MM-DD
     try:
         d = _dt.date.fromisoformat(v)
         return d.isoformat()
@@ -36,7 +34,15 @@ def _parse_date(value: str) -> str:
         raise ValidationError("Fecha inválida. Use formato YYYY-MM-DD.")
 
 
-def validar_becado_create_data(*, carnet: str, id_beca: int, fecha_aplicacion: str) -> dict:
+def validar_becado_create_data(*, id_becado: int, carnet: str, id_beca: int, fecha_aplicacion: str) -> dict:
+    try:
+        id_becado = int(id_becado)
+    except Exception:
+        raise ValidationError("El ID del registro debe ser numérico.")
+
+    if id_becado <= 0:
+        raise ValidationError("El ID del registro debe ser mayor a 0.")
+
     carnet = (carnet or "").strip()
 
     try:
@@ -54,6 +60,7 @@ def validar_becado_create_data(*, carnet: str, id_beca: int, fecha_aplicacion: s
     fecha_norm = _parse_date(fecha_aplicacion)
 
     return {
+        "id_becado": id_becado,
         "carnet": carnet,
         "id_beca": id_beca,
         "fecha_aplicacion": fecha_norm,
@@ -61,17 +68,12 @@ def validar_becado_create_data(*, carnet: str, id_beca: int, fecha_aplicacion: s
 
 
 def validar_becado_update_data(*, id_becado: int, carnet: str, id_beca: int, fecha_aplicacion: str) -> dict:
-    try:
-        id_becado = int(id_becado)
-    except Exception:
-        raise ValidationError("El ID del registro debe ser numérico.")
-
-    if id_becado <= 0:
-        raise ValidationError("El ID del registro debe ser mayor a 0.")
-
-    base = validar_becado_create_data(carnet=carnet, id_beca=id_beca, fecha_aplicacion=fecha_aplicacion)
-    base["id_becado"] = id_becado
-    return base
+    return validar_becado_create_data(
+        id_becado=id_becado,
+        carnet=carnet,
+        id_beca=id_beca,
+        fecha_aplicacion=fecha_aplicacion,
+    )
 
 
 def validar_becado_refs(conn, *, carnet: str, id_beca: int) -> None:
@@ -82,11 +84,6 @@ def validar_becado_refs(conn, *, carnet: str, id_beca: int) -> None:
 
 
 def validar_becado_unicidad_activa(conn, *, carnet: str, exclude_id: int | None = None) -> None:
-    """
-    Regla con borrado lógico:
-    - Un estudiante NO puede tener más de una beca ACTIVA.
-    - Si tiene una beca INACTIVA, sí puede volver a asignarse.
-    """
     if exists_becado_activo_by_carnet(conn, carnet, exclude_id=exclude_id):
         raise ValidationError("El estudiante ya tiene una beca activa.")
 

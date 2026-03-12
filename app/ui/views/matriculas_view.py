@@ -286,7 +286,6 @@ class MatriculasView(ttk.Frame):
         self.cb_curso["values"] = [f"{cod} - {desc}" for cod, desc in self._cursos]
         self.cb_estudiante["values"] = []
         self.cb_estudiante.set("")
-        self.cb_estudiante.set("")
         self.cb_curso.set("")
         self.cb_docente["values"] = []
         self.cb_docente.set("")
@@ -316,6 +315,10 @@ class MatriculasView(ttk.Frame):
         self.nb.select(0)
         self._selected_key = None
 
+        # Si ya hay curso seleccionado, recargar elegibles para evitar que
+        # sigan apareciendo estudiantes con matrícula activa recién creada.
+        self._refresh_estudiantes_elegibles()
+
     # ------------------------------------------------------------------
     # Eventos / helpers
     # ------------------------------------------------------------------
@@ -327,6 +330,29 @@ class MatriculasView(ttk.Frame):
             self.ent_fecha.insert(0, d.isoformat())
 
         _CalendarPopup(self, "Seleccionar fecha", min_date=min_date, on_pick=_set)
+
+    def _refresh_estudiantes_elegibles(self):
+        """
+        Carga en el combo únicamente estudiantes elegibles para el curso actual,
+        idealmente excluyendo los que ya tienen matrícula activa.
+        """
+        curso_cod = self._parse_cod_from_combo(self.cb_curso.get())
+        if not curso_cod:
+            self.cb_estudiante["values"] = []
+            self.cb_estudiante.set("")
+            return
+
+        periodo = _dt.date.today().year
+        elegibles = m_ep.get_estudiantes_elegibles(
+            db_user=self.db_user,
+            db_pass=self.db_pass,
+            curso_cod=int(curso_cod),
+            periodo=int(periodo),
+            codigo_usuario=self.codigo_usuario,
+        ) or []
+
+        self.cb_estudiante["values"] = [f"{c} - {n}" for c, n in elegibles]
+        self.cb_estudiante.set("")
 
     def _on_curso_changed(self, _evt=None):
         curso_cod = self._parse_cod_from_combo(self.cb_curso.get())
@@ -342,21 +368,12 @@ class MatriculasView(ttk.Frame):
             db_pass=self.db_pass,
             curso_cod=int(curso_cod),
             codigo_usuario=self.codigo_usuario,
-        )
+        ) or []
+
         self.cb_docente["values"] = [f"{c} - {n}" for c, n in docentes]
         self.cb_docente.set("")
 
-        periodo = _dt.date.today().year
-        elegibles = m_ep.get_estudiantes_elegibles(
-            db_user=self.db_user,
-            db_pass=self.db_pass,
-            curso_cod=int(curso_cod),
-            periodo=int(periodo),
-            codigo_usuario=self.codigo_usuario,
-        )
-
-        self.cb_estudiante["values"] = [f"{c} - {n}" for c, n in elegibles]
-        self.cb_estudiante.set("")
+        self._refresh_estudiantes_elegibles()
 
     def _on_row_select(self, tree: ttk.Treeview):
         sel = tree.selection()
@@ -456,6 +473,7 @@ class MatriculasView(ttk.Frame):
             if ok:
                 messagebox.showinfo("Éxito", "Matrícula registrada correctamente.")
                 self.refresh_grid()
+                self._refresh_estudiantes_elegibles()
         except Exception as ex:
             messagebox.showerror("Error", f"No se pudo matricular.\n\nDetalle: {ex}")
 
@@ -509,6 +527,7 @@ class MatriculasView(ttk.Frame):
                 messagebox.showinfo("Éxito", f"Estado actualizado a: {nuevo}")
                 win.destroy()
                 self._refresh_active_tab_after_mutation()
+                self._refresh_estudiantes_elegibles()
             except Exception as ex:
                 messagebox.showerror("Error", f"No se pudo cambiar el estado.\n\nDetalle: {ex}")
 
@@ -554,6 +573,7 @@ class MatriculasView(ttk.Frame):
             )
             messagebox.showinfo("Éxito", "Matrícula eliminada correctamente.")
             self._refresh_active_tab_after_mutation()
+            self._refresh_estudiantes_elegibles()
         except Exception as ex:
             messagebox.showerror("Error", f"No se pudo eliminar.\n\nDetalle: {ex}")
 

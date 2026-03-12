@@ -67,6 +67,25 @@ class BecadosTab(ttk.Frame):
     def _today(self) -> str:
         return _dt.date.today().isoformat()
 
+    def _get_carnets_con_beca_activa(self) -> set[str]:
+        """
+        Obtiene los carnets que actualmente ya tienen una beca activa/listada.
+        Se apoya en listar_becados(), que idealmente ya devuelve solo activos.
+        """
+        carnets: set[str] = set()
+        try:
+            rows = listar_becados(self.db_user, self.db_pass) or []
+            for r in rows:
+                try:
+                    carnet = str(r[1]).strip()
+                    if carnet:
+                        carnets.add(carnet)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        return carnets
+
     # -----------------------------
     # UI
     # -----------------------------
@@ -236,22 +255,37 @@ class BecadosTab(ttk.Frame):
     # Lookups
     # -----------------------------
     def _load_lookups(self):
-        # ✅ FIX: no pasar codigo_usuario si endpoint no lo acepta
         data = get_lookups(self.db_user, self.db_pass)
 
         estudiantes = data.get("estudiantes") or []
         becas = data.get("becas") or []
+
+        # Tomar carnets con beca activa para excluirlos del combo en modo NEW
+        carnets_becados = self._get_carnets_con_beca_activa()
 
         # estudiantes: [(carnet, nombre), ...]
         self.estudiante_display_to_carnet = {}
         self.carnet_to_estudiante_display = {}
 
         for r in estudiantes:
-            carnet = str(r[0])
-            nombre = str(r[1])
+            carnet = str(r[0]).strip()
+            nombre = str(r[1]).strip()
+
+            if not carnet or not nombre:
+                continue
+
+            # En modo nuevo: excluir estudiantes ya becados
+            if self._mode == "new" and carnet in carnets_becados:
+                continue
+
             display = nombre
             self.estudiante_display_to_carnet[display] = carnet
             self.carnet_to_estudiante_display[carnet] = display
+
+        # En modo update: asegurar que el estudiante original siga visible
+        if self._mode == "update" and self._orig_carnet and self._orig_est_display:
+            self.estudiante_display_to_carnet[self._orig_est_display] = self._orig_carnet
+            self.carnet_to_estudiante_display[self._orig_carnet] = self._orig_est_display
 
         # becas: [(id_beca, nombre, pct), ...]
         self.beca_display_to_id = {}
@@ -354,7 +388,6 @@ class BecadosTab(ttk.Frame):
             if self.tree is None:
                 return
 
-            # ✅ FIX: no pasar codigo_usuario si endpoint no lo acepta
             rows = listar_becados(self.db_user, self.db_pass)
 
             for item in self.tree.get_children():
@@ -376,7 +409,6 @@ class BecadosTab(ttk.Frame):
     def _load_next_id(self):
         try:
             self._ensure_vars()
-            # ✅ FIX: no pasar codigo_usuario si endpoint no lo acepta
             next_id = siguiente_id_becado(self.db_user, self.db_pass)
             self.vars["id_becado"].set(str(next_id))
         except Exception as e:
@@ -407,15 +439,14 @@ class BecadosTab(ttk.Frame):
             self._orig_est_display = estudiante_nombre
             self._orig_id_beca = self.beca_display_to_id.get(beca_nombre)
 
-            # Asegurar estudiante (aunque ya esté becado)
-            self._ensure_student_in_combo(carnet=carnet, nombre=estudiante_nombre)
+            # Recargar lookups en modo update para conservar estudiante actual
+            self._load_lookups()
 
             self.vars["id_becado"].set(id_becado)
             self.vars["estudiante"].set(estudiante_nombre)
             self.vars["carnet_view"].set(carnet)
             self.vars["beca"].set(beca_nombre)
 
-            # ✅ FIX: porcentaje correcto desde lookup
             id_beca = self.beca_display_to_id.get(beca_nombre)
             pct = self.beca_id_to_pct.get(int(id_beca), 0) if id_beca is not None else 0
             self.vars["porcentaje"].set(str(pct))
@@ -458,9 +489,8 @@ class BecadosTab(ttk.Frame):
             ok = crear_becado(
                 self.db_user,
                 self.db_pass,
-                int(id_becado_txt),
                 carnet,
-                int(id_beca),
+                id_beca,
                 fecha,
             )
             if ok:
