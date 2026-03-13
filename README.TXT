@@ -8,7 +8,8 @@ Base de datos utilizada: Universidad
 
 Descripción General
 
-El SIS-Universitario es un sistema de información académica desarrollado en Python, con conexión a SQL Server Express, cuyo objetivo es gestionar los procesos académicos básicos de una universidad.
+El SIS-Universitario es un sistema de información académica desarrollado en Python, con conexión a SQL Server 
+Express, cuyo objetivo es gestionarlos procesos académicos básicos de una universidad.
 
 Este Entregable No. 1 se enfoca exclusivamente en:
 
@@ -36,7 +37,8 @@ Alcance del Entregable No. 1
 - Estructura modular del proyecto
 
 Nota:
-Las funcionalidades académicas (matrícula, notas, asistencia, reportes, etc.) serán implementadas en entregables posteriores.
+Las funcionalidades académicas (matrícula, notas, asistencia, reportes, etc.) serán implementadas en entregables 
+posteriores.
 
 Interfaz de Login
 
@@ -152,9 +154,12 @@ ENTREGABLE No. 2
 
 Descripción General del Entregable No. 2
 
-El Entregable No. 2 amplía el sistema SIS-Universitario incorporando un menú principal moderno y la implementación de mantenimientos académicos mediante operaciones CRUD reales, conectados directamente a la base de datos SQL Server.
+El Entregable No. 2 amplía el sistema SIS-Universitario incorporando un menú principal moderno y la 
+implementación de mantenimientos académicos mediante operaciones CRUD reales, conectados directamente a la 
+base de datos SQL Server.
 
-Este entregable introduce una arquitectura más robusta, orientada a la escalabilidad y reutilización de código, manteniendo separación estricta de responsabilidades por capas.
+Este entregable introduce una arquitectura más robusta, orientada a la escalabilidad y reutilización de código, 
+manteniendo separación estricta de responsabilidades por capas.
 
 Alcance del Entregable No. 2
 
@@ -296,9 +301,12 @@ ENTREGABLE No. 3
 
 Descripción General del Entregable No. 3
 
-El Entregable No. 3 amplía el sistema SIS-Universitario incorporando la gestión completa del proceso de Matrículas Académicas, implementando reglas reales de negocio, validaciones preventivas y funcionalidades de consulta y reporte, manteniendo la arquitectura modular definida desde los entregables anteriores.
+El Entregable No. 3 amplía el sistema SIS-Universitario incorporando la gestión completa del proceso de 
+Matrículas Académicas, implementando reglas reales de negocio, validaciones preventivas y funcionalidades de 
+consulta y reporte, manteniendo la arquitectura modular definida desde los entregables anteriores.
 
-Este entregable consolida la separación por capas (UI, Endpoints, Services y Repositories) y refuerza la escalabilidad del sistema para futuros módulos académicos.
+Este entregable consolida la separación por capas (UI, Endpoints, Services y Repositories) y refuerza la 
+escalabilidad del sistema para futuros módulos académicos.
 
 Alcance del Entregable No. 3
 
@@ -476,15 +484,22 @@ SIS_Universitario/
 ├── main.py
 ├── requirements.txt
 └── README.TXT  
+
 ----------------------------------------------------------------
 ENTREGABLE No. 4
 ----------------------------------------------------------------
 
 Descripción General del Entregable No. 4
 
-El Entregable No. 4 amplía el sistema SIS-Universitario incorporando el módulo de Matrícula por Materias, permitiendo gestionar la asignación académica detallada de materias a estudiantes previamente matriculados en curso, bajo reglas de negocio reales, validaciones de carga académica y control de consistencia con la estructura modular del sistema.
+El Entregable No. 4 amplía el sistema SIS-Universitario incorporando el módulo de Matrícula por Materias, 
+permitiendo gestionar la asignación académica detallada de materias a estudiantes previamente matriculados en 
+curso, bajo reglas de negocio reales, validaciones de carga académica y control de consistencia con la 
+estructura modular del sistema.
 
-Este entregable extiende la arquitectura definida en los entregables anteriores, manteniendo la separación estricta por capas (UI, Endpoints, Services, Repositories y Core), e incorpora nuevos componentes especializados para consulta de matrícula del estudiante, asignación de materias, validación de horarios, relación docente-materia y apoyo al proceso de facturación académica.
+Este entregable extiende la arquitectura definida en los entregables anteriores, manteniendo la separación 
+estricta por capas (UI, Endpoints, Services, Repositories y Core), e incorpora nuevos componentes 
+especializados para consulta de matrícula del estudiante, asignación de materias, validación de horarios, 
+relación docente-materia y apoyo al proceso de facturación académica.
 
 Alcance del Entregable No. 4
 
@@ -541,7 +556,8 @@ La interfaz del Entregable No. 4 incorpora:
 
 Arquitectura y Diseño
 
-El Entregable No. 4 refuerza la arquitectura modular del sistema mediante la incorporación de un nuevo bloque funcional completo para matrícula por materias:
+El Entregable No. 4 refuerza la arquitectura modular del sistema mediante la incorporación de un nuevo bloque 
+funcional completo para matrícula por materias:
 
 - UI: vistas, pestañas, formularios, popups y validaciones visuales.
 - Endpoints: coordinación del flujo entre interfaz, servicios y base de datos.
@@ -637,11 +653,152 @@ SIS_Universitario/
 
 Observaciones Finales
 
-El Entregable No. 4 fortalece el SIS-Universitario al incorporar un módulo académico más específico y alineado con los procesos reales de matrícula universitaria.
+El Entregable No. 4 fortalece el SIS-Universitario al incorporar un módulo académico más específico y 
+alineado con los procesos reales de matrícula universitaria.
 
-La implementación mantiene coherencia con la arquitectura definida desde los entregables anteriores, favoreciendo la mantenibilidad, reutilización de código y escalabilidad del sistema.
+La implementación mantiene coherencia con la arquitectura definida desde los entregables anteriores, 
+favoreciendo la mantenibilidad, reutilización de código y escalabilidad del sistema.
 
-Este entregable consolida al proyecto como una base funcional robusta para continuar con los siguientes módulos académicos del sistema.
+Este entregable consolida al proyecto como una base funcional robusta para continuar con los siguientes 
+módulos académicos del sistema.
+
+----------------------------------------------------------------
+ENTREGABLE No. 5
+----------------------------------------------------------------
+
+Descripción General del Entregable No. 5
+
+El Entregable No. 5 amplía el sistema SIS-Universitario incorporando el módulo de Asistencias Académicas, 
+permitiendo registrar, consultar y controlar la asistencia de los estudiantes en sus materias matriculadas, 
+bajo reglas de negocio reales, validaciones de consistencia académica y manteniendo la arquitectura modular 
+establecida desde los entregables anteriores.
+
+Este entregable fortalece la cobertura funcional del sistema al integrar el proceso de asistencia dentro del 
+flujo académico general, reutilizando la estructura por capas (UI, Endpoints, Services, Repositories y Core) y 
+respetando el enfoque de escalabilidad, mantenibilidad y separación de responsabilidades del proyecto.
+
+Alcance del Entregable No. 5
+
+- Implementación del módulo de Asistencias Académicas.
+- Registro de asistencia de estudiantes por materia.
+- Validación de matrícula activa del estudiante antes de registrar asistencia.
+- Validación de correspondencia entre estudiante, materia, horario y fecha seleccionada.
+- Control de consistencia entre la fecha registrada y el horario académico asignado.
+- Prevención de registros inválidos o inconsistentes.
+- Consulta y visualización de información asociada al proceso de asistencia.
+- Integración del módulo con la arquitectura general del sistema.
+- Manejo controlado de errores desde interfaz, servicios y acceso a datos.
+- Preparación del sistema para futuros procesos académicos relacionados con evaluación y seguimiento estudiantil.
+
+Gestión de Asistencias
+
+El módulo de Asistencias permite:
+
+- Seleccionar al estudiante correspondiente dentro del contexto académico válido.
+- Consultar la materia asociada a su proceso de matrícula.
+- Registrar la asistencia en una fecha determinada.
+- Validar que el estudiante tenga relación académica activa con la materia.
+- Verificar que la fecha seleccionada sea coherente con el horario de la materia.
+- Mantener consistencia entre los datos académicos y el registro generado.
+- Controlar errores antes de guardar la información en base de datos.
+
+Validaciones y Reglas de Negocio
+
+El sistema aplica validaciones orientadas a garantizar la integridad del registro de asistencia, entre ellas:
+
+- Verificación de existencia de matrícula activa del estudiante.
+- Validación de existencia de matrícula por materia asociada al estudiante.
+- Verificación de que la materia seleccionada corresponda al contexto académico real.
+- Validación de fecha de clase contra el horario configurado de la materia.
+- Prevención de registros inconsistentes en el proceso de asistencia.
+- Manejo de errores controlado desde la interfaz gráfica, la capa de servicios y los repositorios.
+- Protección del flujo mediante validaciones previas antes de persistir la información.
+
+Interfaz Gráfica y Experiencia de Usuario
+
+La interfaz del Entregable No. 5 incorpora:
+
+- Una nueva pestaña especializada para el proceso de asistencias.
+- Flujo guiado para registrar asistencia académica.
+- Componentes gráficos consistentes con el resto del sistema.
+- Validaciones visuales para prevenir errores de entrada.
+- Mensajes de confirmación, advertencia y error según el resultado del proceso.
+- Integración visual con el menú principal del sistema.
+- Reutilización del tema gráfico y de componentes existentes para mantener uniformidad visual.
+
+Arquitectura y Diseño
+
+El Entregable No. 5 mantiene y refuerza la arquitectura modular del sistema mediante la incorporación de un 
+nuevo bloque funcional completo para asistencias:
+
+- UI: vista del módulo de asistencias, formularios y validaciones visuales.
+- Endpoints: coordinación del flujo entre la interfaz, la lógica de negocio y la base de datos.
+- Services: validaciones académicas, reglas de negocio y control del proceso de asistencia.
+- Repositories: acceso estructurado a la información de asistencias, matrícula por materia y horarios.
+- Core: reutilización de componentes de conexión, sesión, manejo de errores y auditoría.
+
+Módulos y Componentes Incorporados en el Entregable No. 5
+
+Se incorporan nuevos componentes organizados por capa para el módulo de asistencias, incluyendo:
+
+- Endpoint de asistencias.
+- Repositorio de asistencias.
+- Servicio de asistencias.
+- Vista gráfica del módulo de asistencias.
+- Integración del módulo al sistema principal para su uso dentro del flujo académico.
+
+Estado del Proyecto
+
+Con la finalización del Entregable No. 5:
+
+- El sistema amplía su cobertura funcional sobre los procesos académicos principales.
+- La arquitectura se mantiene estable, modular y escalable.
+- El proyecto continúa consolidándose como una solución académica integral.
+- El sistema queda preparado para futuros módulos como:
+  - Notas académicas
+  - Reportes avanzados
+  - Indicadores de rendimiento
+  - Procesos complementarios de control académico
+
+Estructura del Proyecto (Entregable No. 5)
+
+SIS_Universitario/
+├── app/
+│   ├── endpoints/
+│   │   └── asistencias/
+│   │       ├── __init__.py
+│   │       └── asistencias_endpoints.py
+│   │
+│   ├── repositories/
+│   │   └── asistencias/
+│   │       ├── __init__.py
+│   │       └── asistencias_repo.py
+│   │
+│   ├── services/
+│   │   └── asistencias/
+│   │       ├── __init__.py
+│   │       └── asistencias_service.py
+│   │
+│   └── ui/
+│       ├── asistencias/
+│       │   ├── __init__.py
+│       │   └── asistencias_tab.py
+│       │
+│       └── views/
+│           └── (integración con la navegación principal del sistema)
+
+Observaciones Finales
+
+El Entregable No. 5 fortalece el SIS-Universitario al incorporar el control de asistencias como parte del 
+flujo académico del sistema, 
+permitiendo un manejo más completo y realista de la información estudiantil.
+
+La implementación mantiene coherencia con la arquitectura definida desde los entregables anteriores, 
+favoreciendo la mantenibilidad, reutilización de código, validación centralizada y escalabilidad del sistema.
+
+Este entregable consolida aún más la base funcional del proyecto y deja preparado el sistema para continuar 
+con módulos académicos de mayor profundidad y análisis.
+
 Autor
 
 José Rodolfo Morales Calderón

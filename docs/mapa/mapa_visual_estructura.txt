@@ -38,6 +38,10 @@ SIS_Universitario/
 │   │   └── session.py
 │   │
 │   ├── endpoints/
+│   │   ├── asistencias/
+│   │   │   ├── _init_.py
+│   │   │   └── asistencias_endpoints.py
+│   │   │
 │   │   ├── mantenimiento/
 │   │   │   ├── becados_endpoints.py
 │   │   │   ├── becas_endpoints.py
@@ -63,6 +67,10 @@ SIS_Universitario/
 │   │   ├── _init_.py
 │   │   ├── auditoria_repo.py
 │   │   ├── usuarios_repo.py
+│   │   │
+│   │   ├── asistencias/
+│   │   │   ├── _init_.py
+│   │   │   └── asistencias_repo.py
 │   │   │
 │   │   ├── mantenimiento/
 │   │   │   ├── becados_repo.py
@@ -91,6 +99,10 @@ SIS_Universitario/
 │   │   ├── _init_.py
 │   │   ├── auth_service.py
 │   │   │
+│   │   ├── asistencias/
+│   │   │   ├── _init_.py
+│   │   │   └── asistencias_service.py
+│   │   │
 │   │   ├── mantenimiento/
 │   │   │   ├── becados_service.py
 │   │   │   ├── becas_service.py
@@ -118,6 +130,10 @@ SIS_Universitario/
 │   │   ├── main_menu.py
 │   │   ├── theme.py
 │   │   ├── welcome_window.py
+│   │   │
+│   │   ├── asistencias/
+│   │   │   ├── _init_.py
+│   │   │   └── asistencias_tab.py
 │   │   │
 │   │   ├── components/
 │   │   │   ├── _init_.py
@@ -161,7 +177,6 @@ SIS_Universitario/
 │   │       └── matriculas_view.py
 │   │
 │   └── modules/
-│      
 │
 └── docs/
     └── mapa/
