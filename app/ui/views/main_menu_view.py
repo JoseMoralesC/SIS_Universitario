@@ -38,6 +38,10 @@ class MainMenuView(ttk.Frame):
         self._matricula_materias_loaded = False
         self._matricula_materias_view = None
 
+        # Asistencias (lazy-load)
+        self._asistencias_loaded = False
+        self._asistencias_view = None
+
         self._build_ui()
 
     def _build_ui(self):
@@ -191,6 +195,22 @@ class MainMenuView(ttk.Frame):
         self._matricula_materias_placeholder_label.grid(row=0, column=0, sticky="nsew")
 
         # =====================================================
+        # View: Asistencias (lazy-load)
+        # =====================================================
+        self.view_asistencias = ttk.Frame(self.content)
+        self.view_asistencias.grid(row=0, column=0, sticky="nsew")
+        self.view_asistencias.rowconfigure(0, weight=1)
+        self.view_asistencias.columnconfigure(0, weight=1)
+
+        self._asistencias_placeholder_label = ttk.Label(
+            self.view_asistencias,
+            text="Módulo Asistencias en construcción.\n(Entregable #5: Registro de listas de asistencia)",
+            anchor="center",
+            font=("Segoe UI", 14),
+        )
+        self._asistencias_placeholder_label.grid(row=0, column=0, sticky="nsew")
+
+        # =====================================================
         # Placeholder general otras opciones
         # =====================================================
         self.view_placeholder = ttk.Frame(self.content)
@@ -212,6 +232,7 @@ class MainMenuView(ttk.Frame):
         self.view_mantenimientos.grid_remove()
         self.view_matriculas.grid_remove()
         self.view_matricula_materias.grid_remove()
+        self.view_asistencias.grid_remove()
         self.view_placeholder.grid_remove()
 
     def _ensure_matriculas_loaded(self):
@@ -284,6 +305,42 @@ class MainMenuView(ttk.Frame):
                 f"No se pudo cargar el módulo.\n\nDetalle:\n{e}"
             )
 
+    def _ensure_asistencias_loaded(self):
+        """
+        Carga (una sola vez) la vista real de Asistencias.
+        Si falla el import o la construcción, muestra el error real.
+        """
+        if self._asistencias_loaded:
+            return
+
+        try:
+            from app.ui.asistencias.asistencias_tab import AsistenciasTab  # type: ignore
+
+            try:
+                if self._asistencias_placeholder_label is not None:
+                    self._asistencias_placeholder_label.destroy()
+                    self._asistencias_placeholder_label = None
+            except Exception:
+                pass
+
+            self._asistencias_view = AsistenciasTab(
+                self.view_asistencias,
+                db_user=self.db_user,
+                db_pass=self.db_pass,
+                codigo_usuario=self.codigo_usuario,
+            )
+            self._asistencias_view.grid(row=0, column=0, sticky="nsew")
+
+            self._asistencias_loaded = True
+
+        except Exception as e:
+            self._asistencias_loaded = False
+            self._asistencias_view = None
+            messagebox.showerror(
+                "Error cargando Asistencias",
+                f"No se pudo cargar el módulo.\n\nDetalle:\n{e}"
+            )
+
     def on_menu_click(self, key: str):
         for k, b in self.menu_buttons.items():
             b.configure(bg="#2f445d" if k == key else "#223142")
@@ -301,6 +358,10 @@ class MainMenuView(ttk.Frame):
         elif key == "matricula_materias":
             self.view_matricula_materias.grid()
             self._ensure_matricula_materias_loaded()
+
+        elif key == "asistencias":
+            self.view_asistencias.grid()
+            self._ensure_asistencias_loaded()
 
         else:
             self.view_placeholder.grid()
