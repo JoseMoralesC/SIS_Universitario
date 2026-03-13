@@ -21,7 +21,11 @@ def _to_int(value, field_name: str) -> int:
 
 def _registrar_auditoria(conn, codigo_usuario: int, movimiento_cod: int) -> None:
     try:
-        insert_auditoria(conn, int(codigo_usuario), int(movimiento_cod))
+        insert_auditoria(
+            conn,
+            codigo_usuario=int(codigo_usuario),
+            movimiento_cod=int(movimiento_cod),
+        )
     except Exception:
         # No romper flujo principal por fallo aislado de auditoría
         pass
@@ -236,7 +240,7 @@ def assign_matricula_materia(
         )
 
         if codigo_usuario is not None:
-            mov = _resolver_movimiento("MATRICULA_MATERIA_CREAR")
+            mov = _resolver_movimiento("MATRICULA_MATERIA_CREADA")
 
             if mov > 0:
                 _registrar_auditoria(
@@ -283,7 +287,7 @@ def update_estado_matricula_materia_endpoint(
         )
 
         if codigo_usuario is not None:
-            mov = _resolver_movimiento("MATRICULA_MATERIA_ESTADO")
+            mov = _resolver_movimiento("MATRICULA_MATERIA_ACTUALIZADA")
 
             if mov > 0:
                 _registrar_auditoria(
@@ -323,7 +327,7 @@ def delete_matricula_materia_endpoint(
         )
 
         if codigo_usuario is not None:
-            mov = _resolver_movimiento("MATRICULA_MATERIA_ELIMINAR")
+            mov = _resolver_movimiento("MATRICULA_MATERIA_ELIMINADA")
 
             if mov > 0:
                 _registrar_auditoria(

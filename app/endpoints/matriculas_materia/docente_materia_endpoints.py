@@ -17,13 +17,25 @@ def _to_int(value, field_name: str) -> int:
         raise ValueError(f"{field_name} inválido.")
 
 
-def _registrar_auditoria(conn, codigo_usuario: int, movimiento_cod: int) -> None:
+def _registrar_auditoria(
+    conn,
+    codigo_usuario: int | None,
+    movimiento_cod: int,
+) -> None:
     """
     Mantiene el mismo patrón de auditoría del proyecto.
     """
+    if codigo_usuario is None:
+        return
+
     try:
-        insert_auditoria(conn, int(codigo_usuario), int(movimiento_cod))
+        insert_auditoria(
+            conn,
+            codigo_usuario=int(codigo_usuario),
+            movimiento_cod=int(movimiento_cod),
+        )
     except Exception:
+        # No romper el flujo principal por un fallo aislado de auditoría
         pass
 
 
@@ -240,10 +252,11 @@ def assign_docente_materia(
             estado_codigo=estado_codigo,
         )
 
-        if codigo_usuario is not None:
-            mov = _resolver_movimiento("DOCENTE_MATERIA_CREAR")
-            if mov > 0:
-                _registrar_auditoria(conn, int(codigo_usuario), mov)
+        _registrar_auditoria(
+            conn,
+            codigo_usuario,
+            Mov.DOCENTE_ASIGNADO_MATERIA,
+        )
 
         return msg
     finally:
@@ -276,10 +289,11 @@ def update_estado_docente_materia(
             nuevo_estado_codigo=nuevo_estado_codigo,
         )
 
-        if codigo_usuario is not None:
-            mov = _resolver_movimiento("DOCENTE_MATERIA_ESTADO")
-            if mov > 0:
-                _registrar_auditoria(conn, int(codigo_usuario), mov)
+        _registrar_auditoria(
+            conn,
+            codigo_usuario,
+            Mov.DOCENTE_ASIGNADO_MATERIA,
+        )
 
         return msg
     finally:
@@ -309,10 +323,11 @@ def delete_docente_materia(
             materia_cod=materia_cod,
         )
 
-        if codigo_usuario is not None:
-            mov = _resolver_movimiento("DOCENTE_MATERIA_ELIMINAR")
-            if mov > 0:
-                _registrar_auditoria(conn, int(codigo_usuario), mov)
+        _registrar_auditoria(
+            conn,
+            codigo_usuario,
+            Mov.DOCENTE_DESASIGNADO_MATERIA,
+        )
 
         return msg
     finally:

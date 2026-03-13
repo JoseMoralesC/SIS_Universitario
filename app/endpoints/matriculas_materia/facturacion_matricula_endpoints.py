@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from typing import List, Dict, Any
 
+from app.core.db import connect
+from app.core.auditoria import Mov
+from app.repositories.auditoria_repo import insert_auditoria
 from app.services.matriculas_materia.facturacion_matricula_service import (
     listar_formas_pago,
     obtener_resumen_facturacion,
@@ -20,6 +23,25 @@ def _forma_pago_to_dict(row: tuple) -> Dict[str, Any]:
         "descripcion": str(descripcion),
         "label": f"{descripcion}",
     }
+
+
+def _registrar_auditoria(
+    conn,
+    codigo_usuario: int | None,
+    movimiento_cod: int,
+) -> None:
+    if codigo_usuario is None:
+        return
+
+    try:
+        insert_auditoria(
+            conn,
+            codigo_usuario=int(codigo_usuario),
+            movimiento_cod=int(movimiento_cod),
+        )
+    except Exception:
+        # No romper el flujo principal por un fallo aislado de auditoría
+        pass
 
 
 # =========================================================
@@ -121,6 +143,17 @@ def completar_pago_matricula(
         observacion=observacion,
         codigo_usuario=codigo_usuario,
     )
+
+    # Auditoría del pago/facturación completada
+    conn = connect(db_user, db_pass)
+    try:
+        _registrar_auditoria(
+            conn,
+            codigo_usuario,
+            Mov.FACTURA_GENERADA,
+        )
+    finally:
+        conn.close()
 
     return {
         "materias_facturadas": int(result["insertados"]),

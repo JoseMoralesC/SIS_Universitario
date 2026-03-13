@@ -16,10 +16,22 @@ def _to_int(value, field_name: str) -> int:
         raise ValueError(f"{field_name} inválido.")
 
 
-def _registrar_auditoria(conn, codigo_usuario: int, movimiento_cod: int) -> None:
+def _registrar_auditoria(
+    conn,
+    codigo_usuario: int | None,
+    movimiento_cod: int,
+) -> None:
+    if codigo_usuario is None:
+        return
+
     try:
-        insert_auditoria(conn, int(codigo_usuario), int(movimiento_cod))
+        insert_auditoria(
+            conn,
+            codigo_usuario=int(codigo_usuario),
+            movimiento_cod=int(movimiento_cod),
+        )
     except Exception:
+        # No romper el flujo principal por un fallo aislado de auditoría
         pass
 
 
@@ -40,7 +52,10 @@ def _open_conn(db_user: str, db_pass: str):
 # =========================================================
 # Lookups
 # =========================================================
-def fetch_dias_semana_materia_horario(db_user: str, db_pass: str) -> list[tuple[str, str]]:
+def fetch_dias_semana_materia_horario(
+    db_user: str,
+    db_pass: str,
+) -> list[tuple[str, str]]:
     conn = _open_conn(db_user, db_pass)
     try:
         service = MateriaHorarioService(conn)
@@ -49,7 +64,10 @@ def fetch_dias_semana_materia_horario(db_user: str, db_pass: str) -> list[tuple[
         conn.close()
 
 
-def fetch_jornadas_materia_horario(db_user: str, db_pass: str) -> list[tuple[int, str]]:
+def fetch_jornadas_materia_horario(
+    db_user: str,
+    db_pass: str,
+) -> list[tuple[int, str]]:
     conn = _open_conn(db_user, db_pass)
     try:
         service = MateriaHorarioService(conn)
@@ -58,7 +76,10 @@ def fetch_jornadas_materia_horario(db_user: str, db_pass: str) -> list[tuple[int
         conn.close()
 
 
-def fetch_materias_activas_materia_horario(db_user: str, db_pass: str) -> list[tuple[int, str]]:
+def fetch_materias_activas_materia_horario(
+    db_user: str,
+    db_pass: str,
+) -> list[tuple[int, str]]:
     conn = _open_conn(db_user, db_pass)
     try:
         service = MateriaHorarioService(conn)
@@ -67,7 +88,10 @@ def fetch_materias_activas_materia_horario(db_user: str, db_pass: str) -> list[t
         conn.close()
 
 
-def fetch_cursos_activos_materia_horario(db_user: str, db_pass: str) -> list[tuple[int, str]]:
+def fetch_cursos_activos_materia_horario(
+    db_user: str,
+    db_pass: str,
+) -> list[tuple[int, str]]:
     conn = _open_conn(db_user, db_pass)
     try:
         service = MateriaHorarioService(conn)
@@ -93,7 +117,10 @@ def fetch_materias_por_curso_con_docente_materia_horario(
 # =========================================================
 # Grid / Listados
 # =========================================================
-def list_materia_horario_rows(db_user: str, db_pass: str) -> list[tuple]:
+def list_materia_horario_rows(
+    db_user: str,
+    db_pass: str,
+) -> list[tuple]:
     conn = _open_conn(db_user, db_pass)
     try:
         service = MateriaHorarioService(conn)
@@ -131,10 +158,9 @@ def assign_materia_horario(
             estado_codigo=estado_codigo,
         )
 
-        if codigo_usuario is not None:
-            mov = _resolver_movimiento("MATERIA_HORARIO_CREAR")
-            if mov > 0:
-                _registrar_auditoria(conn, int(codigo_usuario), mov)
+        mov = _resolver_movimiento("MATERIA_HORARIO_CREADO")
+        if mov > 0:
+            _registrar_auditoria(conn, codigo_usuario, mov)
 
         return msg
     finally:
@@ -161,10 +187,9 @@ def update_estado_materia_horario_endpoint(
             nuevo_estado=nuevo_estado,
         )
 
-        if codigo_usuario is not None:
-            mov = _resolver_movimiento("MATERIA_HORARIO_ESTADO")
-            if mov > 0:
-                _registrar_auditoria(conn, int(codigo_usuario), mov)
+        mov = _resolver_movimiento("MATERIA_HORARIO_ACTUALIZADO")
+        if mov > 0:
+            _registrar_auditoria(conn, codigo_usuario, mov)
 
         return msg
     finally:
@@ -188,10 +213,9 @@ def delete_materia_horario_endpoint(
             horario_id=horario_id,
         )
 
-        if codigo_usuario is not None:
-            mov = _resolver_movimiento("MATERIA_HORARIO_ELIMINAR")
-            if mov > 0:
-                _registrar_auditoria(conn, int(codigo_usuario), mov)
+        mov = _resolver_movimiento("MATERIA_HORARIO_ELIMINADO")
+        if mov > 0:
+            _registrar_auditoria(conn, codigo_usuario, mov)
 
         return msg
     finally:

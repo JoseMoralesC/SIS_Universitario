@@ -10,7 +10,6 @@ from app.repositories.mantenimiento.becados_repo import (
     soft_delete_becado,
     exists_becado_activo_by_carnet,
 )
-
 from app.core.auditoria import Mov
 from app.repositories.auditoria_repo import insert_auditoria
 from app.repositories.mantenimiento.becas_repo import fetch_becas_lookup
@@ -21,6 +20,21 @@ from app.services.mantenimiento.becados_service import (
     validar_becado_existente,
 )
 from app.core.exceptions import ValidationError
+
+
+def _registrar_auditoria(conn, codigo_usuario: int | None, movimiento_cod: int) -> None:
+    if codigo_usuario is None:
+        return
+
+    try:
+        insert_auditoria(
+            conn,
+            codigo_usuario=int(codigo_usuario),
+            movimiento_cod=int(movimiento_cod),
+        )
+    except Exception:
+        # No romper el flujo principal por un fallo aislado de auditoría
+        pass
 
 
 def get_lookups(db_user: str, db_pass: str, codigo_usuario: int | None = None):
@@ -60,7 +74,6 @@ def crear_becado(
     fecha_aplicacion: str,
     codigo_usuario: int | None = None,
 ) -> bool:
-
     conn = connect(db_user, db_pass)
     try:
         id_becado = next_id_becado(conn)
@@ -87,6 +100,13 @@ def crear_becado(
             id_beca=data["id_beca"],
             fecha_aplicacion=data["fecha_aplicacion"],
         )
+
+        _registrar_auditoria(
+            conn,
+            codigo_usuario,
+            Mov.BECADO_CREADO,
+        )
+
         return True
 
     finally:
@@ -127,15 +147,11 @@ def actualizar_becado(
 
         update_becado(conn, **data)
 
-        if codigo_usuario is not None:
-            try:
-                insert_auditoria(
-                    conn,
-                    codigo_usuario=int(codigo_usuario),
-                    movimiento_cod=Mov.BECADO_ACTUALIZADO,
-                )
-            except Exception:
-                pass
+        _registrar_auditoria(
+            conn,
+            codigo_usuario,
+            Mov.BECADO_ACTUALIZADO,
+        )
 
         return True
     finally:
@@ -156,15 +172,11 @@ def eliminar_becado(
         validar_becado_existente(conn, id_becado=int(id_becado))
         soft_delete_becado(conn, id_becado=int(id_becado))
 
-        if codigo_usuario is not None:
-            try:
-                insert_auditoria(
-                    conn,
-                    codigo_usuario=int(codigo_usuario),
-                    movimiento_cod=Mov.BECADO_ELIMINADO,
-                )
-            except Exception:
-                pass
+        _registrar_auditoria(
+            conn,
+            codigo_usuario,
+            Mov.BECADO_ELIMINADO,
+        )
 
         return True
     finally:

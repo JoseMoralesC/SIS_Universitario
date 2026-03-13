@@ -476,7 +476,172 @@ SIS_Universitario/
 ├── main.py
 ├── requirements.txt
 └── README.TXT  
+----------------------------------------------------------------
+ENTREGABLE No. 4
+----------------------------------------------------------------
 
+Descripción General del Entregable No. 4
+
+El Entregable No. 4 amplía el sistema SIS-Universitario incorporando el módulo de Matrícula por Materias, permitiendo gestionar la asignación académica detallada de materias a estudiantes previamente matriculados en curso, bajo reglas de negocio reales, validaciones de carga académica y control de consistencia con la estructura modular del sistema.
+
+Este entregable extiende la arquitectura definida en los entregables anteriores, manteniendo la separación estricta por capas (UI, Endpoints, Services, Repositories y Core), e incorpora nuevos componentes especializados para consulta de matrícula del estudiante, asignación de materias, validación de horarios, relación docente-materia y apoyo al proceso de facturación académica.
+
+Alcance del Entregable No. 4
+
+- Implementación del módulo de Matrícula por Materias.
+- Consulta de estudiantes con matrícula de curso activa.
+- Validación de elegibilidad del estudiante antes de asignar materias.
+- Carga dinámica del período académico correspondiente.
+- Visualización de restricciones de carga académica.
+- Asignación de materias al estudiante según matrícula activa.
+- Consulta de docentes asociados a cada materia.
+- Validación de horarios para evitar conflictos.
+- Integración de apoyo al proceso de facturación de matrícula.
+- Uso de ventanas emergentes especializadas para completar el proceso de matrícula.
+- Integración con la arquitectura modular ya existente.
+- Preparación del sistema para futuros módulos académicos relacionados.
+
+Gestión de Matrícula por Materias
+
+El módulo de Matrícula por Materias permite:
+
+- Consultar estudiantes con matrícula académica activa.
+- Verificar la información general de la matrícula del estudiante.
+- Cargar el período correspondiente para el proceso.
+- Mostrar restricciones asociadas a la carga académica.
+- Consultar materias disponibles según el contexto académico.
+- Consultar docentes vinculados a las materias ofertadas.
+- Validar la viabilidad de la asignación antes de guardar.
+- Completar el proceso de matrícula mediante una ventana emergente de confirmación y detalle.
+
+Validaciones y Reglas de Negocio
+
+El sistema aplica validaciones orientadas a garantizar la integridad del proceso académico, entre ellas:
+
+- Verificación de existencia de matrícula activa del estudiante.
+- Validación de datos requeridos antes de completar la matrícula.
+- Prevención de inconsistencias en la asignación de materias.
+- Control de selección de materia y docente según disponibilidad.
+- Validación de horarios para evitar traslapes o conflictos.
+- Control de restricciones de carga académica.
+- Manejo de errores controlado desde interfaz, servicios y repositorios.
+
+Interfaz Gráfica y Experiencia de Usuario
+
+La interfaz del Entregable No. 4 incorpora:
+
+- Nuevas pestañas especializadas para el proceso de matrícula por materias.
+- Flujo guiado para consulta y asignación.
+- Combobox dinámicos y dependientes.
+- Grillas con información académica relevante.
+- Ventanas emergentes para completar matrícula.
+- Retroalimentación visual mediante mensajes, confirmaciones y validaciones.
+- Navegación consistente con el menú principal del sistema.
+- Reutilización de componentes visuales existentes para mantener uniformidad.
+
+Arquitectura y Diseño
+
+El Entregable No. 4 refuerza la arquitectura modular del sistema mediante la incorporación de un nuevo bloque funcional completo para matrícula por materias:
+
+- UI: vistas, pestañas, formularios, popups y validaciones visuales.
+- Endpoints: coordinación del flujo entre interfaz, servicios y base de datos.
+- Services: reglas de negocio, validaciones académicas y control del proceso.
+- Repositories: acceso estructurado a la información de matrícula, materias, docentes, horarios y facturación.
+- Core: reutilización de manejo de errores, sesión, conexión y auditoría.
+
+Módulos y Componentes Incorporados en el Entregable No. 4
+
+Se incorporan nuevos componentes organizados por capa para el módulo de matrícula por materias, incluyendo:
+
+- Consulta de matrícula del estudiante.
+- Gestión de asignación de materias.
+- Relación docente-materia.
+- Validación y consulta de horario por materia.
+- Apoyo al proceso de facturación de matrícula.
+- Popup de completado de matrícula.
+- Nueva vista integrada al menú principal para el módulo de matrícula por materias.
+
+Estado del Proyecto
+
+Con la finalización del Entregable No. 4:
+
+- El sistema amplía su cobertura funcional sobre el proceso académico.
+- La arquitectura se mantiene estable, modular y escalable.
+- El proyecto queda preparado para continuar con módulos posteriores como:
+  - Notas académicas
+  - Asistencia
+  - Reportes avanzados
+  - Procesos académicos complementarios
+
+Estructura del Proyecto (Entregable No. 4)
+
+SIS_Universitario/
+├── app/
+│   ├── endpoints/
+│   │   ├── mantenimiento/
+│   │   │   └── periodos_endpoints.py
+│   │   ├── matriculas/
+│   │   │   └── matriculas_endpoints.py
+│   │   └── matriculas_materia/
+│   │       ├── __init__.py
+│   │       ├── consulta_matricula_estudiante_endpoints.py
+│   │       ├── docente_materia_endpoints.py
+│   │       ├── facturacion_matricula_endpoints.py
+│   │       ├── materia_horario_endpoints.py
+│   │       └── matricula_materia_endpoints.py
+│   │
+│   ├── repositories/
+│   │   ├── mantenimiento/
+│   │   │   └── periodos_repo.py
+│   │   ├── matriculas/
+│   │   │   └── matriculas_repo.py
+│   │   └── matriculas_materia/
+│   │       ├── __init__.py
+│   │       ├── consulta_matricula_estudiante_repo.py
+│   │       ├── docente_materia_repo.py
+│   │       ├── facturacion_matricula_repo.py
+│   │       ├── materia_horario_repo.py
+│   │       └── matricula_materia_repo.py
+│   │
+│   ├── services/
+│   │   ├── mantenimiento/
+│   │   │   └── periodos_service.py
+│   │   ├── matriculas/
+│   │   │   └── matriculas_service.py
+│   │   └── matriculas_materia/
+│   │       ├── __init__.py
+│   │       ├── consulta_matricula_estudiante_service.py
+│   │       ├── docente_materia_service.py
+│   │       ├── facturacion_matricula_service.py
+│   │       ├── materia_horario_service.py
+│   │       └── matricula_materia_service.py
+│   │
+│   ├── ui/
+│   │   ├── mantenimientos/
+│   │   │   └── periodos_tab.py
+│   │   ├── matriculas/
+│   │   │   ├── consulta_matriculas_tab.py
+│   │   │   ├── listado_matriculas_tab.py
+│   │   │   └── reporte_estudiantes_tab.py
+│   │   ├── matriculas_materia/
+│   │   │   ├── __init__.py
+│   │   │   ├── completar_matricula_popup.py
+│   │   │   ├── consulta_matricula_estudiante_tab.py
+│   │   │   ├── docente_materia_tab.py
+│   │   │   ├── materia_horario_tab.py
+│   │   │   └── matricula_materia_tab.py
+│   │   ├── transitions/
+│   │   │   └── popup_slide.py
+│   │   └── views/
+│   │       └── matriculas_materia_view.py
+
+Observaciones Finales
+
+El Entregable No. 4 fortalece el SIS-Universitario al incorporar un módulo académico más específico y alineado con los procesos reales de matrícula universitaria.
+
+La implementación mantiene coherencia con la arquitectura definida desde los entregables anteriores, favoreciendo la mantenibilidad, reutilización de código y escalabilidad del sistema.
+
+Este entregable consolida al proyecto como una base funcional robusta para continuar con los siguientes módulos académicos del sistema.
 Autor
 
 José Rodolfo Morales Calderón

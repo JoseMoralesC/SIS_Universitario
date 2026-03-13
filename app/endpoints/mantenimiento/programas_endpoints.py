@@ -14,12 +14,31 @@ from app.repositories.mantenimiento.programas_repo import (
     insert_programa,
     update_programa,
     soft_delete_programa,
-    set_curso_jornadas,  # NUEVO
-    get_curso_jornadas,  # NUEVO
+    set_curso_jornadas,
+    get_curso_jornadas,
 )
 
 from app.core.auditoria import Mov
 from app.repositories.auditoria_repo import insert_auditoria
+
+
+def _registrar_auditoria(
+    conn,
+    codigo_usuario: int | None,
+    movimiento_cod: int,
+) -> None:
+    if codigo_usuario is None:
+        return
+
+    try:
+        insert_auditoria(
+            conn,
+            codigo_usuario=int(codigo_usuario),
+            movimiento_cod=int(movimiento_cod),
+        )
+    except Exception:
+        # No romper el flujo principal por un fallo aislado de auditoría
+        pass
 
 
 def get_lookups(db_user: str, db_pass: str):
@@ -31,13 +50,19 @@ def get_lookups(db_user: str, db_pass: str):
         conn.close()
 
 
-def listar_programas(db_user: str, db_pass: str, codigo_usuario: int | None = None):
+def listar_programas(
+    db_user: str,
+    db_pass: str,
+    codigo_usuario: int | None = None,
+):
     """
     Lista programas visibles en el grid:
     - NO incluye estado Inactivo
-    - Sí incluye Activo y Suspendido (y cualquier otro excepto Inactivo)
+    - Sí incluye Activo y Suspendido
+      (y cualquier otro excepto Inactivo)
 
-    codigo_usuario se acepta por consistencia (y futuras auditorías de listado).
+    codigo_usuario se acepta por consistencia
+    (y futuras auditorías de listado).
     """
     conn = connect(db_user, db_pass)
     try:
@@ -46,7 +71,11 @@ def listar_programas(db_user: str, db_pass: str, codigo_usuario: int | None = No
         conn.close()
 
 
-def siguiente_curso_cod(db_user: str, db_pass: str, codigo_usuario: int | None = None) -> int:
+def siguiente_curso_cod(
+    db_user: str,
+    db_pass: str,
+    codigo_usuario: int | None = None,
+) -> int:
     """
     Siguiente ID para Cursos_Programas.
     codigo_usuario se acepta por consistencia.
@@ -65,11 +94,13 @@ def obtener_jornadas_programa(
     codigo_usuario: int | None = None,
 ) -> list[int]:
     """
-    Devuelve las jornadas (1=Mañana, 2=Tarde, 3=Noche) asociadas al curso.
+    Devuelve las jornadas (1=Mañana, 2=Tarde, 3=Noche)
+    asociadas al curso.
     codigo_usuario se acepta por consistencia.
     """
     if not curso_cod:
         return []
+
     conn = connect(db_user, db_pass)
     try:
         return get_curso_jornadas(conn, int(curso_cod))
@@ -83,7 +114,7 @@ def crear_programa(
     curso_cod: int,
     descripcion: str,
     horario_tipo_id: int | None,
-    jornadas_ids: list[int] | None,  # NUEVO
+    jornadas_ids: list[int] | None,
     precio_matricula: str,
     estado_codigo: int,
     codigo_usuario: int | None = None,
@@ -100,7 +131,7 @@ def crear_programa(
 
         validar_programa_unicidad(
             conn,
-            curso_cod=None,  # crear
+            curso_cod=None,
             descripcion=data["descripcion"],
         )
 
@@ -114,14 +145,18 @@ def crear_programa(
             estado_codigo=data["estado_codigo"],
         )
 
-        # Guardar Jornadas (tabla puente)
-        set_curso_jornadas(conn, int(curso_cod), data["jornadas_ids"])
+        # Guardar jornadas en tabla puente
+        set_curso_jornadas(
+            conn,
+            int(curso_cod),
+            data["jornadas_ids"],
+        )
 
-        # Auditoría (al final, operación completa)
-        try:
-            insert_auditoria(conn, codigo_usuario=codigo_usuario, movimiento_cod=Mov.PROGRAMA_CREADO)
-        except Exception:
-            pass
+        _registrar_auditoria(
+            conn,
+            codigo_usuario,
+            Mov.PROGRAMA_CREADO,
+        )
 
         return True
     finally:
@@ -134,7 +169,7 @@ def actualizar_programa(
     curso_cod: int,
     descripcion: str,
     horario_tipo_id: int | None,
-    jornadas_ids: list[int] | None,  # NUEVO
+    jornadas_ids: list[int] | None,
     precio_matricula: str,
     estado_codigo: int,
     codigo_usuario: int | None = None,
@@ -168,14 +203,18 @@ def actualizar_programa(
             estado_codigo=data["estado_codigo"],
         )
 
-        # Reemplazar Jornadas
-        set_curso_jornadas(conn, int(curso_cod), data["jornadas_ids"])
+        # Reemplazar jornadas
+        set_curso_jornadas(
+            conn,
+            int(curso_cod),
+            data["jornadas_ids"],
+        )
 
-        # Auditoría (al final, operación completa)
-        try:
-            insert_auditoria(conn, codigo_usuario=codigo_usuario, movimiento_cod=Mov.PROGRAMA_ACTUALIZADO)
-        except Exception:
-            pass
+        _registrar_auditoria(
+            conn,
+            codigo_usuario,
+            Mov.PROGRAMA_ACTUALIZADO,
+        )
 
         return True
     finally:
@@ -200,11 +239,11 @@ def eliminar_programa(
     try:
         soft_delete_programa(conn, int(curso_cod))
 
-        # Auditoría
-        try:
-            insert_auditoria(conn, codigo_usuario=codigo_usuario, movimiento_cod=Mov.PROGRAMA_ELIMINADO)
-        except Exception:
-            pass
+        _registrar_auditoria(
+            conn,
+            codigo_usuario,
+            Mov.PROGRAMA_ELIMINADO,
+        )
 
         return True
     finally:

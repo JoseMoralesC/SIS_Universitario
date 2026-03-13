@@ -10,7 +10,7 @@ from app.core.exceptions import ValidationError
 from app.repositories.mantenimiento.estudiantes_repo import (
     fetch_estados,
     list_estudiantes_join_activos,
-    next_carnet,  # NUEVO
+    next_carnet,
     insert_estudiante,
     update_estudiante,
     soft_delete_estudiante,
@@ -18,6 +18,25 @@ from app.repositories.mantenimiento.estudiantes_repo import (
 
 from app.core.auditoria import Mov
 from app.repositories.auditoria_repo import insert_auditoria
+
+
+def _registrar_auditoria(
+    conn,
+    codigo_usuario: int | None,
+    movimiento_cod: int,
+) -> None:
+    if codigo_usuario is None:
+        return
+
+    try:
+        insert_auditoria(
+            conn,
+            codigo_usuario=int(codigo_usuario),
+            movimiento_cod=int(movimiento_cod),
+        )
+    except Exception:
+        # No romper el flujo principal por un fallo aislado de auditoría
+        pass
 
 
 def get_lookups(db_user: str, db_pass: str):
@@ -28,9 +47,14 @@ def get_lookups(db_user: str, db_pass: str):
         conn.close()
 
 
-def listar_estudiantes(db_user: str, db_pass: str, codigo_usuario: int | None = None):
+def listar_estudiantes(
+    db_user: str,
+    db_pass: str,
+    codigo_usuario: int | None = None,
+):
     """
-    Lista estudiantes visibles en el grid (según repo: normalmente excluye Inactivo).
+    Lista estudiantes visibles en el grid
+    (según repo: normalmente excluye Inactivo).
     codigo_usuario se acepta por consistencia.
     """
     conn = connect(db_user, db_pass)
@@ -78,11 +102,11 @@ def crear_estudiante(
 
         insert_estudiante(conn, **data)
 
-        # Auditoría
-        try:
-            insert_auditoria(conn, codigo_usuario=codigo_usuario, movimiento_cod=Mov.ESTUDIANTE_CREADO)
-        except Exception:
-            pass
+        _registrar_auditoria(
+            conn,
+            codigo_usuario,
+            Mov.ESTUDIANTE_CREADO,
+        )
 
         return True
     finally:
@@ -116,7 +140,8 @@ def actualizar_estudiante(
         )
 
         # OJO: la unicidad debe excluir el mismo carnet.
-        # Tu service actual usa (carnet, identificacion). Mantenemos tu intención:
+        # Tu service actual usa (carnet, identificacion).
+        # Mantenemos tu intención actual.
         validar_estudiante_unicidad(
             conn,
             carnet=carnet,
@@ -125,11 +150,11 @@ def actualizar_estudiante(
 
         update_estudiante(conn, **data)
 
-        # Auditoría
-        try:
-            insert_auditoria(conn, codigo_usuario=codigo_usuario, movimiento_cod=Mov.ESTUDIANTE_ACTUALIZADO)
-        except Exception:
-            pass
+        _registrar_auditoria(
+            conn,
+            codigo_usuario,
+            Mov.ESTUDIANTE_ACTUALIZADO,
+        )
 
         return True
     finally:
@@ -150,11 +175,11 @@ def eliminar_estudiante(
     try:
         soft_delete_estudiante(conn, carnet)
 
-        # Auditoría
-        try:
-            insert_auditoria(conn, codigo_usuario=codigo_usuario, movimiento_cod=Mov.ESTUDIANTE_ELIMINADO)
-        except Exception:
-            pass
+        _registrar_auditoria(
+            conn,
+            codigo_usuario,
+            Mov.ESTUDIANTE_ELIMINADO,
+        )
 
         return True
     finally:

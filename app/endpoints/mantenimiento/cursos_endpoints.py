@@ -21,6 +21,25 @@ from app.core.auditoria import Mov
 from app.repositories.auditoria_repo import insert_auditoria
 
 
+def _registrar_auditoria(
+    conn,
+    codigo_usuario: int | None,
+    movimiento_cod: int,
+) -> None:
+    if codigo_usuario is None:
+        return
+
+    try:
+        insert_auditoria(
+            conn,
+            codigo_usuario=int(codigo_usuario),
+            movimiento_cod=int(movimiento_cod),
+        )
+    except Exception:
+        # No romper el flujo principal por un fallo aislado de auditoría
+        pass
+
+
 def get_lookups(db_user: str, db_pass: str):
     conn = connect(db_user, db_pass)
     try:
@@ -31,13 +50,18 @@ def get_lookups(db_user: str, db_pass: str):
         conn.close()
 
 
-def listar_cursos(db_user: str, db_pass: str, codigo_usuario: int | None = None):
+def listar_cursos(
+    db_user: str,
+    db_pass: str,
+    codigo_usuario: int | None = None,
+):
     """
     Lista cursos visibles en el grid:
     - NO incluye estado Inactivo
     - Sí incluye Activo y Suspendido (y cualquier otro excepto Inactivo)
 
-    codigo_usuario se acepta por consistencia (y futuras auditorías de listado).
+    codigo_usuario se acepta por consistencia
+    (y futuras auditorías de listado).
     """
     conn = connect(db_user, db_pass)
     try:
@@ -60,7 +84,7 @@ def crear_curso(
     materia_cod: int,
     descripcion: str,
     curso_cod: int,
-    precio: str,  # NUEVO
+    precio: str,
     estado_codigo: int,
     codigo_usuario: int | None = None,
 ) -> bool:
@@ -69,24 +93,28 @@ def crear_curso(
         data = validar_curso_data(
             descripcion=descripcion,
             curso_cod=curso_cod,
-            precio=precio,  # NUEVO
+            precio=precio,
             estado_codigo=estado_codigo,
         )
 
         validar_curso_unicidad(
             conn,
-            materia_cod=None,  # crear
+            materia_cod=None,
             descripcion=data["descripcion"],
             curso_cod=data["curso_cod"],
         )
 
-        insert_curso(conn, materia_cod=int(materia_cod), **data)
+        insert_curso(
+            conn,
+            materia_cod=int(materia_cod),
+            **data,
+        )
 
-        # Auditoría
-        try:
-            insert_auditoria(conn, codigo_usuario=codigo_usuario, movimiento_cod=Mov.CURSO_CREADO)
-        except Exception:
-            pass
+        _registrar_auditoria(
+            conn,
+            codigo_usuario,
+            Mov.CURSO_CREADO,
+        )
 
         return True
     finally:
@@ -99,7 +127,7 @@ def actualizar_curso(
     materia_cod: int,
     descripcion: str,
     curso_cod: int,
-    precio: str,  # NUEVO
+    precio: str,
     estado_codigo: int,
     codigo_usuario: int | None = None,
 ) -> bool:
@@ -111,7 +139,7 @@ def actualizar_curso(
         data = validar_curso_data(
             descripcion=descripcion,
             curso_cod=curso_cod,
-            precio=precio,  # NUEVO
+            precio=precio,
             estado_codigo=estado_codigo,
         )
 
@@ -122,13 +150,17 @@ def actualizar_curso(
             curso_cod=data["curso_cod"],
         )
 
-        update_curso(conn, materia_cod=int(materia_cod), **data)
+        update_curso(
+            conn,
+            materia_cod=int(materia_cod),
+            **data,
+        )
 
-        # Auditoría
-        try:
-            insert_auditoria(conn, codigo_usuario=codigo_usuario, movimiento_cod=Mov.CURSO_ACTUALIZADO)
-        except Exception:
-            pass
+        _registrar_auditoria(
+            conn,
+            codigo_usuario,
+            Mov.CURSO_ACTUALIZADO,
+        )
 
         return True
     finally:
@@ -153,11 +185,11 @@ def eliminar_curso(
     try:
         soft_delete_curso(conn, int(materia_cod))
 
-        # Auditoría
-        try:
-            insert_auditoria(conn, codigo_usuario=codigo_usuario, movimiento_cod=Mov.CURSO_ELIMINADO)
-        except Exception:
-            pass
+        _registrar_auditoria(
+            conn,
+            codigo_usuario,
+            Mov.CURSO_ELIMINADO,
+        )
 
         return True
     finally:

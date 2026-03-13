@@ -21,6 +21,25 @@ from app.core.auditoria import Mov
 from app.repositories.auditoria_repo import insert_auditoria
 
 
+def _registrar_auditoria(
+    conn,
+    codigo_usuario: int | None,
+    movimiento_cod: int,
+) -> None:
+    if codigo_usuario is None:
+        return
+
+    try:
+        insert_auditoria(
+            conn,
+            codigo_usuario=int(codigo_usuario),
+            movimiento_cod=int(movimiento_cod),
+        )
+    except Exception:
+        # No romper el flujo principal por un fallo aislado de auditoría
+        pass
+
+
 def siguiente_docente_cod(db_user: str, db_pass: str) -> int:
     conn = connect(db_user, db_pass)
     try:
@@ -39,13 +58,18 @@ def get_lookups(db_user: str, db_pass: str):
         conn.close()
 
 
-def listar_docentes(db_user: str, db_pass: str, codigo_usuario: int | None = None):
+def listar_docentes(
+    db_user: str,
+    db_pass: str,
+    codigo_usuario: int | None = None,
+):
     """
     Lista docentes visibles en el grid:
     - NO incluye estado Inactivo
     - Sí incluye Activo y Suspendido (y cualquier otro excepto Inactivo)
 
-    codigo_usuario se acepta por consistencia (y futuras auditorías de listado).
+    codigo_usuario se acepta por consistencia
+    (y futuras auditorías de listado).
     """
     conn = connect(db_user, db_pass)
     try:
@@ -82,13 +106,17 @@ def crear_docente(
             usuario_docente=data["usuario_docente"],
         )
 
-        insert_docente(conn, docente_cod=int(docente_cod), **data)
+        insert_docente(
+            conn,
+            docente_cod=int(docente_cod),
+            **data,
+        )
 
-        # Auditoría
-        try:
-            insert_auditoria(conn, codigo_usuario=codigo_usuario, movimiento_cod=Mov.DOCENTE_CREADO)
-        except Exception:
-            pass
+        _registrar_auditoria(
+            conn,
+            codigo_usuario,
+            Mov.DOCENTE_CREADO,
+        )
 
         return True
     finally:
@@ -126,13 +154,17 @@ def actualizar_docente(
             usuario_docente=data["usuario_docente"],
         )
 
-        update_docente(conn, docente_cod=int(docente_cod), **data)
+        update_docente(
+            conn,
+            docente_cod=int(docente_cod),
+            **data,
+        )
 
-        # Auditoría
-        try:
-            insert_auditoria(conn, codigo_usuario=codigo_usuario, movimiento_cod=Mov.DOCENTE_ACTUALIZADO)
-        except Exception:
-            pass
+        _registrar_auditoria(
+            conn,
+            codigo_usuario,
+            Mov.DOCENTE_ACTUALIZADO,
+        )
 
         return True
     finally:
@@ -157,11 +189,11 @@ def eliminar_docente(
     try:
         soft_delete_docente(conn, int(docente_cod))
 
-        # Auditoría
-        try:
-            insert_auditoria(conn, codigo_usuario=codigo_usuario, movimiento_cod=Mov.DOCENTE_ELIMINADO)
-        except Exception:
-            pass
+        _registrar_auditoria(
+            conn,
+            codigo_usuario,
+            Mov.DOCENTE_ELIMINADO,
+        )
 
         return True
     finally:

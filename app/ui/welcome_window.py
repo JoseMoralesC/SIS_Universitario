@@ -139,7 +139,7 @@ class WelcomeWindow(tk.Tk):
         status_line("Servidor", "SQL Server Express")
         status_line("Base de datos", "Universidad")
         status_line("Modo", "Académico")
-        status_line("Versión", "3.0")
+        status_line("Versión", "4.1")
 
         # Botón iniciar sesión
         btn_login = tk.Button(

@@ -11,114 +11,158 @@ Correo:
 305000192@cuc.cr
 
 SIS_Universitario/
-├── app/
-│ ├── init.py
-│ │
-│ ├── assets/
-│ │ ├── background.png
-│ │ └── users/
-│ │ ├── Administrador.jpg
-│ │ ├── Auditor.jpg
-│ │ ├── Operador.jpg
-│ │ └── default.png
-│ │
-│ ├── core/
-│ │ ├── init.py
-│ │ ├── auditoria.py
-│ │ ├── config.py
-│ │ ├── db.py
-│ │ ├── error_handler.py
-│ │ ├── exceptions.py
-│ │ └── session.py
-│ │
-│ ├── endpoints/
-│ │ ├── mantenimiento/
-│ │ │ ├── becados_endpoints.py
-│ │ │ ├── becas_endpoints.py
-│ │ │ ├── cursos_endpoints.py
-│ │ │ ├── docentes_endpoints.py
-│ │ │ ├── estudiantes_endpoints.py
-│ │ │ └── programas_endpoints.py
-│ │ └── matriculas/
-│ │ ├── init.py
-│ │ └── matriculas_endpoints.py
-│ │
-│ ├── repositories/
-│ │ ├── init.py
-│ │ ├── auditoria_repo.py
-│ │ ├── usuarios_repo.py
-│ │ ├── mantenimiento/
-│ │ │ ├── becados_repo.py
-│ │ │ ├── becas_repo.py
-│ │ │ ├── cursos_repo.py
-│ │ │ ├── docentes_repo.py
-│ │ │ ├── estado_general_repo.py
-│ │ │ ├── estudiantes_repo.py
-│ │ │ ├── profesiones_repo.py
-│ │ │ └── programas_repo.py
-│ │ └── matriculas/
-│ │ ├── init.py
-│ │ └── matriculas_repo.py
-│ │
-│ ├── services/
-│ │ ├── init.py
-│ │ ├── auth_service.py
-│ │ ├── mantenimiento/
-│ │ │ ├── becados_service.py
-│ │ │ ├── becas_service.py
-│ │ │ ├── cursos_service.py
-│ │ │ ├── docentes_service.py
-│ │ │ ├── estudiantes_service.py
-│ │ │ └── programas_service.py
-│ │ └── matriculas/
-│ │ ├── init.py
-│ │ └── matriculas_service.py
-│ │
-│ ├── ui/
-│ │ ├── init.py
-│ │ ├── theme.py
-│ │ ├── login_window.py
-│ │ ├── welcome_window.py
-│ │ ├── main_menu.py
-│ │ ├── transitions/
-│ │ │ └── window_slide.py
-│ │ ├── components/
-│ │ │ ├── init.py
-│ │ │ ├── confirm_dialog.py
-│ │ │ ├── error_dialog.py
-│ │ │ └── toast.py
-│ │ ├── mantenimientos/
-│ │ │ ├── init.py
-│ │ │ ├── base_tab.py
-│ │ │ ├── becados_tab.py
-│ │ │ ├── becas_tab.py
-│ │ │ ├── cursos_tab.py
-│ │ │ ├── docentes_tab.py
-│ │ │ ├── estudiantes_tab.py
-│ │ │ └── programas_tab.py
-│ │ ├── matriculas/
-│ │ │ └── init.py
-│ │ └── views/
-│ │ ├── init.py
-│ │ ├── main_menu_view.py
-│ │ ├── mantenimientos_view.py
-│ │ └── matriculas_view.py
-│ │
-│ └── modules/
-│ └── (reservado / a futuro)
-│
-├── databases/
-│ └── scripts/
-│ ├── 009_auditoria_setup.sql
-│ ├── 01_create_table_usuarios.sql
-│ ├── 02_create_table_tipo_usuario.sql
-│ ├── 03_create_table_estado_usuario.sql
-│ └── 04_insert_usuarios_Usuarios.sql
-│
-├── docs/
-│ └── mapa/
-│ └── mapa_visual_estructura.txt
-│
+├── .git/
+├── .gitignore
+├── README.TXT
 ├── main.py
 ├── requirements.txt
-└── README.TXT
+│
+├── app/
+│   ├── _init_.py
+│   │
+│   ├── assets/
+│   │   ├── background.png
+│   │   └── users/
+│   │       ├── Administrador.jpg
+│   │       ├── Auditor.jpg
+│   │       ├── Operador.jpg
+│   │       └── default.png
+│   │
+│   ├── core/
+│   │   ├── _init_.py
+│   │   ├── auditoria.py
+│   │   ├── config.py
+│   │   ├── db.py
+│   │   ├── error_handler.py
+│   │   ├── exceptions.py
+│   │   └── session.py
+│   │
+│   ├── endpoints/
+│   │   ├── mantenimiento/
+│   │   │   ├── becados_endpoints.py
+│   │   │   ├── becas_endpoints.py
+│   │   │   ├── cursos_endpoints.py
+│   │   │   ├── docentes_endpoints.py
+│   │   │   ├── estudiantes_endpoints.py
+│   │   │   ├── periodos_endpoints.py
+│   │   │   └── programas_endpoints.py
+│   │   │
+│   │   ├── matriculas/
+│   │   │   ├── _init_.py
+│   │   │   └── matriculas_endpoints.py
+│   │   │
+│   │   └── matriculas_materia/
+│   │       ├── _init_.py
+│   │       ├── consulta_matricula_estudiante_endpoints.py
+│   │       ├── docente_materia_endpoints.py
+│   │       ├── facturacion_matricula_endpoints.py
+│   │       ├── materia_horario_endpoints.py
+│   │       └── matricula_materia_endpoints.py
+│   │
+│   ├── repositories/
+│   │   ├── _init_.py
+│   │   ├── auditoria_repo.py
+│   │   ├── usuarios_repo.py
+│   │   │
+│   │   ├── mantenimiento/
+│   │   │   ├── becados_repo.py
+│   │   │   ├── becas_repo.py
+│   │   │   ├── cursos_repo.py
+│   │   │   ├── docentes_repo.py
+│   │   │   ├── estado_general_repo.py
+│   │   │   ├── estudiantes_repo.py
+│   │   │   ├── periodos_repo.py
+│   │   │   ├── profesiones_repo.py
+│   │   │   └── programas_repo.py
+│   │   │
+│   │   ├── matriculas/
+│   │   │   ├── _init_.py
+│   │   │   └── matriculas_repo.py
+│   │   │
+│   │   └── matriculas_materia/
+│   │       ├── _init_.py
+│   │       ├── consulta_matricula_estudiante_repo.py
+│   │       ├── docente_materia_repo.py
+│   │       ├── facturacion_matricula_repo.py
+│   │       ├── materia_horario_repo.py
+│   │       └── matricula_materia_repo.py
+│   │
+│   ├── services/
+│   │   ├── _init_.py
+│   │   ├── auth_service.py
+│   │   │
+│   │   ├── mantenimiento/
+│   │   │   ├── becados_service.py
+│   │   │   ├── becas_service.py
+│   │   │   ├── cursos_service.py
+│   │   │   ├── docentes_service.py
+│   │   │   ├── estudiantes_service.py
+│   │   │   ├── periodos_service.py
+│   │   │   └── programas_service.py
+│   │   │
+│   │   ├── matriculas/
+│   │   │   ├── _init_.py
+│   │   │   └── matriculas_service.py
+│   │   │
+│   │   └── matriculas_materia/
+│   │       ├── _init_.py
+│   │       ├── consulta_matricula_estudiante_service.py
+│   │       ├── docente_materia_service.py
+│   │       ├── facturacion_matricula_service.py
+│   │       ├── materia_horario_service.py
+│   │       └── matricula_materia_service.py
+│   │
+│   ├── ui/
+│   │   ├── _init_.py
+│   │   ├── login_window.py
+│   │   ├── main_menu.py
+│   │   ├── theme.py
+│   │   ├── welcome_window.py
+│   │   │
+│   │   ├── components/
+│   │   │   ├── _init_.py
+│   │   │   ├── confirm_dialog.py
+│   │   │   ├── error_dialog.py
+│   │   │   └── toast.py
+│   │   │
+│   │   ├── mantenimientos/
+│   │   │   ├── __init__.py
+│   │   │   ├── base_tab.py
+│   │   │   ├── becados_tab.py
+│   │   │   ├── becas_tab.py
+│   │   │   ├── cursos_tab.py
+│   │   │   ├── docentes_tab.py
+│   │   │   ├── estudiantes_tab.py
+│   │   │   ├── periodos_tab.py
+│   │   │   └── programas_tab.py
+│   │   │
+│   │   ├── matriculas/
+│   │   │   ├── consulta_matriculas_tab.py
+│   │   │   ├── listado_matriculas_tab.py
+│   │   │   └── reporte_estudiantes_tab.py
+│   │   │
+│   │   ├── matriculas_materia/
+│   │   │   ├── _init_.py
+│   │   │   ├── completar_matricula_popup.py
+│   │   │   ├── consulta_matricula_estudiante_tab.py
+│   │   │   ├── docente_materia_tab.py
+│   │   │   ├── materia_horario_tab.py
+│   │   │   └── matricula_materia_tab.py
+│   │   │
+│   │   ├── transitions/
+│   │   │   ├── popup_slide.py
+│   │   │   └── window_slide.py
+│   │   │
+│   │   └── views/
+│   │       ├── _init_.py
+│   │       ├── main_menu_view.py
+│   │       ├── mantenimientos_view.py
+│   │       ├── matriculas_materia_view.py
+│   │       └── matriculas_view.py
+│   │
+│   └── modules/
+│      
+│
+└── docs/
+    └── mapa/
+        └── mapa_visual_estructura.txt

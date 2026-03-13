@@ -19,6 +19,21 @@ from app.services.mantenimiento.becas_service import (
 )
 
 
+def _registrar_auditoria(conn, codigo_usuario: int | None, movimiento_cod: int) -> None:
+    if codigo_usuario is None:
+        return
+
+    try:
+        insert_auditoria(
+            conn,
+            codigo_usuario=int(codigo_usuario),
+            movimiento_cod=int(movimiento_cod),
+        )
+    except Exception:
+        # No romper el flujo principal por un fallo aislado de auditoría
+        pass
+
+
 def listar_becas(db_user: str, db_pass: str, codigo_usuario: int | None = None):
     conn = connect(db_user, db_pass)
     try:
@@ -44,22 +59,28 @@ def crear_beca(
 ) -> bool:
     conn = connect(db_user, db_pass)
     try:
-        # Validaciones consistentes
         data = validar_beca_data(
             id_beca=None,
             nombre_beca=nombre_beca,
             porcentaje_descuento=int(porcentaje_descuento),
         )
-        validar_beca_unicidad(conn, nombre_beca=data["nombre_beca"], exclude_id=None)
+        validar_beca_unicidad(
+            conn,
+            nombre_beca=data["nombre_beca"],
+            exclude_id=None,
+        )
 
-        insert_beca(conn, nombre_beca=data["nombre_beca"], porcentaje_descuento=int(data["porcentaje_descuento"]))
+        insert_beca(
+            conn,
+            nombre_beca=data["nombre_beca"],
+            porcentaje_descuento=int(data["porcentaje_descuento"]),
+        )
 
-        # Auditoría
-        if codigo_usuario is not None:
-            try:
-                insert_auditoria(conn, codigo_usuario=int(codigo_usuario), movimiento_cod=Mov.BECA_CREADA)
-            except Exception:
-                pass
+        _registrar_auditoria(
+            conn,
+            codigo_usuario,
+            Mov.BECA_CREADA,
+        )
 
         return True
     finally:
@@ -82,35 +103,42 @@ def actualizar_beca(
             porcentaje_descuento=int(porcentaje_descuento),
         )
         validar_beca_existente(conn, id_beca=data["id_beca"])
-        validar_beca_unicidad(conn, nombre_beca=data["nombre_beca"], exclude_id=data["id_beca"])
+        validar_beca_unicidad(
+            conn,
+            nombre_beca=data["nombre_beca"],
+            exclude_id=data["id_beca"],
+        )
 
         update_beca(conn, **data)
 
-        # Auditoría
-        if codigo_usuario is not None:
-            try:
-                insert_auditoria(conn, codigo_usuario=int(codigo_usuario), movimiento_cod=Mov.BECA_ACTUALIZADA)
-            except Exception:
-                pass
+        _registrar_auditoria(
+            conn,
+            codigo_usuario,
+            Mov.BECA_ACTUALIZADA,
+        )
 
         return True
     finally:
         conn.close()
 
 
-def eliminar_beca(db_user: str, db_pass: str, id_beca: int, codigo_usuario: int | None = None) -> bool:
+def eliminar_beca(
+    db_user: str,
+    db_pass: str,
+    id_beca: int,
+    codigo_usuario: int | None = None,
+) -> bool:
     conn = connect(db_user, db_pass)
     try:
         validar_beca_existente(conn, id_beca=int(id_beca))
         validar_beca_puede_eliminarse(conn, id_beca=int(id_beca))
-        soft_delete_beca(conn, id_beca=int(id_beca))  # lógico
+        soft_delete_beca(conn, id_beca=int(id_beca))  # DELETE lógico
 
-        # Auditoría
-        if codigo_usuario is not None:
-            try:
-                insert_auditoria(conn, codigo_usuario=int(codigo_usuario), movimiento_cod=Mov.BECA_ELIMINADA)
-            except Exception:
-                pass
+        _registrar_auditoria(
+            conn,
+            codigo_usuario,
+            Mov.BECA_ELIMINADA,
+        )
 
         return True
     finally:
