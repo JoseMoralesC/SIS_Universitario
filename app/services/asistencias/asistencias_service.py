@@ -126,35 +126,21 @@ def _validar_fecha_vs_horario_materia(
     fecha_clase: str,
 ) -> tuple[str, str]:
     """
-    Valida que la fecha corresponda con alguno de los días configurados
-    para la materia en Materia_Horario.
+    Opción B:
+    No bloquea el guardado si la fecha no coincide con el horario
+    configurado de la materia.
 
-    Retorna:
+    Retorna el día real de la fecha seleccionada:
         (dia_cod, dia_nombre)
+
+    El horario de la materia queda como referencia informativa.
     """
-    horarios = fetch_horarios_materia(conn, materia_cod=materia_cod)
-    if not horarios:
-        raise ValueError(
-            "La materia seleccionada no tiene horario configurado. "
-            "No se puede registrar asistencia."
-        )
+    _parse_fecha_iso(fecha_clase)
 
     dia_cod_fecha = _dia_cod_desde_fecha(fecha_clase)
+    dia_nombre_fecha = _DIA_COD_TO_NOMBRE.get(dia_cod_fecha, "Desconocido")
 
-    for dia_cod, dia_nombre, _jornada_id, _jornada in horarios:
-        if str(dia_cod).strip().upper() == dia_cod_fecha:
-            return str(dia_cod).strip().upper(), str(dia_nombre).strip()
-
-    dias_validos = ", ".join(
-        f"{str(dia_nombre)} ({str(dia_cod)})"
-        for dia_cod, dia_nombre, _jid, _jdesc in horarios
-    )
-
-    raise ValueError(
-        f"La fecha seleccionada no coincide con el horario de la materia. "
-        f"Días válidos: {dias_validos}."
-    )
-
+    return dia_cod_fecha, dia_nombre_fecha
 
 def _validar_estudiantes_en_grupo(
     conn: pyodbc.Connection,

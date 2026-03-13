@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import tkinter as tk
 from tkinter import ttk
-from datetime import date
+from datetime import date, datetime
 
 from app.endpoints.asistencias import asistencias_endpoints as ep
 from app.core.error_handler import show_warning, show_info, handle_exception
@@ -17,6 +17,11 @@ class AsistenciasTab(ttk.Frame):
         self.db_user = db_user
         self.db_pass = db_pass
         self.codigo_usuario = codigo_usuario
+
+        self.periodos = []
+        self.cursos = []
+        self.materias = []
+        self.docentes = []
 
         self.estudiantes = []
         self.asistentes = []
@@ -40,12 +45,12 @@ class AsistenciasTab(ttk.Frame):
         self.cb_periodo.bind("<<ComboboxSelected>>", self._on_periodo)
 
         ttk.Label(top, text="Curso").grid(row=0, column=1, padx=5)
-        self.cb_curso = ttk.Combobox(top, width=20, state="readonly")
+        self.cb_curso = ttk.Combobox(top, width=22, state="readonly")
         self.cb_curso.grid(row=1, column=1, padx=5)
         self.cb_curso.bind("<<ComboboxSelected>>", self._on_curso)
 
         ttk.Label(top, text="Materia").grid(row=0, column=2, padx=5)
-        self.cb_materia = ttk.Combobox(top, width=20, state="readonly")
+        self.cb_materia = ttk.Combobox(top, width=22, state="readonly")
         self.cb_materia.grid(row=1, column=2, padx=5)
         self.cb_materia.bind("<<ComboboxSelected>>", self._on_materia)
 
@@ -56,11 +61,13 @@ class AsistenciasTab(ttk.Frame):
 
         ttk.Label(top, text="Fecha").grid(row=0, column=4, padx=5)
         self.fecha_var = tk.StringVar(value=str(date.today()))
-        ttk.Entry(top, textvariable=self.fecha_var, width=12).grid(row=1, column=4)
+        self.entry_fecha = ttk.Entry(top, textvariable=self.fecha_var, width=12)
+        self.entry_fecha.grid(row=1, column=4)
+        self.entry_fecha.bind("<FocusOut>", self._on_fecha_change)
 
         ttk.Label(top, text="Día").grid(row=0, column=5, padx=5)
         self.lbl_dia = ttk.Label(top, text="-")
-        self.lbl_dia.grid(row=1, column=5)
+        self.lbl_dia.grid(row=1, column=5, sticky="w")
 
         # =====================================================
         # LISTAS
@@ -121,6 +128,46 @@ class AsistenciasTab(ttk.Frame):
         ).pack(pady=10)
 
     # =====================================================
+    # HELPERS UI
+    # =====================================================
+
+    def _reset_listas(self):
+        self.estudiantes = []
+        self.asistentes = []
+        self.ausentes = []
+
+        self.list_asistentes.delete(0, tk.END)
+        self.list_ausentes.delete(0, tk.END)
+
+        self.cb_asistentes.set("")
+        self.cb_ausentes.set("")
+        self.cb_asistentes["values"] = []
+        self.cb_ausentes["values"] = []
+
+    def _get_fecha_dia_nombre(self, fecha_texto: str) -> str:
+        try:
+            fecha = datetime.strptime(str(fecha_texto).strip(), "%Y-%m-%d").date()
+            dias = {
+                0: "Lunes",
+                1: "Martes",
+                2: "Miércoles",
+                3: "Jueves",
+                4: "Viernes",
+                5: "Sábado",
+                6: "Domingo",
+            }
+            return dias[fecha.weekday()]
+        except Exception:
+            return "-"
+
+    def _refresh_lbl_dia(self):
+        dia_fecha = self._get_fecha_dia_nombre(self.fecha_var.get())
+        self.lbl_dia.config(text=dia_fecha)
+
+    def _on_fecha_change(self, event=None):
+        self._refresh_lbl_dia()
+
+    # =====================================================
     # LOADERS
     # =====================================================
 
@@ -131,12 +178,21 @@ class AsistenciasTab(ttk.Frame):
             self.periodos = rows
             self.cb_periodo["values"] = [r["label"] for r in rows]
 
+            if rows:
+                self.cb_periodo.current(0)
+                self._on_periodo()
+
         except Exception as e:
-            handle_exception(e)
+            handle_exception(self, e, context="Cargar períodos")
 
     def _on_periodo(self, event=None):
         try:
+            self._reset_listas()
+
             idx = self.cb_periodo.current()
+            if idx < 0:
+                return
+
             periodo_id = self.periodos[idx]["id"]
 
             rows = ep.get_cursos_por_periodo(
@@ -146,14 +202,25 @@ class AsistenciasTab(ttk.Frame):
             )
 
             self.cursos = rows
+            self.cb_curso.set("")
+            self.cb_materia.set("")
+            self.cb_docente.set("")
+
             self.cb_curso["values"] = [r["label"] for r in rows]
+            self.cb_materia["values"] = []
+            self.cb_docente["values"] = []
 
         except Exception as e:
-            handle_exception(e)
+            handle_exception(self, e, context="Cargar cursos")
 
     def _on_curso(self, event=None):
 
         try:
+            self._reset_listas()
+
+            if self.cb_periodo.current() < 0 or self.cb_curso.current() < 0:
+                return
+
             periodo = self.periodos[self.cb_periodo.current()]["id"]
             curso = self.cursos[self.cb_curso.current()]["id"]
 
@@ -165,26 +232,34 @@ class AsistenciasTab(ttk.Frame):
             )
 
             self.materias = rows
+            self.cb_materia.set("")
+            self.cb_docente.set("")
+
             self.cb_materia["values"] = [r["label"] for r in rows]
+            self.cb_docente["values"] = []
+            self.lbl_dia.config(text="-")
 
         except Exception as e:
-            handle_exception(e)
+            handle_exception(self, e, context="Cargar materias")
 
     def _on_materia(self, event=None):
 
         try:
+            self._reset_listas()
+
+            if (
+                self.cb_periodo.current() < 0
+                or self.cb_curso.current() < 0
+                or self.cb_materia.current() < 0
+            ):
+                return
+
             periodo = self.periodos[self.cb_periodo.current()]["id"]
             curso = self.cursos[self.cb_curso.current()]["id"]
             materia = self.materias[self.cb_materia.current()]["id"]
 
-            horario = ep.get_horario_principal_materia(
-                self.db_user,
-                self.db_pass,
-                materia
-            )
-
-            if horario:
-                self.lbl_dia.config(text=horario["dia_nombre"])
+            # En la UI mostramos el día real de la fecha escrita
+            self._refresh_lbl_dia()
 
             rows = ep.get_docentes_por_periodo_curso_materia(
                 self.db_user,
@@ -195,14 +270,25 @@ class AsistenciasTab(ttk.Frame):
             )
 
             self.docentes = rows
+            self.cb_docente.set("")
             self.cb_docente["values"] = [r["label"] for r in rows]
 
         except Exception as e:
-            handle_exception(e)
+            handle_exception(self, e, context="Cargar docentes")
 
     def _on_docente(self, event=None):
 
         try:
+            self._reset_listas()
+
+            if (
+                self.cb_periodo.current() < 0
+                or self.cb_curso.current() < 0
+                or self.cb_materia.current() < 0
+                or self.cb_docente.current() < 0
+            ):
+                return
+
             periodo = self.periodos[self.cb_periodo.current()]["id"]
             curso = self.cursos[self.cb_curso.current()]["id"]
             materia = self.materias[self.cb_materia.current()]["id"]
@@ -218,11 +304,10 @@ class AsistenciasTab(ttk.Frame):
             )
 
             self.estudiantes = rows
-
             self._refresh_combos()
 
         except Exception as e:
-            handle_exception(e)
+            handle_exception(self, e, context="Cargar estudiantes")
 
     # =====================================================
     # LIST MANAGEMENT
@@ -241,14 +326,27 @@ class AsistenciasTab(ttk.Frame):
         self.cb_asistentes["values"] = labels
         self.cb_ausentes["values"] = labels
 
+        if labels:
+            self.cb_asistentes.set(labels[0])
+            self.cb_ausentes.set(labels[0])
+        else:
+            self.cb_asistentes.set("")
+            self.cb_ausentes.set("")
+
     def _add_asistente(self):
 
         idx = self.cb_asistentes.current()
         if idx < 0:
             return
 
-        label = self.cb_asistentes.get()
+        label = self.cb_asistentes.get().strip()
+        if not label:
+            return
+
         carnet = label.split("|")[0].strip()
+
+        if carnet in self.asistentes or carnet in self.ausentes:
+            return
 
         self.asistentes.append(carnet)
         self.list_asistentes.insert(tk.END, label)
@@ -261,8 +359,14 @@ class AsistenciasTab(ttk.Frame):
         if idx < 0:
             return
 
-        label = self.cb_ausentes.get()
+        label = self.cb_ausentes.get().strip()
+        if not label:
+            return
+
         carnet = label.split("|")[0].strip()
+
+        if carnet in self.asistentes or carnet in self.ausentes:
+            return
 
         self.ausentes.append(carnet)
         self.list_ausentes.insert(tk.END, label)
@@ -280,9 +384,10 @@ class AsistenciasTab(ttk.Frame):
 
         carnet = label.split("|")[0].strip()
 
-        self.asistentes.remove(carnet)
-        self.list_asistentes.delete(idx)
+        if carnet in self.asistentes:
+            self.asistentes.remove(carnet)
 
+        self.list_asistentes.delete(idx)
         self._refresh_combos()
 
     def _remove_ausente(self):
@@ -296,9 +401,10 @@ class AsistenciasTab(ttk.Frame):
 
         carnet = label.split("|")[0].strip()
 
-        self.ausentes.remove(carnet)
-        self.list_ausentes.delete(idx)
+        if carnet in self.ausentes:
+            self.ausentes.remove(carnet)
 
+        self.list_ausentes.delete(idx)
         self._refresh_combos()
 
     # =====================================================
@@ -308,6 +414,22 @@ class AsistenciasTab(ttk.Frame):
     def _guardar(self):
 
         try:
+            if self.cb_periodo.current() < 0:
+                show_warning(self, "Validación", "Debe seleccionar un período.")
+                return
+
+            if self.cb_curso.current() < 0:
+                show_warning(self, "Validación", "Debe seleccionar un curso.")
+                return
+
+            if self.cb_materia.current() < 0:
+                show_warning(self, "Validación", "Debe seleccionar una materia.")
+                return
+
+            if self.cb_docente.current() < 0:
+                show_warning(self, "Validación", "Debe seleccionar un docente.")
+                return
+
             periodo = self.periodos[self.cb_periodo.current()]["id"]
             curso = self.cursos[self.cb_curso.current()]["id"]
             materia = self.materias[self.cb_materia.current()]["id"]
@@ -320,17 +442,22 @@ class AsistenciasTab(ttk.Frame):
                 curso_cod=curso,
                 materia_cod=materia,
                 docente_cod=docente,
-                fecha_clase=self.fecha_var.get(),
+                fecha_clase=self.fecha_var.get().strip(),
                 asistentes=self.asistentes,
                 ausentes=self.ausentes,
                 codigo_usuario=self.codigo_usuario,
             )
 
             show_info(
-                f"Asistencia {result['accion']} correctamente\n"
-                f"Asistentes: {result['total_asistentes']}\n"
-                f"Ausentes: {result['total_ausentes']}"
+                self,
+                "Asistencia guardada",
+                (
+                    f"Asistencia {result['accion']} correctamente.\n\n"
+                    f"Asistentes: {result['total_asistentes']}\n"
+                    f"Ausentes: {result['total_ausentes']}\n"
+                    f"Pendientes: {result['pendientes']}"
+                )
             )
 
         except Exception as e:
-            handle_exception(e)
+            handle_exception(self, e, context="Guardar asistencia")
