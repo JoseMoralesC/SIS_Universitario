@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from app.core.db import connect
-from app.core.auditoria import Mov
+from app.core.auditoria import Mov, Tab, compose_named_row_id
 from app.repositories.auditoria_repo import insert_auditoria
 
 from app.repositories.matriculas.matriculas_repo import (
@@ -10,6 +10,7 @@ from app.repositories.matriculas.matriculas_repo import (
     fetch_cursos_activos,
     fetch_docentes_activos,
     fetch_docentes_por_curso,
+    fetch_estudiantes_elegibles_para_curso,
     list_matriculas,
     insert_matricula,
     update_estado_matricula,
@@ -26,22 +27,69 @@ from app.services.matriculas.matriculas_service import (
 )
 
 
-def get_lookups(db_user: str, db_pass: str, codigo_usuario: int | None = None) -> dict:
+def _build_row_id(carnet: str, curso_cod: int, periodo: int) -> str:
+    """
+    Construye el identificador compuesto de Matricula_Curso.
+
+    PK real en DB:
+    - Carnet
+    - Curso_Cod
+    - Periodo
+    """
+    return compose_named_row_id(
+        Carnet=(carnet or "").strip(),
+        Curso_Cod=int(curso_cod),
+        Periodo=int(periodo),
+    )
+
+
+def _registrar_auditoria(
+    conn,
+    codigo_usuario: int | None,
+    movimiento_cod: int,
+    id_row_tabla: object | None = None,
+) -> None:
+    if codigo_usuario is None:
+        return
+
+    try:
+        insert_auditoria(
+            conn,
+            codigo_usuario=int(codigo_usuario),
+            movimiento_cod=int(movimiento_cod),
+            id_tabla=Tab.MATRICULA_CURSO,
+            id_row_tabla=id_row_tabla,
+        )
+    except Exception:
+        # No romper el flujo principal por un fallo aislado de auditoría
+        pass
+
+
+def get_lookups(
+    db_user: str,
+    db_pass: str,
+    codigo_usuario: int | None = None,
+) -> dict:
     conn = connect(db_user, db_pass)
     try:
         return {
             "estados": fetch_estados(conn),
             "estudiantes": fetch_estudiantes_activos(conn),
             "cursos": fetch_cursos_activos(conn),
-            # NOTA: docentes generales se pueden dejar si querés para otras pantallas,
-            # pero en Matrículas el combo se carga por curso.
+            # En matrículas el combo de docentes se carga por curso,
+            # pero mantenemos este catálogo general por compatibilidad.
             "docentes": fetch_docentes_activos(conn),
         }
     finally:
         conn.close()
 
 
-def get_docentes_por_curso(db_user: str, db_pass: str, curso_cod: int, codigo_usuario: int | None = None) -> list:
+def get_docentes_por_curso(
+    db_user: str,
+    db_pass: str,
+    curso_cod: int,
+    codigo_usuario: int | None = None,
+) -> list:
     conn = connect(db_user, db_pass)
     try:
         return fetch_docentes_por_curso(conn, int(curso_cod))
@@ -49,7 +97,11 @@ def get_docentes_por_curso(db_user: str, db_pass: str, curso_cod: int, codigo_us
         conn.close()
 
 
-def listar_matriculas(db_user: str, db_pass: str, codigo_usuario: int | None = None):
+def listar_matriculas(
+    db_user: str,
+    db_pass: str,
+    codigo_usuario: int | None = None,
+):
     conn = connect(db_user, db_pass)
     try:
         return list_matriculas(conn)
@@ -96,11 +148,18 @@ def matricular(
             estado_codigo=int(reglas["estado_codigo"]),
         )
 
-        if codigo_usuario is not None:
-            try:
-                insert_auditoria(conn, codigo_usuario=int(codigo_usuario), movimiento_cod=Mov.MATRICULA_CREADA)
-            except Exception:
-                pass
+        row_id = _build_row_id(
+            carnet=data["carnet"],
+            curso_cod=data["curso_cod"],
+            periodo=data["periodo"],
+        )
+
+        _registrar_auditoria(
+            conn,
+            codigo_usuario,
+            Mov.MATRICULA_CREADA,
+            id_row_tabla=row_id,
+        )
 
         return True
     finally:
@@ -119,21 +178,35 @@ def cambiar_estado(
 ) -> bool:
     conn = connect(db_user, db_pass)
     try:
-        nuevo_estado_cod = validar_cambio_estado(conn, nuevo_estado=nuevo_estado)
+        carnet_limpio = (carnet or "").strip()
+        curso_cod = int(curso_cod)
+        periodo = int(periodo)
+
+        nuevo_estado_cod = validar_cambio_estado(
+            conn,
+            nuevo_estado=nuevo_estado,
+        )
 
         update_estado_matricula(
             conn,
-            carnet=(carnet or "").strip(),
-            curso_cod=int(curso_cod),
-            periodo=int(periodo),
+            carnet=carnet_limpio,
+            curso_cod=curso_cod,
+            periodo=periodo,
             nuevo_estado_codigo=int(nuevo_estado_cod),
         )
 
-        if codigo_usuario is not None:
-            try:
-                insert_auditoria(conn, codigo_usuario=int(codigo_usuario), movimiento_cod=Mov.MATRICULA_ESTADO_CAMBIADO)
-            except Exception:
-                pass
+        row_id = _build_row_id(
+            carnet=carnet_limpio,
+            curso_cod=curso_cod,
+            periodo=periodo,
+        )
+
+        _registrar_auditoria(
+            conn,
+            codigo_usuario,
+            Mov.MATRICULA_ESTADO_CAMBIADO,
+            id_row_tabla=row_id,
+        )
 
         return True
     finally:
@@ -151,25 +224,41 @@ def eliminar_matricula(
 ) -> bool:
     conn = connect(db_user, db_pass)
     try:
+        carnet_limpio = (carnet or "").strip()
+        curso_cod = int(curso_cod)
+        periodo = int(periodo)
+
         delete_matricula(
             conn,
-            carnet=(carnet or "").strip(),
-            curso_cod=int(curso_cod),
-            periodo=int(periodo),
+            carnet=carnet_limpio,
+            curso_cod=curso_cod,
+            periodo=periodo,
         )
 
-        if codigo_usuario is not None:
-            try:
-                insert_auditoria(conn, codigo_usuario=int(codigo_usuario), movimiento_cod=Mov.MATRICULA_ELIMINADA)
-            except Exception:
-                pass
+        row_id = _build_row_id(
+            carnet=carnet_limpio,
+            curso_cod=curso_cod,
+            periodo=periodo,
+        )
+
+        _registrar_auditoria(
+            conn,
+            codigo_usuario,
+            Mov.MATRICULA_ELIMINADA,
+            id_row_tabla=row_id,
+        )
 
         return True
     finally:
         conn.close()
 
 
-def listar_matriculas_por_curso(db_user: str, db_pass: str, curso_cod: int, codigo_usuario: int | None = None):
+def listar_matriculas_por_curso(
+    db_user: str,
+    db_pass: str,
+    curso_cod: int,
+    codigo_usuario: int | None = None,
+):
     conn = connect(db_user, db_pass)
     try:
         return list_matriculas_por_curso(conn, curso_cod=int(curso_cod))
@@ -177,35 +266,50 @@ def listar_matriculas_por_curso(db_user: str, db_pass: str, curso_cod: int, codi
         conn.close()
 
 
-def reporte_estudiantes_por_curso(*, db_user: str, db_pass: str, curso_cod: int, codigo_usuario: int):
+def reporte_estudiantes_por_curso(
+    *,
+    db_user: str,
+    db_pass: str,
+    curso_cod: int,
+    codigo_usuario: int,
+):
     """
     Reporte: estudiantes matriculados por curso.
     Devuelve lista de tuplas: (Periodo, Carnet, Estudiante, Estado)
     """
     conn = connect(db_user, db_pass)
     try:
-        data = reporte_estudiantes_por_curso_repo(conn, curso_cod=int(curso_cod))
+        curso_cod = int(curso_cod)
+        data = reporte_estudiantes_por_curso_repo(conn, curso_cod=curso_cod)
 
-        # Auditoría (opcional, no revienta si falla)
-        try:
-            insert_auditoria(
-                conn,
-                codigo_usuario=int(codigo_usuario),
-                movimiento_cod=Mov.REPORTE_ESTUDIANTES_POR_CURSO,
-            )
-        except Exception:
-            pass
+        # Para reportes usamos el curso como identificador contextual
+        row_id = compose_named_row_id(Curso_Cod=curso_cod)
+
+        _registrar_auditoria(
+            conn,
+            codigo_usuario,
+            Mov.REPORTE_ESTUDIANTES_POR_CURSO,
+            id_row_tabla=row_id,
+        )
 
         return data
     finally:
         conn.close()
 
-from app.repositories.matriculas.matriculas_repo import fetch_estudiantes_elegibles_para_curso
-# (agregalo en el bloque de imports donde están los otros fetch/list)
 
-def get_estudiantes_elegibles(db_user: str, db_pass: str, curso_cod: int, periodo: int, codigo_usuario: int | None = None) -> list:
+def get_estudiantes_elegibles(
+    db_user: str,
+    db_pass: str,
+    curso_cod: int,
+    periodo: int,
+    codigo_usuario: int | None = None,
+) -> list:
     conn = connect(db_user, db_pass)
     try:
-        return fetch_estudiantes_elegibles_para_curso(conn, curso_cod=int(curso_cod), periodo=int(periodo))
+        return fetch_estudiantes_elegibles_para_curso(
+            conn,
+            curso_cod=int(curso_cod),
+            periodo=int(periodo),
+        )
     finally:
-        conn.close()        
+        conn.close()

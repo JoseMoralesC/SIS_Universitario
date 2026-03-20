@@ -2,7 +2,11 @@
 from __future__ import annotations
 
 from app.core.db import connect
-from app.core.auditoria import Mov
+from app.core.auditoria import (
+    Mov,
+    Tab,
+    compose_named_row_id,
+)
 from app.repositories.auditoria_repo import insert_auditoria
 from app.services.matriculas_materia.docente_materia_service import DocenteMateriaService
 
@@ -17,13 +21,28 @@ def _to_int(value, field_name: str) -> int:
         raise ValueError(f"{field_name} inválido.")
 
 
+def _build_row_id(
+    docente_cod: int,
+    materia_cod: int,
+) -> str:
+    """
+    Identificador compuesto para auditoría de asignación docente-materia.
+    """
+    return compose_named_row_id(
+        Docente_Cod=int(docente_cod),
+        Materia_Cod=int(materia_cod),
+    )
+
+
 def _registrar_auditoria(
     conn,
     codigo_usuario: int | None,
     movimiento_cod: int,
+    id_row_tabla: object | None = None,
 ) -> None:
     """
-    Mantiene el mismo patrón de auditoría del proyecto.
+    Mantiene el mismo patrón de auditoría del proyecto,
+    pero ahora registrando también tabla e id de fila afectada.
     """
     if codigo_usuario is None:
         return
@@ -33,16 +52,14 @@ def _registrar_auditoria(
             conn,
             codigo_usuario=int(codigo_usuario),
             movimiento_cod=int(movimiento_cod),
+            id_tabla=Tab.DOCENTE_MATERIA,
+            id_row_tabla=id_row_tabla,
         )
     except Exception:
-        # No romper el flujo principal por un fallo aislado de auditoría
         pass
 
 
 def _resolver_movimiento(default_value: int | str | None) -> int:
-    """
-    Permite usar Mov si existe el atributo, y si no, cae en el valor recibido.
-    """
     if isinstance(default_value, int):
         return default_value
 
@@ -120,8 +137,10 @@ def fetch_materias_disponibles_para_docente(
     conn = _open_conn(db_user, db_pass)
     try:
         service = DocenteMateriaService(conn)
+
         docente_cod = _to_int(docente_cod, "Docente")
         curso_cod = _to_int(curso_cod, "Curso")
+
         return service.obtener_materias_disponibles_para_docente(
             docente_cod=docente_cod,
             curso_cod=curso_cod,
@@ -196,7 +215,9 @@ def list_materias_de_docente_rows(
     conn = _open_conn(db_user, db_pass)
     try:
         service = DocenteMateriaService(conn)
+
         docente_cod = _to_int(docente_cod, "Docente")
+
         return service.listar_materias_de_docente(
             docente_cod=docente_cod,
             solo_activas=solo_activas,
@@ -214,7 +235,9 @@ def list_docentes_de_materia_rows(
     conn = _open_conn(db_user, db_pass)
     try:
         service = DocenteMateriaService(conn)
+
         materia_cod = _to_int(materia_cod, "Materia")
+
         return service.listar_docentes_de_materia(
             materia_cod=materia_cod,
             solo_activas=solo_activas,
@@ -235,10 +258,8 @@ def assign_docente_materia(
     estado_codigo: int = 1,
     codigo_usuario: int | None = None,
 ) -> str:
-    """
-    Crea o reactiva la asignación Docente ↔ Materia.
-    """
     conn = _open_conn(db_user, db_pass)
+
     try:
         service = DocenteMateriaService(conn)
 
@@ -252,13 +273,20 @@ def assign_docente_materia(
             estado_codigo=estado_codigo,
         )
 
-        _registrar_auditoria(
-            conn,
-            codigo_usuario,
-            Mov.DOCENTE_ASIGNADO_MATERIA,
-        )
+        mov = _resolver_movimiento("DOCENTE_MATERIA_CREADA")
+        if mov > 0:
+            _registrar_auditoria(
+                conn,
+                codigo_usuario,
+                mov,
+                id_row_tabla=_build_row_id(
+                    docente_cod=docente_cod,
+                    materia_cod=materia_cod,
+                ),
+            )
 
         return msg
+
     finally:
         conn.close()
 
@@ -272,10 +300,8 @@ def update_estado_docente_materia(
     nuevo_estado_codigo: int,
     codigo_usuario: int | None = None,
 ) -> str:
-    """
-    Actualiza el estado de una asignación existente.
-    """
     conn = _open_conn(db_user, db_pass)
+
     try:
         service = DocenteMateriaService(conn)
 
@@ -289,13 +315,20 @@ def update_estado_docente_materia(
             nuevo_estado_codigo=nuevo_estado_codigo,
         )
 
-        _registrar_auditoria(
-            conn,
-            codigo_usuario,
-            Mov.DOCENTE_ASIGNADO_MATERIA,
-        )
+        mov = _resolver_movimiento("DOCENTE_MATERIA_ACTUALIZADA")
+        if mov > 0:
+            _registrar_auditoria(
+                conn,
+                codigo_usuario,
+                mov,
+                id_row_tabla=_build_row_id(
+                    docente_cod=docente_cod,
+                    materia_cod=materia_cod,
+                ),
+            )
 
         return msg
+
     finally:
         conn.close()
 
@@ -308,10 +341,8 @@ def delete_docente_materia(
     materia_cod: int,
     codigo_usuario: int | None = None,
 ) -> str:
-    """
-    Borrado lógico de la asignación.
-    """
     conn = _open_conn(db_user, db_pass)
+
     try:
         service = DocenteMateriaService(conn)
 
@@ -323,12 +354,19 @@ def delete_docente_materia(
             materia_cod=materia_cod,
         )
 
-        _registrar_auditoria(
-            conn,
-            codigo_usuario,
-            Mov.DOCENTE_DESASIGNADO_MATERIA,
-        )
+        mov = _resolver_movimiento("DOCENTE_MATERIA_ELIMINADA")
+        if mov > 0:
+            _registrar_auditoria(
+                conn,
+                codigo_usuario,
+                mov,
+                id_row_tabla=_build_row_id(
+                    docente_cod=docente_cod,
+                    materia_cod=materia_cod,
+                ),
+            )
 
         return msg
+
     finally:
         conn.close()

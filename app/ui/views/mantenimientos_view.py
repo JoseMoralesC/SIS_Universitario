@@ -1,4 +1,3 @@
-# app/ui/views/mantenimientos_view.py
 from __future__ import annotations
 
 import os
@@ -13,6 +12,7 @@ from app.ui.mantenimientos.programas_tab import ProgramasTab
 from app.ui.mantenimientos.becas_tab import BecasTab
 from app.ui.mantenimientos.becados_tab import BecadosTab
 from app.ui.mantenimientos.periodos_tab import PeriodosTab
+from app.ui.mantenimientos.asignacion_tab import AsignacionTab
 
 
 class MantenimientosView(ttk.Frame):
@@ -44,7 +44,7 @@ class MantenimientosView(ttk.Frame):
         self.notebook.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
 
         # =====================================================
-        # TAB: Inicio (Background real a tamaño completo)
+        # TAB: Inicio
         # =====================================================
         self.tab_home = ttk.Frame(self.notebook)
         Toast(
@@ -60,19 +60,18 @@ class MantenimientosView(ttk.Frame):
             slide_in_from="right",
             slide_out_to="right",
             step=20,
-            delay_ms=18,   # 7 segundos
+            delay_ms=18,
         )
 
         home_canvas = tk.Canvas(self.tab_home, highlightthickness=0, bd=0)
         home_canvas.pack(fill="both", expand=True)
         self._home_bg_canvas = home_canvas
 
-        # Cargar imagen original (si Pillow existe)
         self._home_bg_original = None
         try:
             from PIL import Image  # type: ignore
 
-            app_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))  # app
+            app_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
             assets_dir = os.path.join(app_dir, "assets")
             img_path = os.path.join(assets_dir, "background.png")
 
@@ -113,20 +112,61 @@ class MantenimientosView(ttk.Frame):
         overlay.columnconfigure(0, weight=1)
         overlay.rowconfigure(0, weight=1)
 
-        # ---- Resto de tabs CRUD ----
-        self.tab_docentes = DocentesTab(self.notebook, db_user=self.db_user, db_pass=self.db_pass, codigo_usuario=self.codigo_usuario)
-        self.tab_cursos = CursosTab(self.notebook, db_user=self.db_user, db_pass=self.db_pass, codigo_usuario=self.codigo_usuario)
-        self.tab_estudiantes = EstudiantesTab(self.notebook, db_user=self.db_user, db_pass=self.db_pass, codigo_usuario=self.codigo_usuario)
-        self.tab_programas = ProgramasTab(self.notebook, db_user=self.db_user, db_pass=self.db_pass, codigo_usuario=self.codigo_usuario)
-        self.tab_becas = BecasTab(self.notebook, db_user=self.db_user, db_pass=self.db_pass, codigo_usuario=self.codigo_usuario)
-        self.tab_becados = BecadosTab(self.notebook, db_user=self.db_user, db_pass=self.db_pass, codigo_usuario=self.codigo_usuario)
-        self.tab_periodos = PeriodosTab(self.notebook, db_user=self.db_user, db_pass=self.db_pass)
+        # ---- Tabs CRUD ----
+        self.tab_docentes = DocentesTab(
+            self.notebook,
+            db_user=self.db_user,
+            db_pass=self.db_pass,
+            codigo_usuario=self.codigo_usuario,
+        )
+        self.tab_cursos = CursosTab(
+            self.notebook,
+            db_user=self.db_user,
+            db_pass=self.db_pass,
+            codigo_usuario=self.codigo_usuario,
+        )
+        self.tab_estudiantes = EstudiantesTab(
+            self.notebook,
+            db_user=self.db_user,
+            db_pass=self.db_pass,
+            codigo_usuario=self.codigo_usuario,
+        )
+        self.tab_programas = ProgramasTab(
+            self.notebook,
+            db_user=self.db_user,
+            db_pass=self.db_pass,
+            codigo_usuario=self.codigo_usuario,
+        )
+        self.tab_asignacion = AsignacionTab(
+            self.notebook,
+            db_user=self.db_user,
+            db_pass=self.db_pass,
+            codigo_usuario=self.codigo_usuario,
+        )
+        self.tab_becas = BecasTab(
+            self.notebook,
+            db_user=self.db_user,
+            db_pass=self.db_pass,
+            codigo_usuario=self.codigo_usuario,
+        )
+        self.tab_becados = BecadosTab(
+            self.notebook,
+            db_user=self.db_user,
+            db_pass=self.db_pass,
+            codigo_usuario=self.codigo_usuario,
+        )
+        self.tab_periodos = PeriodosTab(
+            self.notebook,
+            db_user=self.db_user,
+            db_pass=self.db_pass,
+        )
 
         self.notebook.add(self.tab_home, text="Inicio")
         self.notebook.add(self.tab_docentes, text="Docentes")
         self.notebook.add(self.tab_cursos, text="Cursos")
         self.notebook.add(self.tab_estudiantes, text="Estudiantes")
         self.notebook.add(self.tab_programas, text="Programas")
+        self.notebook.add(self.tab_asignacion, text="Asignación")
         self.notebook.add(self.tab_becas, text="Becas")
         self.notebook.add(self.tab_becados, text="Becados")
         self.notebook.add(self.tab_periodos, text="Períodos")
@@ -135,6 +175,7 @@ class MantenimientosView(ttk.Frame):
 
     def _on_tab_changed(self, _evt=None):
         current = self.notebook.select()
+
         if current == str(self.tab_docentes):
             self.tab_docentes.ensure_loaded()
         elif current == str(self.tab_cursos):
@@ -143,6 +184,8 @@ class MantenimientosView(ttk.Frame):
             self.tab_programas.ensure_loaded()
         elif current == str(self.tab_estudiantes):
             self.tab_estudiantes.ensure_loaded()
+        elif current == str(self.tab_asignacion):
+            self.tab_asignacion.ensure_loaded()
         elif current == str(self.tab_becados):
             self.tab_becados.ensure_loaded()
         elif current == str(self.tab_becas):
@@ -151,9 +194,6 @@ class MantenimientosView(ttk.Frame):
             self.tab_periodos.ensure_loaded()
 
     def select_home(self):
-        """
-        Mantiene el comportamiento anterior: al entrar al módulo, selecciona Inicio.
-        """
         try:
             self.notebook.select(self.tab_home)
         except Exception:

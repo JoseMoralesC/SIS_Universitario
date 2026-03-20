@@ -49,6 +49,9 @@ def _normalizar_lista_carnets(items: list[str] | tuple[str, ...] | None) -> list
     return salida
 
 
+# =========================================================
+# Exists / validaciones básicas
+# =========================================================
 def exists_periodo(conn: pyodbc.Connection, periodo_id: int) -> bool:
     cur = conn.cursor()
     cur.execute(
@@ -109,7 +112,7 @@ def exists_estudiante(conn: pyodbc.Connection, carnet: str) -> bool:
         FROM dbo.Estudiantes
         WHERE Carnet = ?;
         """,
-        (str(carnet).strip(),),
+        str(carnet).strip(),
     )
     return cur.fetchone() is not None
 
@@ -254,6 +257,7 @@ def fetch_docentes_por_periodo_curso_materia(
         WHERE mm.Periodo_Id = ?
           AND m.Curso_Cod = ?
           AND mm.Materia_Cod = ?
+          AND mm.Docente_Cod = d.Docente_Cod
           AND mm.Estado_Codigo = ?
           AND m.Estado_Codigo = ?
           AND d.Estado_Codigo = ?
@@ -316,9 +320,6 @@ def fetch_horario_principal_materia(
     """
     Devuelve el primer horario activo de la materia:
     (dia_cod, dia_nombre, jornada_id, jornada)
-
-    Nota:
-    si la materia tiene más de un horario, toma el primero por orden de día/jornada.
     """
     rows = fetch_horarios_materia(conn, materia_cod=materia_cod)
     return rows[0] if rows else None
@@ -384,20 +385,6 @@ def find_asistencia_lista_by_unique(
 ) -> tuple | None:
     """
     Busca una lista existente por la llave única del negocio.
-
-    Retorna:
-    (
-        Asistencia_Lista_Id,
-        Periodo_Id,
-        Curso_Cod,
-        Materia_Cod,
-        Docente_Cod,
-        Dia_Cod,
-        Fecha_Clase,
-        Fecha_Registro,
-        Codigo_Usuario,
-        Estado_Codigo
-    )
     """
     cur = conn.cursor()
     cur.execute(
@@ -535,6 +522,211 @@ def fetch_asistencia_detalle(
 
 
 # =========================================================
+# Consultas de listas existentes (nuevo)
+# =========================================================
+def fetch_listas_asistencia(
+    conn: pyodbc.Connection,
+    *,
+    periodo_id: int | None = None,
+    curso_cod: int | None = None,
+    materia_cod: int | None = None,
+    docente_cod: int | None = None,
+    fecha_desde: str | None = None,
+    fecha_hasta: str | None = None,
+    estado_codigo: int | None = None,
+) -> list[tuple]:
+    """
+    Retorna filas para grilla de consultas:
+    (
+        Asistencia_Lista_Id,
+        Periodo_Id,
+        Periodo_Label,
+        Curso_Cod,
+        Curso_Desc,
+        Materia_Cod,
+        Materia_Desc,
+        Docente_Cod,
+        Docente_Nombre,
+        Dia_Cod,
+        Dia_Nombre,
+        Fecha_Clase,
+        Fecha_Registro,
+        Codigo_Usuario,
+        Estado_Codigo,
+        Total_Asistentes,
+        Total_Ausentes,
+        Total_Registros
+    )
+    """
+    cur = conn.cursor()
+
+    sql = """
+        SELECT
+            al.Asistencia_Lista_Id,
+            al.Periodo_Id,
+            CONCAT(p.Periodo_Codigo, ' | ', p.Anio, ' - P', p.Numero_Periodo) AS Periodo_Label,
+            al.Curso_Cod,
+            cp.Descripcion AS Curso_Desc,
+            al.Materia_Cod,
+            m.Descripcion AS Materia_Desc,
+            al.Docente_Cod,
+            d.Nombre_Completo AS Docente_Nombre,
+            al.Dia_Cod,
+            ds.Dia_Nombre,
+            al.Fecha_Clase,
+            al.Fecha_Registro,
+            al.Codigo_Usuario,
+            al.Estado_Codigo,
+            SUM(CASE WHEN ad.Estado_Asistencia = 'A' THEN 1 ELSE 0 END) AS Total_Asistentes,
+            SUM(CASE WHEN ad.Estado_Asistencia = 'F' THEN 1 ELSE 0 END) AS Total_Ausentes,
+            COUNT(ad.Asistencia_Detalle_Id) AS Total_Registros
+        FROM dbo.Asistencia_Lista al
+        INNER JOIN dbo.Periodos p
+            ON p.Periodo_Id = al.Periodo_Id
+        INNER JOIN dbo.Cursos_Programas cp
+            ON cp.Curso_Cod = al.Curso_Cod
+        INNER JOIN dbo.Materias m
+            ON m.Materia_Cod = al.Materia_Cod
+        INNER JOIN dbo.Docentes d
+            ON d.Docente_Cod = al.Docente_Cod
+        INNER JOIN dbo.Dias_Semana ds
+            ON ds.Dia_Cod = al.Dia_Cod
+        LEFT JOIN dbo.Asistencia_Detalle ad
+            ON ad.Asistencia_Lista_Id = al.Asistencia_Lista_Id
+        WHERE 1 = 1
+    """
+
+    params: list = []
+
+    if periodo_id is not None:
+        sql += " AND al.Periodo_Id = ?"
+        params.append(int(periodo_id))
+
+    if curso_cod is not None:
+        sql += " AND al.Curso_Cod = ?"
+        params.append(int(curso_cod))
+
+    if materia_cod is not None:
+        sql += " AND al.Materia_Cod = ?"
+        params.append(int(materia_cod))
+
+    if docente_cod is not None:
+        sql += " AND al.Docente_Cod = ?"
+        params.append(int(docente_cod))
+
+    if fecha_desde:
+        sql += " AND al.Fecha_Clase >= ?"
+        params.append(str(fecha_desde).strip())
+
+    if fecha_hasta:
+        sql += " AND al.Fecha_Clase <= ?"
+        params.append(str(fecha_hasta).strip())
+
+    if estado_codigo is not None:
+        sql += " AND al.Estado_Codigo = ?"
+        params.append(int(estado_codigo))
+
+    sql += """
+        GROUP BY
+            al.Asistencia_Lista_Id,
+            al.Periodo_Id,
+            p.Periodo_Codigo,
+            p.Anio,
+            p.Numero_Periodo,
+            al.Curso_Cod,
+            cp.Descripcion,
+            al.Materia_Cod,
+            m.Descripcion,
+            al.Docente_Cod,
+            d.Nombre_Completo,
+            al.Dia_Cod,
+            ds.Dia_Nombre,
+            al.Fecha_Clase,
+            al.Fecha_Registro,
+            al.Codigo_Usuario,
+            al.Estado_Codigo
+        ORDER BY
+            al.Fecha_Clase DESC,
+            cp.Descripcion ASC,
+            m.Descripcion ASC,
+            d.Nombre_Completo ASC,
+            al.Asistencia_Lista_Id DESC;
+    """
+
+    cur.execute(sql, params)
+    return [tuple(r) for r in cur.fetchall()]
+
+
+def fetch_asistencia_lista_resumen_row(
+    conn: pyodbc.Connection,
+    *,
+    asistencia_lista_id: int,
+) -> tuple | None:
+    """
+    Retorna una sola fila resumen para una lista específica.
+    """
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT
+            al.Asistencia_Lista_Id,
+            al.Periodo_Id,
+            CONCAT(p.Periodo_Codigo, ' | ', p.Anio, ' - P', p.Numero_Periodo) AS Periodo_Label,
+            al.Curso_Cod,
+            cp.Descripcion AS Curso_Desc,
+            al.Materia_Cod,
+            m.Descripcion AS Materia_Desc,
+            al.Docente_Cod,
+            d.Nombre_Completo AS Docente_Nombre,
+            al.Dia_Cod,
+            ds.Dia_Nombre,
+            al.Fecha_Clase,
+            al.Fecha_Registro,
+            al.Codigo_Usuario,
+            al.Estado_Codigo,
+            SUM(CASE WHEN ad.Estado_Asistencia = 'A' THEN 1 ELSE 0 END) AS Total_Asistentes,
+            SUM(CASE WHEN ad.Estado_Asistencia = 'F' THEN 1 ELSE 0 END) AS Total_Ausentes,
+            COUNT(ad.Asistencia_Detalle_Id) AS Total_Registros
+        FROM dbo.Asistencia_Lista al
+        INNER JOIN dbo.Periodos p
+            ON p.Periodo_Id = al.Periodo_Id
+        INNER JOIN dbo.Cursos_Programas cp
+            ON cp.Curso_Cod = al.Curso_Cod
+        INNER JOIN dbo.Materias m
+            ON m.Materia_Cod = al.Materia_Cod
+        INNER JOIN dbo.Docentes d
+            ON d.Docente_Cod = al.Docente_Cod
+        INNER JOIN dbo.Dias_Semana ds
+            ON ds.Dia_Cod = al.Dia_Cod
+        LEFT JOIN dbo.Asistencia_Detalle ad
+            ON ad.Asistencia_Lista_Id = al.Asistencia_Lista_Id
+        WHERE al.Asistencia_Lista_Id = ?
+        GROUP BY
+            al.Asistencia_Lista_Id,
+            al.Periodo_Id,
+            p.Periodo_Codigo,
+            p.Anio,
+            p.Numero_Periodo,
+            al.Curso_Cod,
+            cp.Descripcion,
+            al.Materia_Cod,
+            m.Descripcion,
+            al.Docente_Cod,
+            d.Nombre_Completo,
+            al.Dia_Cod,
+            ds.Dia_Nombre,
+            al.Fecha_Clase,
+            al.Fecha_Registro,
+            al.Codigo_Usuario,
+            al.Estado_Codigo;
+        """,
+        int(asistencia_lista_id),
+    )
+    row = cur.fetchone()
+    return tuple(row) if row else None
+
+
+# =========================================================
 # Commands
 # =========================================================
 def insert_asistencia_lista(
@@ -622,7 +814,6 @@ def insert_asistencia_detalle_many(
     asistentes_norm = _normalizar_lista_carnets(asistentes)
     ausentes_norm = _normalizar_lista_carnets(ausentes)
 
-    # Evitar que un carnet quede en ambas listas
     set_asistentes = set(asistentes_norm)
     ausentes_norm = [c for c in ausentes_norm if c not in set_asistentes]
 

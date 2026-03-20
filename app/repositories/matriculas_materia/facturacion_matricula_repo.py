@@ -61,6 +61,72 @@ def fetch_formas_pago(conn: pyodbc.Connection) -> list[tuple[int, str]]:
     return [(int(r[0]), str(r[1])) for r in cur.fetchall()]
 
 
+def get_forma_pago_desc_by_cod(conn: pyodbc.Connection, forma_pago_cod: int) -> str:
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT Descripcion
+        FROM dbo.Forma_Pago
+        WHERE Forma_Pago_Cod = ?;
+        """,
+        (int(forma_pago_cod),),
+    )
+    row = cur.fetchone()
+
+    if not row:
+        raise ValueError("La forma de pago seleccionada no existe.")
+
+    return str(row[0]).strip()
+
+
+# =========================================================
+# Referencia automática
+# =========================================================
+def get_prefijo_forma_pago(descripcion: str) -> str:
+    desc = (descripcion or "").strip().lower()
+
+    if "efectivo" in desc:
+        return "EFEC"
+    if "sinpe" in desc:
+        return "SINP"
+    if "tarjeta" in desc:
+        return "TARJ"
+
+    raise ValueError(
+        "No fue posible generar la referencia automática. "
+        "La forma de pago no tiene un prefijo configurado."
+    )
+
+
+def get_siguiente_consecutivo_referencia(conn: pyodbc.Connection) -> int:
+    """
+    Busca el consecutivo global más alto usado en Referencia_Pago
+    con formato REF-XXXX-0001 y retorna el siguiente.
+    """
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT ISNULL(MAX(
+            TRY_CAST(RIGHT(Referencia_Pago, 4) AS INT)
+        ), 0) + 1
+        FROM dbo.Matricula_Materia_Facturacion
+        WHERE Referencia_Pago IS NOT NULL
+          AND LTRIM(RTRIM(Referencia_Pago)) <> ''
+          AND Referencia_Pago LIKE 'REF-%-[0-9][0-9][0-9][0-9]';
+        """
+    )
+    row = cur.fetchone()
+    return int(row[0]) if row and row[0] is not None else 1
+
+
+def build_referencia_pago(conn: pyodbc.Connection, forma_pago_cod: int) -> str:
+    descripcion = get_forma_pago_desc_by_cod(conn, forma_pago_cod)
+    prefijo = get_prefijo_forma_pago(descripcion)
+    consecutivo = get_siguiente_consecutivo_referencia(conn)
+
+    return f"REF-{prefijo}-{consecutivo:04d}"
+
+
 # =========================================================
 # Beca vigente
 # =========================================================
@@ -298,6 +364,9 @@ def insert_facturacion_matricula(
     """
     Inserta una fila por cada materia pendiente de facturar.
     El flujo actual registra el pago como CANCELADO (pagado).
+
+    La referencia se genera automáticamente con formato:
+    REF-EFEC-0001 / REF-SINP-0002 / REF-TARJ-0003
     """
     activo = get_estado_codigo_by_desc(conn, "Activo")
     estado_pago_cancelado = get_estado_pago_cod_by_desc(conn, "Cancelado")
@@ -318,7 +387,11 @@ def insert_facturacion_matricula(
             "subtotal": Decimal("0.00"),
             "descuento": Decimal("0.00"),
             "total": Decimal("0.00"),
+            "referencia_pago": None,
         }
+
+    referencia_generada = build_referencia_pago(conn, int(forma_pago_cod))
+    referencia_final = referencia_generada.strip()
 
     cur = conn.cursor()
 
@@ -362,7 +435,7 @@ def insert_facturacion_matricula(
                 int(item["porcentaje_beca"]),
                 item["monto_descuento"],
                 item["monto_final"],
-                (referencia_pago or "").strip() or None,
+                referencia_final,
                 (observacion or "").strip() or None,
                 int(codigo_usuario),
             ),
@@ -375,4 +448,5 @@ def insert_facturacion_matricula(
         "subtotal": resumen["subtotal"],
         "descuento": resumen["descuento"],
         "total": resumen["total"],
+        "referencia_pago": referencia_final,
     }

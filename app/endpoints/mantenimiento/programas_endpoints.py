@@ -18,7 +18,7 @@ from app.repositories.mantenimiento.programas_repo import (
     get_curso_jornadas,
 )
 
-from app.core.auditoria import Mov
+from app.core.auditoria import Mov, Tab
 from app.repositories.auditoria_repo import insert_auditoria
 
 
@@ -26,6 +26,7 @@ def _registrar_auditoria(
     conn,
     codigo_usuario: int | None,
     movimiento_cod: int,
+    id_row_tabla: object | None = None,
 ) -> None:
     if codigo_usuario is None:
         return
@@ -35,6 +36,8 @@ def _registrar_auditoria(
             conn,
             codigo_usuario=int(codigo_usuario),
             movimiento_cod=int(movimiento_cod),
+            id_tabla=Tab.CURSOS_PROGRAMAS,
+            id_row_tabla=id_row_tabla,
         )
     except Exception:
         # No romper el flujo principal por un fallo aislado de auditoría
@@ -129,6 +132,8 @@ def crear_programa(
             estado_codigo=estado_codigo,
         )
 
+        curso_cod = int(curso_cod)
+
         validar_programa_unicidad(
             conn,
             curso_cod=None,
@@ -138,7 +143,7 @@ def crear_programa(
         # Insert SOLO a Cursos_Programas (sin jornadas_ids)
         insert_programa(
             conn,
-            curso_cod=int(curso_cod),
+            curso_cod=curso_cod,
             descripcion=data["descripcion"],
             horario_tipo_id=data["horario_tipo_id"],
             precio_matricula=data["precio_matricula"],
@@ -148,7 +153,7 @@ def crear_programa(
         # Guardar jornadas en tabla puente
         set_curso_jornadas(
             conn,
-            int(curso_cod),
+            curso_cod,
             data["jornadas_ids"],
         )
 
@@ -156,6 +161,7 @@ def crear_programa(
             conn,
             codigo_usuario,
             Mov.PROGRAMA_CREADO,
+            id_row_tabla=curso_cod,
         )
 
         return True
@@ -179,6 +185,8 @@ def actualizar_programa(
 
     conn = connect(db_user, db_pass)
     try:
+        curso_cod = int(curso_cod)
+
         data = validar_programa_data(
             descripcion=descripcion,
             horario_tipo_id=horario_tipo_id,
@@ -189,14 +197,14 @@ def actualizar_programa(
 
         validar_programa_unicidad(
             conn,
-            curso_cod=int(curso_cod),
+            curso_cod=curso_cod,
             descripcion=data["descripcion"],
         )
 
         # Update SOLO a Cursos_Programas (sin jornadas_ids)
         update_programa(
             conn,
-            curso_cod=int(curso_cod),
+            curso_cod=curso_cod,
             descripcion=data["descripcion"],
             horario_tipo_id=data["horario_tipo_id"],
             precio_matricula=data["precio_matricula"],
@@ -206,7 +214,7 @@ def actualizar_programa(
         # Reemplazar jornadas
         set_curso_jornadas(
             conn,
-            int(curso_cod),
+            curso_cod,
             data["jornadas_ids"],
         )
 
@@ -214,6 +222,7 @@ def actualizar_programa(
             conn,
             codigo_usuario,
             Mov.PROGRAMA_ACTUALIZADO,
+            id_row_tabla=curso_cod,
         )
 
         return True
@@ -237,12 +246,15 @@ def eliminar_programa(
 
     conn = connect(db_user, db_pass)
     try:
-        soft_delete_programa(conn, int(curso_cod))
+        curso_cod = int(curso_cod)
+
+        soft_delete_programa(conn, curso_cod)
 
         _registrar_auditoria(
             conn,
             codigo_usuario,
             Mov.PROGRAMA_ELIMINADO,
+            id_row_tabla=curso_cod,
         )
 
         return True

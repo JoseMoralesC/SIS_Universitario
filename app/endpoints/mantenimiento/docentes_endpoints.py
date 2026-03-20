@@ -17,7 +17,7 @@ from app.repositories.mantenimiento.docentes_repo import (
     next_docente_cod,
 )
 
-from app.core.auditoria import Mov
+from app.core.auditoria import Mov, Tab
 from app.repositories.auditoria_repo import insert_auditoria
 
 
@@ -25,6 +25,7 @@ def _registrar_auditoria(
     conn,
     codigo_usuario: int | None,
     movimiento_cod: int,
+    id_row_tabla: object | None = None,
 ) -> None:
     if codigo_usuario is None:
         return
@@ -34,6 +35,8 @@ def _registrar_auditoria(
             conn,
             codigo_usuario=int(codigo_usuario),
             movimiento_cod=int(movimiento_cod),
+            id_tabla=Tab.DOCENTES,
+            id_row_tabla=id_row_tabla,
         )
     except Exception:
         # No romper el flujo principal por un fallo aislado de auditoría
@@ -99,6 +102,8 @@ def crear_docente(
             profesion_cod=profesion_cod,
         )
 
+        docente_cod = int(docente_cod)
+
         validar_docente_unicidad(
             conn,
             docente_cod=None,
@@ -108,7 +113,7 @@ def crear_docente(
 
         insert_docente(
             conn,
-            docente_cod=int(docente_cod),
+            docente_cod=docente_cod,
             **data,
         )
 
@@ -116,6 +121,7 @@ def crear_docente(
             conn,
             codigo_usuario,
             Mov.DOCENTE_CREADO,
+            id_row_tabla=docente_cod,
         )
 
         return True
@@ -147,16 +153,18 @@ def actualizar_docente(
             profesion_cod=profesion_cod,
         )
 
+        docente_cod = int(docente_cod)
+
         validar_docente_unicidad(
             conn,
-            docente_cod=int(docente_cod),
+            docente_cod=docente_cod,
             identificacion=data["identificacion"],
             usuario_docente=data["usuario_docente"],
         )
 
         update_docente(
             conn,
-            docente_cod=int(docente_cod),
+            docente_cod=docente_cod,
             **data,
         )
 
@@ -164,6 +172,7 @@ def actualizar_docente(
             conn,
             codigo_usuario,
             Mov.DOCENTE_ACTUALIZADO,
+            id_row_tabla=docente_cod,
         )
 
         return True
@@ -187,12 +196,15 @@ def eliminar_docente(
 
     conn = connect(db_user, db_pass)
     try:
-        soft_delete_docente(conn, int(docente_cod))
+        docente_cod = int(docente_cod)
+
+        soft_delete_docente(conn, docente_cod)
 
         _registrar_auditoria(
             conn,
             codigo_usuario,
             Mov.DOCENTE_ELIMINADO,
+            id_row_tabla=docente_cod,
         )
 
         return True

@@ -16,7 +16,7 @@ from app.repositories.mantenimiento.estudiantes_repo import (
     soft_delete_estudiante,
 )
 
-from app.core.auditoria import Mov
+from app.core.auditoria import Mov, Tab
 from app.repositories.auditoria_repo import insert_auditoria
 
 
@@ -24,6 +24,7 @@ def _registrar_auditoria(
     conn,
     codigo_usuario: int | None,
     movimiento_cod: int,
+    id_row_tabla: object | None = None,
 ) -> None:
     if codigo_usuario is None:
         return
@@ -33,6 +34,8 @@ def _registrar_auditoria(
             conn,
             codigo_usuario=int(codigo_usuario),
             movimiento_cod=int(movimiento_cod),
+            id_tabla=Tab.ESTUDIANTES,
+            id_row_tabla=id_row_tabla,
         )
     except Exception:
         # No romper el flujo principal por un fallo aislado de auditoría
@@ -94,9 +97,11 @@ def crear_estudiante(
             estado_codigo=estado_codigo,
         )
 
+        carnet_limpio = str(data["carnet"]).strip()
+
         validar_estudiante_unicidad(
             conn,
-            carnet=data["carnet"],
+            carnet=carnet_limpio,
             identificacion=data["identificacion"],
         )
 
@@ -106,6 +111,7 @@ def crear_estudiante(
             conn,
             codigo_usuario,
             Mov.ESTUDIANTE_CREADO,
+            id_row_tabla=carnet_limpio,
         )
 
         return True
@@ -139,12 +145,14 @@ def actualizar_estudiante(
             estado_codigo=estado_codigo,
         )
 
+        carnet_limpio = str(data["carnet"]).strip()
+
         # OJO: la unicidad debe excluir el mismo carnet.
         # Tu service actual usa (carnet, identificacion).
         # Mantenemos tu intención actual.
         validar_estudiante_unicidad(
             conn,
-            carnet=carnet,
+            carnet=carnet_limpio,
             identificacion=data["identificacion"],
         )
 
@@ -154,6 +162,7 @@ def actualizar_estudiante(
             conn,
             codigo_usuario,
             Mov.ESTUDIANTE_ACTUALIZADO,
+            id_row_tabla=carnet_limpio,
         )
 
         return True
@@ -179,6 +188,7 @@ def eliminar_estudiante(
             conn,
             codigo_usuario,
             Mov.ESTUDIANTE_ELIMINADO,
+            id_row_tabla=carnet,
         )
 
         return True

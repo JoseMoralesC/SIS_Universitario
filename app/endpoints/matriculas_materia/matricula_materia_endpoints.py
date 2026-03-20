@@ -2,7 +2,11 @@
 from __future__ import annotations
 
 from app.core.db import connect
-from app.core.auditoria import Mov
+from app.core.auditoria import (
+    Mov,
+    Tab,
+    compose_named_row_id,
+)
 from app.repositories.auditoria_repo import insert_auditoria
 from app.services.matriculas_materia.matricula_materia_service import (
     MatriculaMateriaService,
@@ -19,12 +23,39 @@ def _to_int(value, field_name: str) -> int:
         raise ValueError(f"{field_name} inválido.")
 
 
-def _registrar_auditoria(conn, codigo_usuario: int, movimiento_cod: int) -> None:
+def _build_row_id_fallback(
+    carnet: str,
+    materia_cod: int,
+    periodo: int,
+) -> str:
+    """
+    Fallback contextual para auditoría cuando el flujo no devuelve
+    explícitamente Matricula_Materia_Id.
+
+    Se usa porque la tabla Matricula_Materia tiene PK simple
+    (Matricula_Materia_Id), pero este endpoint actualmente trabaja
+    con un service que devuelve mensaje y no necesariamente el ID.
+    """
+    return compose_named_row_id(
+        Carnet=(carnet or "").strip(),
+        Materia_Cod=int(materia_cod),
+        Periodo=int(periodo),
+    )
+
+
+def _registrar_auditoria(
+    conn,
+    codigo_usuario: int,
+    movimiento_cod: int,
+    id_row_tabla: object | None = None,
+) -> None:
     try:
         insert_auditoria(
             conn,
             codigo_usuario=int(codigo_usuario),
             movimiento_cod=int(movimiento_cod),
+            id_tabla=Tab.MATRICULA_MATERIA,
+            id_row_tabla=id_row_tabla,
         )
     except Exception:
         # No romper flujo principal por fallo aislado de auditoría
@@ -243,10 +274,17 @@ def assign_matricula_materia(
             mov = _resolver_movimiento("MATRICULA_MATERIA_CREADA")
 
             if mov > 0:
+                row_id = _build_row_id_fallback(
+                    carnet=carnet,
+                    materia_cod=materia_cod,
+                    periodo=periodo,
+                )
+
                 _registrar_auditoria(
                     conn,
                     int(codigo_usuario),
                     mov,
+                    id_row_tabla=row_id,
                 )
 
         return msg
@@ -294,6 +332,7 @@ def update_estado_matricula_materia_endpoint(
                     conn,
                     int(codigo_usuario),
                     mov,
+                    id_row_tabla=matricula_materia_id,
                 )
 
         return msg
@@ -334,6 +373,7 @@ def delete_matricula_materia_endpoint(
                     conn,
                     int(codigo_usuario),
                     mov,
+                    id_row_tabla=matricula_materia_id,
                 )
 
         return msg

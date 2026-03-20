@@ -17,7 +17,7 @@ from app.repositories.mantenimiento.cursos_repo import (
     soft_delete_curso,
 )
 
-from app.core.auditoria import Mov
+from app.core.auditoria import Mov, Tab
 from app.repositories.auditoria_repo import insert_auditoria
 
 
@@ -25,6 +25,7 @@ def _registrar_auditoria(
     conn,
     codigo_usuario: int | None,
     movimiento_cod: int,
+    id_row_tabla: object | None = None,
 ) -> None:
     if codigo_usuario is None:
         return
@@ -34,6 +35,8 @@ def _registrar_auditoria(
             conn,
             codigo_usuario=int(codigo_usuario),
             movimiento_cod=int(movimiento_cod),
+            id_tabla=Tab.MATERIAS,
+            id_row_tabla=id_row_tabla,
         )
     except Exception:
         # No romper el flujo principal por un fallo aislado de auditoría
@@ -97,6 +100,8 @@ def crear_curso(
             estado_codigo=estado_codigo,
         )
 
+        materia_cod = int(materia_cod)
+
         validar_curso_unicidad(
             conn,
             materia_cod=None,
@@ -106,7 +111,7 @@ def crear_curso(
 
         insert_curso(
             conn,
-            materia_cod=int(materia_cod),
+            materia_cod=materia_cod,
             **data,
         )
 
@@ -114,6 +119,7 @@ def crear_curso(
             conn,
             codigo_usuario,
             Mov.CURSO_CREADO,
+            id_row_tabla=materia_cod,
         )
 
         return True
@@ -136,6 +142,8 @@ def actualizar_curso(
 
     conn = connect(db_user, db_pass)
     try:
+        materia_cod = int(materia_cod)
+
         data = validar_curso_data(
             descripcion=descripcion,
             curso_cod=curso_cod,
@@ -145,14 +153,14 @@ def actualizar_curso(
 
         validar_curso_unicidad(
             conn,
-            materia_cod=int(materia_cod),
+            materia_cod=materia_cod,
             descripcion=data["descripcion"],
             curso_cod=data["curso_cod"],
         )
 
         update_curso(
             conn,
-            materia_cod=int(materia_cod),
+            materia_cod=materia_cod,
             **data,
         )
 
@@ -160,6 +168,7 @@ def actualizar_curso(
             conn,
             codigo_usuario,
             Mov.CURSO_ACTUALIZADO,
+            id_row_tabla=materia_cod,
         )
 
         return True
@@ -183,12 +192,15 @@ def eliminar_curso(
 
     conn = connect(db_user, db_pass)
     try:
-        soft_delete_curso(conn, int(materia_cod))
+        materia_cod = int(materia_cod)
+
+        soft_delete_curso(conn, materia_cod)
 
         _registrar_auditoria(
             conn,
             codigo_usuario,
             Mov.CURSO_ELIMINADO,
+            id_row_tabla=materia_cod,
         )
 
         return True

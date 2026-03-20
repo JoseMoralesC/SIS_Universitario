@@ -14,11 +14,13 @@ from app.repositories.asistencias.asistencias_repo import (
     exists_materia,
     exists_periodo,
     fetch_asistencia_detalle,
+    fetch_asistencia_lista_resumen_row,
     fetch_cursos_por_periodo,
     fetch_docentes_por_periodo_curso_materia,
     fetch_estudiantes_matriculados,
     fetch_horario_principal_materia,
     fetch_horarios_materia,
+    fetch_listas_asistencia,
     fetch_materias_por_periodo_curso,
     fetch_periodos_activos,
     find_asistencia_lista_by_unique,
@@ -126,14 +128,12 @@ def _validar_fecha_vs_horario_materia(
     fecha_clase: str,
 ) -> tuple[str, str]:
     """
-    Opción B:
+    Opción flexible:
     No bloquea el guardado si la fecha no coincide con el horario
     configurado de la materia.
 
     Retorna el día real de la fecha seleccionada:
         (dia_cod, dia_nombre)
-
-    El horario de la materia queda como referencia informativa.
     """
     _parse_fecha_iso(fecha_clase)
 
@@ -141,6 +141,7 @@ def _validar_fecha_vs_horario_materia(
     dia_nombre_fecha = _DIA_COD_TO_NOMBRE.get(dia_cod_fecha, "Desconocido")
 
     return dia_cod_fecha, dia_nombre_fecha
+
 
 def _validar_estudiantes_en_grupo(
     conn: pyodbc.Connection,
@@ -202,6 +203,101 @@ def _validar_listas(
         raise ValueError(
             "La cantidad registrada supera el total de estudiantes matriculados del grupo."
         )
+
+
+def _build_cabecera_dict(cabecera: tuple) -> dict:
+    return {
+        "asistencia_lista_id": int(cabecera[0]),
+        "periodo_id": int(cabecera[1]),
+        "periodo_label": str(cabecera[2]),
+        "curso_cod": int(cabecera[3]),
+        "curso_desc": str(cabecera[4]),
+        "materia_cod": int(cabecera[5]),
+        "materia_desc": str(cabecera[6]),
+        "docente_cod": int(cabecera[7]),
+        "docente_nombre": str(cabecera[8]),
+        "dia_cod": str(cabecera[9]),
+        "dia_nombre": str(cabecera[10]),
+        "fecha_clase": str(cabecera[11]),
+        "fecha_registro": str(cabecera[12]),
+        "codigo_usuario": None if cabecera[13] is None else int(cabecera[13]),
+        "estado_codigo": int(cabecera[14]),
+    }
+
+
+def _build_detalle_dicts(detalle_rows: list[tuple]) -> tuple[list[dict], list[dict]]:
+    asistentes: list[dict] = []
+    ausentes: list[dict] = []
+
+    for item in detalle_rows:
+        _detalle_id, carnet, nombre, estado_asistencia, observacion, estado_codigo = item
+
+        registro = {
+            "carnet": str(carnet),
+            "nombre": str(nombre),
+            "label": f"{str(carnet)} | {str(nombre)}",
+            "estado_asistencia": str(estado_asistencia).strip().upper(),
+            "observacion": None if observacion is None else str(observacion),
+            "estado_codigo": int(estado_codigo),
+        }
+
+        if registro["estado_asistencia"] == "A":
+            asistentes.append(registro)
+        else:
+            ausentes.append(registro)
+
+    return asistentes, ausentes
+
+
+def _build_lista_resumen_dict(row: tuple) -> dict:
+    return {
+        "asistencia_lista_id": int(row[0]),
+        "periodo_id": int(row[1]),
+        "periodo_label": str(row[2]),
+        "curso_cod": int(row[3]),
+        "curso_desc": str(row[4]),
+        "materia_cod": int(row[5]),
+        "materia_desc": str(row[6]),
+        "docente_cod": int(row[7]),
+        "docente_nombre": str(row[8]),
+        "dia_cod": str(row[9]),
+        "dia_nombre": str(row[10]),
+        "fecha_clase": str(row[11]),
+        "fecha_registro": str(row[12]),
+        "codigo_usuario": None if row[13] is None else int(row[13]),
+        "estado_codigo": int(row[14]),
+        "total_asistentes": int(row[15] or 0),
+        "total_ausentes": int(row[16] or 0),
+        "total_registrados": int(row[17] or 0),
+        "pendientes": max(0, int(row[17] or 0) - int(row[17] or 0)),  # placeholder seguro
+    }
+
+
+def _build_lista_resumen_dict_con_pendientes(row: tuple) -> dict:
+    total_registrados = int(row[17] or 0)
+
+    data = {
+        "asistencia_lista_id": int(row[0]),
+        "periodo_id": int(row[1]),
+        "periodo_label": str(row[2]),
+        "curso_cod": int(row[3]),
+        "curso_desc": str(row[4]),
+        "materia_cod": int(row[5]),
+        "materia_desc": str(row[6]),
+        "docente_cod": int(row[7]),
+        "docente_nombre": str(row[8]),
+        "dia_cod": str(row[9]),
+        "dia_nombre": str(row[10]),
+        "fecha_clase": str(row[11]),
+        "fecha_registro": str(row[12]),
+        "codigo_usuario": None if row[13] is None else int(row[13]),
+        "estado_codigo": int(row[14]),
+        "total_asistentes": int(row[15] or 0),
+        "total_ausentes": int(row[16] or 0),
+        "total_registrados": total_registrados,
+    }
+
+    return data
 
 
 # =========================================================
@@ -281,6 +377,26 @@ def obtener_horario_principal_materia(
     }
 
 
+def listar_horarios_materia(
+    conn: pyodbc.Connection,
+    *,
+    materia_cod: int,
+) -> list[dict]:
+    if not materia_cod:
+        return []
+
+    rows = fetch_horarios_materia(conn, materia_cod=int(materia_cod))
+    return [
+        {
+            "dia_cod": dia_cod,
+            "dia_nombre": dia_nombre,
+            "jornada_id": jornada_id,
+            "jornada": jornada,
+        }
+        for dia_cod, dia_nombre, jornada_id, jornada in rows
+    ]
+
+
 def listar_estudiantes_grupo(
     conn: pyodbc.Connection,
     *,
@@ -332,7 +448,7 @@ def obtener_resumen_grupo(
 
 
 # =========================================================
-# Cargar lista existente
+# Cargar lista existente por llave de negocio
 # =========================================================
 def cargar_asistencia_existente(
     conn: pyodbc.Connection,
@@ -365,10 +481,29 @@ def cargar_asistencia_existente(
 
     asistencia_lista_id = int(found[0])
 
+    return obtener_asistencia_por_id(
+        conn,
+        asistencia_lista_id=asistencia_lista_id,
+    )
+
+
+# =========================================================
+# Consulta por ID de lista
+# =========================================================
+def obtener_asistencia_por_id(
+    conn: pyodbc.Connection,
+    *,
+    asistencia_lista_id: int,
+) -> dict | None:
+    asistencia_lista_id = int(asistencia_lista_id)
+
     cabecera = get_asistencia_lista_detalle_cabecera(
         conn,
         asistencia_lista_id=asistencia_lista_id,
     )
+    if cabecera is None:
+        return None
+
     detalle = fetch_asistencia_detalle(
         conn,
         asistencia_lista_id=asistencia_lista_id,
@@ -378,50 +513,96 @@ def cargar_asistencia_existente(
         asistencia_lista_id=asistencia_lista_id,
     )
 
-    asistentes: list[dict] = []
-    ausentes: list[dict] = []
-
-    for item in detalle:
-        _detalle_id, carnet, nombre, estado_asistencia, observacion, estado_codigo = item
-
-        registro = {
-            "carnet": str(carnet),
-            "nombre": str(nombre),
-            "label": f"{str(carnet)} | {str(nombre)}",
-            "observacion": observacion,
-            "estado_codigo": int(estado_codigo),
-        }
-
-        if str(estado_asistencia).strip().upper() == "A":
-            asistentes.append(registro)
-        else:
-            ausentes.append(registro)
-
-    if cabecera is None:
-        return None
+    asistentes, ausentes = _build_detalle_dicts(detalle)
 
     return {
-        "cabecera": {
-            "asistencia_lista_id": int(cabecera[0]),
-            "periodo_id": int(cabecera[1]),
-            "periodo_label": str(cabecera[2]),
-            "curso_cod": int(cabecera[3]),
-            "curso_desc": str(cabecera[4]),
-            "materia_cod": int(cabecera[5]),
-            "materia_desc": str(cabecera[6]),
-            "docente_cod": int(cabecera[7]),
-            "docente_nombre": str(cabecera[8]),
-            "dia_cod": str(cabecera[9]),
-            "dia_nombre": str(cabecera[10]),
-            "fecha_clase": str(cabecera[11]),
-            "fecha_registro": str(cabecera[12]),
-            "codigo_usuario": None if cabecera[13] is None else int(cabecera[13]),
-            "estado_codigo": int(cabecera[14]),
-        },
+        "cabecera": _build_cabecera_dict(cabecera),
         "asistentes": asistentes,
         "ausentes": ausentes,
+        "detalle": asistentes + ausentes,
         "resumen": resumen,
     }
+
+
+# =========================================================
+# Consultas de listas existentes
+# =========================================================
+def consultar_listas_asistencia(
+    conn: pyodbc.Connection,
+    *,
+    periodo_id: int | None = None,
+    curso_cod: int | None = None,
+    materia_cod: int | None = None,
+    docente_cod: int | None = None,
+    fecha_desde: str | None = None,
+    fecha_hasta: str | None = None,
+    solo_activas: bool = True,
+) -> list[dict]:
+    if fecha_desde:
+        _parse_fecha_iso(fecha_desde)
+
+    if fecha_hasta:
+        _parse_fecha_iso(fecha_hasta)
+
+    estado_codigo = None
+    if solo_activas:
+        estado_codigo = get_estado_codigo_by_desc(conn, "Activo")
+
+    rows = fetch_listas_asistencia(
+        conn,
+        periodo_id=None if periodo_id in (None, "", 0) else int(periodo_id),
+        curso_cod=None if curso_cod in (None, "", 0) else int(curso_cod),
+        materia_cod=None if materia_cod in (None, "", 0) else int(materia_cod),
+        docente_cod=None if docente_cod in (None, "", 0) else int(docente_cod),
+        fecha_desde=None if not fecha_desde else str(fecha_desde).strip(),
+        fecha_hasta=None if not fecha_hasta else str(fecha_hasta).strip(),
+        estado_codigo=estado_codigo,
+    )
+
+    data: list[dict] = []
+    for row in rows:
+        item = _build_lista_resumen_dict_con_pendientes(row)
+
+        total_grupo = count_estudiantes_matriculados(
+            conn,
+            periodo_id=item["periodo_id"],
+            curso_cod=item["curso_cod"],
+            materia_cod=item["materia_cod"],
+            docente_cod=item["docente_cod"],
+        )
+
+        item["total_grupo"] = int(total_grupo)
+        item["pendientes"] = max(0, int(total_grupo) - int(item["total_registrados"]))
+        data.append(item)
+
+    return data
+
+
+def obtener_resumen_lista_asistencia(
+    conn: pyodbc.Connection,
+    *,
+    asistencia_lista_id: int,
+) -> dict | None:
+    row = fetch_asistencia_lista_resumen_row(
+        conn,
+        asistencia_lista_id=int(asistencia_lista_id),
+    )
+    if row is None:
+        return None
+
+    item = _build_lista_resumen_dict_con_pendientes(row)
+
+    total_grupo = count_estudiantes_matriculados(
+        conn,
+        periodo_id=item["periodo_id"],
+        curso_cod=item["curso_cod"],
+        materia_cod=item["materia_cod"],
+        docente_cod=item["docente_cod"],
+    )
+
+    item["total_grupo"] = int(total_grupo)
+    item["pendientes"] = max(0, int(total_grupo) - int(item["total_registrados"]))
+    return item
 
 
 # =========================================================

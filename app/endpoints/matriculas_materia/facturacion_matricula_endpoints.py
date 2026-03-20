@@ -1,34 +1,50 @@
 from __future__ import annotations
 
-from typing import List, Dict, Any
-
 from app.core.db import connect
-from app.core.auditoria import Mov
+from app.core.auditoria import (
+    Mov,
+    Tab,
+    compose_named_row_id,
+)
 from app.repositories.auditoria_repo import insert_auditoria
 from app.services.matriculas_materia.facturacion_matricula_service import (
-    listar_formas_pago,
-    obtener_resumen_facturacion,
-    procesar_pago_matricula,
+    generar_referencia_preview,
+    validar_facturacion_request,
+)
+from app.repositories.matriculas_materia.facturacion_matricula_repo import (
+    build_resumen_facturacion,
+    fetch_formas_pago,
+    insert_facturacion_matricula,
 )
 
 
 # =========================================================
-# Helpers
+# Helpers internos
 # =========================================================
-def _forma_pago_to_dict(row: tuple) -> Dict[str, Any]:
-    forma_pago_cod, descripcion = row
-
-    return {
-        "forma_pago_cod": int(forma_pago_cod),
-        "descripcion": str(descripcion),
-        "label": f"{descripcion}",
-    }
+def _build_row_id_fallback(
+    *,
+    carnet: str,
+    curso_cod: int,
+    periodo_id: int,
+    referencia_pago: str | None = None,
+) -> str:
+    """
+    Fallback contextual para auditoría mientras el repository
+    no devuelva explícitamente los Factura_Id insertados.
+    """
+    return compose_named_row_id(
+        Carnet=(carnet or "").strip(),
+        Curso_Cod=int(curso_cod),
+        Periodo_Id=int(periodo_id),
+        Referencia_Pago=(referencia_pago or "").strip() or None,
+    )
 
 
 def _registrar_auditoria(
     conn,
     codigo_usuario: int | None,
     movimiento_cod: int,
+    id_row_tabla: object | None = None,
 ) -> None:
     if codigo_usuario is None:
         return
@@ -38,32 +54,48 @@ def _registrar_auditoria(
             conn,
             codigo_usuario=int(codigo_usuario),
             movimiento_cod=int(movimiento_cod),
+            id_tabla=Tab.MATRICULA_MATERIA_FACTURACION,
+            id_row_tabla=id_row_tabla,
         )
     except Exception:
-        # No romper el flujo principal por un fallo aislado de auditoría
+        # No romper flujo principal por fallo aislado de auditoría
         pass
 
 
 # =========================================================
-# Catálogo formas de pago
+# Catálogos
 # =========================================================
-def obtener_formas_pago(
+def get_formas_pago(db_user: str, db_pass: str) -> list[tuple[int, str]]:
+    conn = connect(db_user, db_pass)
+    try:
+        return fetch_formas_pago(conn)
+    finally:
+        conn.close()
+
+
+# =========================================================
+# Preview referencia automática
+# =========================================================
+def get_referencia_pago_preview(
     db_user: str,
     db_pass: str,
-) -> List[Dict[str, Any]]:
-
-    rows = listar_formas_pago(
-        db_user,
-        db_pass,
-    )
-
-    return [_forma_pago_to_dict(r) for r in rows]
+    *,
+    forma_pago_cod: int,
+) -> str:
+    conn = connect(db_user, db_pass)
+    try:
+        return generar_referencia_preview(
+            conn,
+            forma_pago_cod=int(forma_pago_cod),
+        )
+    finally:
+        conn.close()
 
 
 # =========================================================
-# Resumen de facturación
+# Resumen antes de facturar
 # =========================================================
-def obtener_resumen_facturacion_estudiante(
+def get_resumen_facturacion(
     db_user: str,
     db_pass: str,
     *,
@@ -71,53 +103,35 @@ def obtener_resumen_facturacion_estudiante(
     curso_cod: int,
     periodo_id: int,
     anio: int,
-) -> Dict[str, Any]:
-
-    data = obtener_resumen_facturacion(
-        db_user,
-        db_pass,
+    forma_pago_cod: int,
+) -> dict:
+    """
+    Retorna el resumen de materias pendientes, beca y totales.
+    """
+    data = validar_facturacion_request(
         carnet=carnet,
         curso_cod=curso_cod,
         periodo_id=periodo_id,
-        anio=anio,
+        forma_pago_cod=forma_pago_cod,
     )
 
-    beca = data["beca"]
-
-    materias = []
-    for m in data["materias"]:
-        materias.append(
-            {
-                "matricula_materia_id": m["matricula_materia_id"],
-                "materia_cod": m["materia_cod"],
-                "materia": m["materia"],
-                "docente": m["docente"],
-                "precio_base": float(m["precio_base"]),
-                "porcentaje_beca": int(m["porcentaje_beca"]),
-                "monto_descuento": float(m["monto_descuento"]),
-                "monto_final": float(m["monto_final"]),
-            }
+    conn = connect(db_user, db_pass)
+    try:
+        return build_resumen_facturacion(
+            conn,
+            carnet=data["carnet"],
+            curso_cod=data["curso_cod"],
+            periodo_id=data["periodo_id"],
+            anio=int(anio),
         )
-
-    return {
-        "beca": {
-            "tiene_beca": bool(beca["tiene_beca"]),
-            "id_beca": beca["id_beca"],
-            "nombre_beca": beca["nombre_beca"],
-            "porcentaje_beca": int(beca["porcentaje_beca"]),
-        },
-        "materias": materias,
-        "subtotal": float(data["subtotal"]),
-        "descuento": float(data["descuento"]),
-        "total": float(data["total"]),
-        "cantidad_materias": int(data["cantidad_materias"]),
-    }
+    finally:
+        conn.close()
 
 
 # =========================================================
-# Procesar pago
+# Confirmar facturación / pago
 # =========================================================
-def completar_pago_matricula(
+def save_facturacion_matricula(
     db_user: str,
     db_pass: str,
     *,
@@ -129,35 +143,51 @@ def completar_pago_matricula(
     referencia_pago: str | None,
     observacion: str | None,
     codigo_usuario: int,
-) -> Dict[str, Any]:
-
-    result = procesar_pago_matricula(
-        db_user,
-        db_pass,
+) -> dict:
+    """
+    Procesa la facturación final.
+    La referencia manual ya no gobierna el guardado;
+    el repository genera la definitiva automáticamente.
+    """
+    data = validar_facturacion_request(
         carnet=carnet,
         curso_cod=curso_cod,
         periodo_id=periodo_id,
-        anio=anio,
         forma_pago_cod=forma_pago_cod,
-        referencia_pago=referencia_pago,
-        observacion=observacion,
-        codigo_usuario=codigo_usuario,
     )
 
-    # Auditoría del pago/facturación completada
     conn = connect(db_user, db_pass)
     try:
-        _registrar_auditoria(
+        result = insert_facturacion_matricula(
             conn,
-            codigo_usuario,
-            Mov.FACTURA_GENERADA,
+            carnet=data["carnet"],
+            curso_cod=data["curso_cod"],
+            periodo_id=data["periodo_id"],
+            anio=int(anio),
+            forma_pago_cod=data["forma_pago_cod"],
+            referencia_pago=referencia_pago,
+            observacion=observacion,
+            codigo_usuario=int(codigo_usuario),
         )
+
+        if codigo_usuario is not None and isinstance(result, dict):
+            insertados = int(result.get("insertados", 0) or 0)
+
+            if insertados > 0:
+                row_id = _build_row_id_fallback(
+                    carnet=data["carnet"],
+                    curso_cod=data["curso_cod"],
+                    periodo_id=data["periodo_id"],
+                    referencia_pago=result.get("referencia_pago"),
+                )
+
+                _registrar_auditoria(
+                    conn,
+                    codigo_usuario,
+                    Mov.FACTURA_MATRICULA_CREADA,
+                    id_row_tabla=row_id,
+                )
+
+        return result
     finally:
         conn.close()
-
-    return {
-        "materias_facturadas": int(result["insertados"]),
-        "subtotal": float(result["subtotal"]),
-        "descuento": float(result["descuento"]),
-        "total": float(result["total"]),
-    }

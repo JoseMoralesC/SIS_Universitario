@@ -347,6 +347,7 @@ class CompletarMatriculaPopup(tk.Toplevel):
 
         self.cbo_pago = ttk.Combobox(pago, state="readonly")
         self.cbo_pago.grid(row=1, column=0, padx=6, pady=(0, 6), sticky="ew")
+        self.cbo_pago.bind("<<ComboboxSelected>>", self._on_forma_pago_change)
 
         ttk.Label(
             pago,
@@ -354,7 +355,12 @@ class CompletarMatriculaPopup(tk.Toplevel):
             style="PopupText.TLabel",
         ).grid(row=0, column=1, padx=6, pady=(8, 2), sticky="w")
 
-        self.txt_referencia = ttk.Entry(pago)
+        self.var_referencia = tk.StringVar(value="")
+        self.txt_referencia = ttk.Entry(
+            pago,
+            textvariable=self.var_referencia,
+            state="readonly",
+        )
         self.txt_referencia.grid(row=1, column=1, padx=6, pady=(0, 6), sticky="ew")
 
         ttk.Label(
@@ -368,7 +374,7 @@ class CompletarMatriculaPopup(tk.Toplevel):
 
         self.lbl_pago_hint = ttk.Label(
             pago,
-            text="Referencia obligatoria para SINPE, transferencia, tarjeta y depósito.",
+            text="La referencia se genera automáticamente según la forma de pago seleccionada.",
             style="PopupText.TLabel",
         )
         self.lbl_pago_hint.grid(row=2, column=0, columnspan=3, padx=6, pady=(0, 8), sticky="w")
@@ -415,29 +421,65 @@ class CompletarMatriculaPopup(tk.Toplevel):
         )
         return any(p in desc for p in palabras_clave)
 
+    def _get_forma_pago_actual(self) -> tuple | None:
+        idx = self.cbo_pago.current()
+        if idx < 0 or idx >= len(self.formas_pago):
+            return None
+        return self.formas_pago[idx]
+
+    def _clear_referencia(self):
+        self.var_referencia.set("")
+
+    def _load_referencia_preview(self):
+        forma_pago = self._get_forma_pago_actual()
+
+        if not forma_pago:
+            self._clear_referencia()
+            return
+
+        try:
+            referencia = fact_ep.get_referencia_pago_preview(
+                self.db_user,
+                self.db_pass,
+                forma_pago_cod=int(forma_pago[0]),
+            )
+            self.var_referencia.set(referencia)
+        except Exception as e:
+            self._clear_referencia()
+            handle_exception(self, e, context="Generar referencia de pago")
+
+    def _on_forma_pago_change(self, _event=None):
+        self._load_referencia_preview()
+
     # =====================================================
     # Cargar datos
     # =====================================================
     def _load_formas_pago(self):
         try:
-            self.formas_pago = fact_ep.obtener_formas_pago(
+            self.formas_pago = fact_ep.get_formas_pago(
                 self.db_user,
                 self.db_pass,
             )
-            self.cbo_pago["values"] = [f["label"] for f in self.formas_pago]
+
+            self.cbo_pago["values"] = [desc for _, desc in self.formas_pago]
+
+            if self.formas_pago:
+                self.cbo_pago.current(0)
+                self._load_referencia_preview()
 
         except Exception as e:
             handle_exception(self, e, context="Cargar formas de pago")
 
     def _load_resumen(self):
         try:
-            data = fact_ep.obtener_resumen_facturacion_estudiante(
+            data = fact_ep.get_resumen_facturacion(
                 self.db_user,
                 self.db_pass,
                 carnet=self.carnet,
                 curso_cod=self.curso_cod,
                 periodo_id=self.periodo_id,
                 anio=self.anio,
+                forma_pago_cod=self.formas_pago[0][0] if self.formas_pago else 1,
             )
 
             self.resumen_data = data
@@ -493,34 +535,34 @@ class CompletarMatriculaPopup(tk.Toplevel):
                 )
                 return
 
-            idx = self.cbo_pago.current()
+            forma_pago = self._get_forma_pago_actual()
 
-            if idx < 0:
+            if not forma_pago:
                 show_warning(self, "Pago", "Debe seleccionar forma de pago.")
                 return
 
-            forma_pago = self.formas_pago[idx]
-            forma_pago_desc = forma_pago["descripcion"]
+            forma_pago_cod = int(forma_pago[0])
+            forma_pago_desc = str(forma_pago[1])
 
-            referencia = self.txt_referencia.get().strip()
+            referencia = self.var_referencia.get().strip()
             observacion = self.txt_obs.get().strip()
 
             if self._forma_pago_requiere_referencia(forma_pago_desc) and not referencia:
                 show_warning(
                     self,
                     "Pago",
-                    f"La forma de pago '{forma_pago_desc}' requiere referencia o comprobante.",
+                    f"La forma de pago '{forma_pago_desc}' requiere referencia automática válida.",
                 )
                 return
 
-            result = fact_ep.completar_pago_matricula(
+            result = fact_ep.save_facturacion_matricula(
                 self.db_user,
                 self.db_pass,
                 carnet=self.carnet,
                 curso_cod=self.curso_cod,
                 periodo_id=self.periodo_id,
                 anio=self.anio,
-                forma_pago_cod=forma_pago["forma_pago_cod"],
+                forma_pago_cod=forma_pago_cod,
                 referencia_pago=referencia,
                 observacion=observacion,
                 codigo_usuario=self.codigo_usuario,
@@ -532,7 +574,8 @@ class CompletarMatriculaPopup(tk.Toplevel):
             show_info(
                 self,
                 "Pago procesado",
-                f"Materias facturadas: {result['materias_facturadas']}\n"
+                f"Materias facturadas: {result['insertados']}\n"
+                f"Referencia: {result['referencia_pago']}\n"
                 f"Total pagado: ₡{result['total']:,.0f}",
             )
 

@@ -1,98 +1,96 @@
 from __future__ import annotations
 
-from app.core.db import connect
+import pyodbc
 
+from app.core.exceptions import ValidationError
 from app.repositories.matriculas_materia.facturacion_matricula_repo import (
-    fetch_formas_pago,
-    build_resumen_facturacion,
-    insert_facturacion_matricula,
+    build_referencia_pago,
+    get_forma_pago_desc_by_cod,
 )
 
 
 # =========================================================
-# Catálogos
+# Validaciones base
 # =========================================================
-def listar_formas_pago(
-    db_user: str,
-    db_pass: str,
-):
-    """
-    Retorna catálogo de formas de pago.
-    """
-    conn = connect(db_user, db_pass)
-
+def validar_forma_pago(forma_pago_cod: int) -> int:
     try:
-        return fetch_formas_pago(conn)
-    finally:
-        conn.close()
+        forma_pago_cod = int(forma_pago_cod)
+    except Exception:
+        raise ValidationError("Forma de pago inválida.")
+
+    if forma_pago_cod <= 0:
+        raise ValidationError("Forma de pago inválida.")
+
+    return forma_pago_cod
 
 
 # =========================================================
-# Resumen de facturación
+# Generación de referencia (preview UI)
 # =========================================================
-def obtener_resumen_facturacion(
-    db_user: str,
-    db_pass: str,
+def generar_referencia_preview(
+    conn: pyodbc.Connection,
     *,
-    carnet: str,
-    curso_cod: int,
-    periodo_id: int,
-    anio: int,
-):
-    """
-    Calcula:
-    - materias pendientes de facturar
-    - beca vigente
-    - subtotal
-    - descuento
-    - total
-    """
-    conn = connect(db_user, db_pass)
-
-    try:
-        return build_resumen_facturacion(
-            conn,
-            carnet=carnet,
-            curso_cod=curso_cod,
-            periodo_id=periodo_id,
-            anio=anio,
-        )
-    finally:
-        conn.close()
-
-
-# =========================================================
-# Procesar pago
-# =========================================================
-def procesar_pago_matricula(
-    db_user: str,
-    db_pass: str,
-    *,
-    carnet: str,
-    curso_cod: int,
-    periodo_id: int,
-    anio: int,
     forma_pago_cod: int,
-    referencia_pago: str | None,
-    observacion: str | None,
-    codigo_usuario: int,
-):
+) -> str:
     """
-    Inserta la facturación de materias pendientes.
+    Genera la referencia de pago para mostrar en pantalla (preview).
+    IMPORTANTE:
+    - Esta referencia es informativa
+    - La definitiva se vuelve a generar en el repository al guardar
     """
-    conn = connect(db_user, db_pass)
+
+    forma_pago_cod = validar_forma_pago(forma_pago_cod)
 
     try:
-        return insert_facturacion_matricula(
-            conn,
-            carnet=carnet,
-            curso_cod=curso_cod,
-            periodo_id=periodo_id,
-            anio=anio,
-            forma_pago_cod=forma_pago_cod,
-            referencia_pago=referencia_pago,
-            observacion=observacion,
-            codigo_usuario=codigo_usuario,
-        )
-    finally:
-        conn.close()
+        # Validamos que exista la forma de pago
+        _ = get_forma_pago_desc_by_cod(conn, forma_pago_cod)
+
+        referencia = build_referencia_pago(conn, forma_pago_cod)
+
+        return referencia
+
+    except Exception as e:
+        raise ValidationError(str(e))
+
+
+# =========================================================
+# Validación antes de facturar
+# =========================================================
+def validar_facturacion_request(
+    *,
+    carnet: str,
+    curso_cod: int,
+    periodo_id: int,
+    forma_pago_cod: int,
+) -> dict:
+    """
+    Validaciones básicas antes de enviar a facturación
+    """
+
+    if not carnet or not str(carnet).strip():
+        raise ValidationError("El carnet es requerido.")
+
+    try:
+        curso_cod = int(curso_cod)
+    except Exception:
+        raise ValidationError("Curso inválido.")
+
+    if curso_cod <= 0:
+        raise ValidationError("Curso inválido.")
+
+    try:
+        periodo_id = int(periodo_id)
+    except Exception:
+        raise ValidationError("Período inválido.")
+
+    if periodo_id <= 0:
+        raise ValidationError("Período inválido.")
+
+    forma_pago_cod = validar_forma_pago(forma_pago_cod)
+
+    return {
+        "carnet": str(carnet).strip(),
+        "curso_cod": curso_cod,
+        "periodo_id": periodo_id,
+        "forma_pago_cod": forma_pago_cod,
+    }
