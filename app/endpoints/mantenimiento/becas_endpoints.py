@@ -1,4 +1,3 @@
-# app/endpoints/mantenimiento/becas_endpoints.py
 from __future__ import annotations
 
 from app.core.db import connect
@@ -9,11 +8,13 @@ from app.repositories.auditoria_repo import insert_auditoria
 from app.services.mantenimiento.becas_service import (
     validar_beca_data,
     validar_beca_unicidad,
+    validar_beca_puede_eliminarse,
 )
 
 from app.repositories.mantenimiento.becas_repo import (
     fetch_estados,
     list_becas_join_activos,
+    next_id_beca,
     insert_beca,
     update_beca,
     soft_delete_beca,
@@ -38,7 +39,6 @@ def _registrar_auditoria(
             id_row_tabla=id_row_tabla,
         )
     except Exception:
-        # No romper el flujo principal por un fallo aislado de auditoría
         pass
 
 
@@ -55,13 +55,21 @@ def listar_becas(
     db_pass: str,
     codigo_usuario: int | None = None,
 ):
-    """
-    Lista becas visibles en el grid.
-    codigo_usuario se acepta por consistencia.
-    """
     conn = connect(db_user, db_pass)
     try:
         return list_becas_join_activos(conn)
+    finally:
+        conn.close()
+
+
+def siguiente_id_beca(
+    db_user: str,
+    db_pass: str,
+    codigo_usuario: int | None = None,
+) -> int:
+    conn = connect(db_user, db_pass)
+    try:
+        return next_id_beca(conn)
     finally:
         conn.close()
 
@@ -71,7 +79,7 @@ def crear_beca(
     db_pass: str,
     nombre_beca: str,
     porcentaje_descuento: int,
-    estado_codigo: int,
+    estado_codigo: int = 1,
     codigo_usuario: int | None = None,
 ) -> bool:
     conn = connect(db_user, db_pass)
@@ -95,16 +103,7 @@ def crear_beca(
             estado_codigo=data["estado_codigo"],
         )
 
-        # Si el repo no devuelve el ID, dejamos el nombre como fallback temporal
-        row_id = id_beca if id_beca is not None else data["nombre_beca"]
-
-        _registrar_auditoria(
-            conn,
-            codigo_usuario,
-            Mov.BECA_CREADA,
-            id_row_tabla=row_id,
-        )
-
+        _registrar_auditoria(conn, codigo_usuario, Mov.BECA_CREADA, id_row_tabla=id_beca)
         return True
     finally:
         conn.close()
@@ -116,7 +115,7 @@ def actualizar_beca(
     id_beca: int,
     nombre_beca: str,
     porcentaje_descuento: int,
-    estado_codigo: int,
+    estado_codigo: int = 1,
     codigo_usuario: int | None = None,
 ) -> bool:
     if not id_beca:
@@ -127,6 +126,7 @@ def actualizar_beca(
         id_beca = int(id_beca)
 
         data = validar_beca_data(
+            id_beca=id_beca,
             nombre_beca=nombre_beca,
             porcentaje_descuento=porcentaje_descuento,
             estado_codigo=estado_codigo,
@@ -146,13 +146,7 @@ def actualizar_beca(
             estado_codigo=data["estado_codigo"],
         )
 
-        _registrar_auditoria(
-            conn,
-            codigo_usuario,
-            Mov.BECA_ACTUALIZADA,
-            id_row_tabla=id_beca,
-        )
-
+        _registrar_auditoria(conn, codigo_usuario, Mov.BECA_ACTUALIZADA, id_row_tabla=id_beca)
         return True
     finally:
         conn.close()
@@ -164,27 +158,15 @@ def eliminar_beca(
     id_beca: int,
     codigo_usuario: int | None = None,
 ) -> bool:
-    """
-    Borrado lógico:
-    - Cambia Estado_Codigo al estado Inactivo
-    - No hace DELETE físico
-    """
     if not id_beca:
         raise ValidationError("Debe seleccionar una beca para eliminar.")
 
     conn = connect(db_user, db_pass)
     try:
         id_beca = int(id_beca)
-
+        validar_beca_puede_eliminarse(conn, id_beca=id_beca)
         soft_delete_beca(conn, id_beca)
-
-        _registrar_auditoria(
-            conn,
-            codigo_usuario,
-            Mov.BECA_ELIMINADA,
-            id_row_tabla=id_beca,
-        )
-
+        _registrar_auditoria(conn, codigo_usuario, Mov.BECA_ELIMINADA, id_row_tabla=id_beca)
         return True
     finally:
         conn.close()

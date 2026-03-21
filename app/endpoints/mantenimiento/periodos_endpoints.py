@@ -1,4 +1,3 @@
-# app/endpoints/mantenimiento/periodos_endpoints.py
 from __future__ import annotations
 
 from app.core.db import connect
@@ -38,11 +37,13 @@ def _registrar_auditoria(
             id_row_tabla=id_row_tabla,
         )
     except Exception:
-        # No romper el flujo principal por un fallo aislado de auditoría
         pass
 
 
-def get_lookups(db_user: str, db_pass: str):
+# =========================================================
+# API interna alineada con la UI actual
+# =========================================================
+def fetch_estados_periodos(db_user: str, db_pass: str):
     conn = connect(db_user, db_pass)
     try:
         return fetch_estados(conn)
@@ -50,15 +51,11 @@ def get_lookups(db_user: str, db_pass: str):
         conn.close()
 
 
-def listar_periodos(
+def list_periodos_rows(
     db_user: str,
     db_pass: str,
     codigo_usuario: int | None = None,
 ):
-    """
-    Lista períodos visibles en el grid.
-    codigo_usuario se acepta por consistencia.
-    """
     conn = connect(db_user, db_pass)
     try:
         return list_periodos_join_activos(conn)
@@ -66,21 +63,20 @@ def listar_periodos(
         conn.close()
 
 
-def crear_periodo(
+def create_periodo(
     db_user: str,
     db_pass: str,
-    periodo_codigo: str,
     anio: int,
     numero_periodo: int,
     fecha_inicio: str,
     fecha_fin: str,
     estado_codigo: int,
     codigo_usuario: int | None = None,
-) -> bool:
+) -> str:
     conn = connect(db_user, db_pass)
     try:
         data = validar_periodo_data(
-            periodo_codigo=periodo_codigo,
+            periodo_codigo=None,
             anio=anio,
             numero_periodo=numero_periodo,
             fecha_inicio=fecha_inicio,
@@ -106,33 +102,29 @@ def crear_periodo(
             estado_codigo=data["estado_codigo"],
         )
 
-        # Si el repo no devuelve el ID, al menos dejamos el código como fallback
-        row_id = periodo_id if periodo_id is not None else data["periodo_codigo"]
-
         _registrar_auditoria(
             conn,
             codigo_usuario,
             Mov.PERIODO_CREADO,
-            id_row_tabla=row_id,
+            id_row_tabla=periodo_id if periodo_id else data["periodo_codigo"],
         )
 
-        return True
+        return "Período creado correctamente."
     finally:
         conn.close()
 
 
-def actualizar_periodo(
+def update_periodo_endpoint(
     db_user: str,
     db_pass: str,
     periodo_id: int,
-    periodo_codigo: str,
     anio: int,
     numero_periodo: int,
     fecha_inicio: str,
     fecha_fin: str,
     estado_codigo: int,
     codigo_usuario: int | None = None,
-) -> bool:
+) -> str:
     if not periodo_id:
         raise ValidationError("Debe seleccionar un período para actualizar.")
 
@@ -141,7 +133,7 @@ def actualizar_periodo(
         periodo_id = int(periodo_id)
 
         data = validar_periodo_data(
-            periodo_codigo=periodo_codigo,
+            periodo_codigo=None,
             anio=anio,
             numero_periodo=numero_periodo,
             fecha_inicio=fecha_inicio,
@@ -175,30 +167,24 @@ def actualizar_periodo(
             id_row_tabla=periodo_id,
         )
 
-        return True
+        return "Período actualizado correctamente."
     finally:
         conn.close()
 
 
-def eliminar_periodo(
+def delete_periodo_endpoint(
     db_user: str,
     db_pass: str,
     periodo_id: int,
     codigo_usuario: int | None = None,
-) -> bool:
-    """
-    Borrado lógico:
-    - Cambia Estado_Codigo al estado Inactivo
-    - No hace DELETE físico
-    """
+) -> str:
     if not periodo_id:
         raise ValidationError("Debe seleccionar un período para eliminar.")
 
     conn = connect(db_user, db_pass)
     try:
         periodo_id = int(periodo_id)
-
-        soft_delete_periodo(conn, periodo_id)
+        soft_delete_periodo(conn, periodo_id=periodo_id)
 
         _registrar_auditoria(
             conn,
@@ -207,6 +193,82 @@ def eliminar_periodo(
             id_row_tabla=periodo_id,
         )
 
-        return True
+        return "Período desactivado correctamente."
     finally:
         conn.close()
+
+
+# =========================================================
+# Alias de compatibilidad
+# =========================================================
+def get_lookups(db_user: str, db_pass: str):
+    return fetch_estados_periodos(db_user, db_pass)
+
+
+def listar_periodos(db_user: str, db_pass: str, codigo_usuario: int | None = None):
+    return list_periodos_rows(db_user, db_pass, codigo_usuario=codigo_usuario)
+
+
+def crear_periodo(
+    db_user: str,
+    db_pass: str,
+    periodo_codigo: str | None = None,
+    anio: int = 0,
+    numero_periodo: int = 0,
+    fecha_inicio: str = "",
+    fecha_fin: str = "",
+    estado_codigo: int = 0,
+    codigo_usuario: int | None = None,
+) -> bool:
+    create_periodo(
+        db_user=db_user,
+        db_pass=db_pass,
+        anio=anio,
+        numero_periodo=numero_periodo,
+        fecha_inicio=fecha_inicio,
+        fecha_fin=fecha_fin,
+        estado_codigo=estado_codigo,
+        codigo_usuario=codigo_usuario,
+    )
+    return True
+
+
+def actualizar_periodo(
+    db_user: str,
+    db_pass: str,
+    periodo_id: int,
+    periodo_codigo: str | None = None,
+    anio: int = 0,
+    numero_periodo: int = 0,
+    fecha_inicio: str = "",
+    fecha_fin: str = "",
+    estado_codigo: int = 0,
+    codigo_usuario: int | None = None,
+) -> bool:
+    update_periodo_endpoint(
+        db_user=db_user,
+        db_pass=db_pass,
+        periodo_id=periodo_id,
+        anio=anio,
+        numero_periodo=numero_periodo,
+        fecha_inicio=fecha_inicio,
+        fecha_fin=fecha_fin,
+        estado_codigo=estado_codigo,
+        codigo_usuario=codigo_usuario,
+    )
+    return True
+
+
+def eliminar_periodo(
+    db_user: str,
+    db_pass: str,
+    periodo_id: int,
+    codigo_usuario: int | None = None,
+) -> bool:
+    delete_periodo_endpoint(
+        db_user=db_user,
+        db_pass=db_pass,
+        periodo_id=periodo_id,
+        codigo_usuario=codigo_usuario,
+    )
+    return True

@@ -1,4 +1,3 @@
-# app/services/mantenimiento/becas_service.py
 from __future__ import annotations
 
 from app.core.exceptions import ValidationError
@@ -9,11 +8,20 @@ from app.repositories.mantenimiento.becas_repo import (
 )
 
 
-def validar_beca_data(*, id_beca: int, nombre_beca: str, porcentaje_descuento: int) -> dict:
-    try:
-        id_beca = int(id_beca)
-    except Exception:
-        raise ValidationError("El ID de la beca debe ser numérico.")
+def validar_beca_data(
+    *,
+    id_beca: int | None = None,
+    nombre_beca: str,
+    porcentaje_descuento: int,
+    estado_codigo: int = 1,
+) -> dict:
+    if id_beca is not None:
+        try:
+            id_beca = int(id_beca)
+        except Exception:
+            raise ValidationError("El ID de la beca debe ser numérico.")
+        if id_beca <= 0:
+            raise ValidationError("El ID de la beca debe ser mayor a 0.")
 
     nombre_beca = (nombre_beca or "").strip()
 
@@ -22,14 +30,15 @@ def validar_beca_data(*, id_beca: int, nombre_beca: str, porcentaje_descuento: i
     except Exception:
         raise ValidationError("El porcentaje de descuento debe ser numérico.")
 
-    if id_beca <= 0:
-        raise ValidationError("El ID de la beca debe ser mayor a 0.")
+    try:
+        estado_codigo = int(estado_codigo)
+    except Exception:
+        raise ValidationError("El estado es inválido.")
 
     if not nombre_beca:
         raise ValidationError("El nombre de la beca es requerido.")
     if len(nombre_beca) > 50:
         raise ValidationError("Nombre de beca demasiado largo (máximo 50).")
-
     if porcentaje_descuento < 0 or porcentaje_descuento > 100:
         raise ValidationError("El porcentaje debe estar entre 0 y 100.")
 
@@ -37,11 +46,20 @@ def validar_beca_data(*, id_beca: int, nombre_beca: str, porcentaje_descuento: i
         "id_beca": id_beca,
         "nombre_beca": nombre_beca,
         "porcentaje_descuento": porcentaje_descuento,
+        "estado_codigo": estado_codigo,
     }
 
 
-def validar_beca_unicidad(conn, *, nombre_beca: str, exclude_id: int | None = None) -> None:
-    if exists_nombre_beca(conn, nombre_beca, exclude_id=exclude_id):
+def validar_beca_unicidad(
+    conn,
+    *,
+    id_beca: int | None = None,
+    nombre_beca: str,
+    exclude_id: int | None = None,
+) -> None:
+    # Compatibilidad con llamadas viejas y nuevas
+    exclude = exclude_id if exclude_id is not None else id_beca
+    if exists_nombre_beca(conn, nombre_beca, exclude_id=exclude):
         raise ValidationError("Ya existe una beca con ese nombre.")
 
 
@@ -53,12 +71,3 @@ def validar_beca_existente(conn, *, id_beca: int) -> None:
 def validar_beca_puede_eliminarse(conn, *, id_beca: int) -> None:
     if is_beca_in_use(conn, int(id_beca)):
         raise ValidationError("No se puede eliminar: la beca está asignada a estudiantes (tabla Becados).")
-    
-def validar_beca_existente(conn, id_beca: int):
-    cur = conn.cursor()
-    cur.execute(
-        "SELECT 1 FROM dbo.Becas WHERE id_beca = ? AND Estado_Codigo = 1;",
-        int(id_beca),
-    )
-    if cur.fetchone() is None:
-        raise ValidationError("La beca no existe o está inactiva.")

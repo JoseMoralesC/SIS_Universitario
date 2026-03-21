@@ -1,4 +1,3 @@
-# app/repositories/mantenimiento/becados_repo.py
 from __future__ import annotations
 
 import pyodbc
@@ -11,20 +10,48 @@ INACTIVO = 2
 # Lookups
 # ==========================
 
+def fetch_estados(conn: pyodbc.Connection) -> list[tuple[int, str]]:
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT Estado_Codigo, Estado_Desc
+        FROM dbo.Estado_General
+        ORDER BY Estado_Codigo;
+        """
+    )
+    return [(int(r[0]), str(r[1])) for r in cur.fetchall()]
+
+
+def fetch_becas(conn: pyodbc.Connection) -> list[tuple[int, str, int]]:
+    """
+    Becas activas para combo:
+    (id_beca, nombre_beca, porcentaje_descuento)
+    """
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT id_beca, nombre_beca, porcentaje_descuento
+        FROM dbo.Becas
+        WHERE Estado_Codigo = ?
+        ORDER BY nombre_beca ASC;
+        """,
+        ACTIVO,
+    )
+    return [(int(r[0]), str(r[1]), int(r[2])) for r in cur.fetchall()]
+
+
 def fetch_estudiantes_disponibles_lookup(conn: pyodbc.Connection) -> list[tuple[str, str]]:
     """
-    Estudiantes activos NO becados (beca activa) para combo: (carnet, nombre_completo)
-
-    Regla:
-    - Si el estudiante tiene beca ACTIVA, NO sale.
-    - Si tiene beca INACTIVA, puede volver a salir (porque se "revivió" al estar disponible).
+    Estudiantes activos NO becados (con beca activa) para combo:
+    (carnet, nombre_completo)
     """
     cur = conn.cursor()
     cur.execute(
         """
         SELECT e.Carnet, e.Nombre_Completo
         FROM dbo.Estudiantes e
-        INNER JOIN dbo.Estado_General eg ON eg.Estado_Codigo = e.Estado_Codigo
+        INNER JOIN dbo.Estado_General eg
+            ON eg.Estado_Codigo = e.Estado_Codigo
         WHERE eg.Estado_Desc <> 'Inactivo'
           AND NOT EXISTS (
               SELECT 1
@@ -88,6 +115,10 @@ def list_becados_join(conn: pyodbc.Connection, *, only_active: bool = True) -> l
     return [tuple(r) for r in cur.fetchall()]
 
 
+def list_becados_join_activos(conn: pyodbc.Connection) -> list[tuple]:
+    return list_becados_join(conn, only_active=True)
+
+
 # ==========================
 # Util
 # ==========================
@@ -118,15 +149,22 @@ def exists_carnet(conn: pyodbc.Connection, carnet: str) -> bool:
     return cur.fetchone() is not None
 
 
-def exists_becado_activo_by_carnet(conn: pyodbc.Connection, carnet: str, exclude_id: int | None = None) -> bool:
-    """
-    Un estudiante NO puede tener 2 becas activas.
-    """
+def exists_becado_activo_by_carnet(
+    conn: pyodbc.Connection,
+    carnet: str,
+    exclude_id: int | None = None,
+) -> bool:
     carnet = (carnet or "").strip()
     cur = conn.cursor()
+
     if exclude_id is None:
         cur.execute(
-            "SELECT 1 FROM dbo.Becados WHERE carnet = ? AND Estado_Codigo = ?;",
+            """
+            SELECT 1
+            FROM dbo.Becados
+            WHERE carnet = ?
+              AND Estado_Codigo = ?;
+            """,
             carnet,
             ACTIVO,
         )
@@ -143,6 +181,7 @@ def exists_becado_activo_by_carnet(conn: pyodbc.Connection, carnet: str, exclude
             ACTIVO,
             int(exclude_id),
         )
+
     return cur.fetchone() is not None
 
 
@@ -150,10 +189,13 @@ def exists_becado_activo_by_carnet(conn: pyodbc.Connection, carnet: str, exclude
 # CRUD
 # ==========================
 
-def insert_becado(conn: pyodbc.Connection, *, carnet: str, id_beca: int, fecha_aplicacion: str) -> int:
-    """
-    Insert lógico: Estado_Codigo = ACTIVO por defecto (DF), pero lo dejamos explícito.
-    """
+def insert_becado(
+    conn: pyodbc.Connection,
+    *,
+    carnet: str,
+    id_beca: int,
+    fecha_aplicacion: str,
+) -> int:
     cur = conn.cursor()
     cur.execute(
         """
@@ -161,17 +203,26 @@ def insert_becado(conn: pyodbc.Connection, *, carnet: str, id_beca: int, fecha_a
         OUTPUT INSERTED.id_becado
         VALUES (?, ?, ?, ?);
         """,
-        (carnet or "").strip(),
-        int(id_beca),
-        fecha_aplicacion,
-        ACTIVO,
+        (
+            (carnet or "").strip(),
+            int(id_beca),
+            fecha_aplicacion,
+            ACTIVO,
+        ),
     )
     row = cur.fetchone()
     conn.commit()
     return int(row[0]) if row and row[0] is not None else 0
 
 
-def update_becado(conn: pyodbc.Connection, *, id_becado: int, carnet: str, id_beca: int, fecha_aplicacion: str) -> None:
+def update_becado(
+    conn: pyodbc.Connection,
+    *,
+    id_becado: int,
+    carnet: str,
+    id_beca: int,
+    fecha_aplicacion: str,
+) -> None:
     cur = conn.cursor()
     cur.execute(
         """
@@ -179,23 +230,25 @@ def update_becado(conn: pyodbc.Connection, *, id_becado: int, carnet: str, id_be
         SET carnet = ?, id_beca = ?, fecha_aplicacion = ?
         WHERE id_becado = ?;
         """,
-        (carnet or "").strip(),
-        int(id_beca),
-        fecha_aplicacion,
-        int(id_becado),
+        (
+            (carnet or "").strip(),
+            int(id_beca),
+            fecha_aplicacion,
+            int(id_becado),
+        ),
     )
     conn.commit()
 
 
 def soft_delete_becado(conn: pyodbc.Connection, *, id_becado: int) -> None:
-    """
-    Delete lógico: cambia Estado_Codigo a INACTIVO.
-    """
     cur = conn.cursor()
     cur.execute(
-        "UPDATE dbo.Becados SET Estado_Codigo = ? WHERE id_becado = ?;",
+        """
+        UPDATE dbo.Becados
+        SET Estado_Codigo = ?
+        WHERE id_becado = ?;
+        """,
         INACTIVO,
         int(id_becado),
     )
     conn.commit()
-    

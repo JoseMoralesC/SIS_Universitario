@@ -1,4 +1,3 @@
-# app/services/mantenimiento/becados_service.py
 from __future__ import annotations
 
 import datetime as _dt
@@ -34,14 +33,21 @@ def _parse_date(value: str) -> str:
         raise ValidationError("Fecha inválida. Use formato YYYY-MM-DD.")
 
 
-def validar_becado_create_data(*, id_becado: int, carnet: str, id_beca: int, fecha_aplicacion: str) -> dict:
-    try:
-        id_becado = int(id_becado)
-    except Exception:
-        raise ValidationError("El ID del registro debe ser numérico.")
+def validar_becado_create_data(
+    *,
+    id_becado: int | None = None,
+    carnet: str,
+    id_beca: int,
+    fecha_aplicacion: str,
+) -> dict:
+    if id_becado is not None:
+        try:
+            id_becado = int(id_becado)
+        except Exception:
+            raise ValidationError("El ID del registro debe ser numérico.")
 
-    if id_becado <= 0:
-        raise ValidationError("El ID del registro debe ser mayor a 0.")
+        if id_becado <= 0:
+            raise ValidationError("El ID del registro debe ser mayor a 0.")
 
     carnet = (carnet or "").strip()
 
@@ -67,7 +73,13 @@ def validar_becado_create_data(*, id_becado: int, carnet: str, id_beca: int, fec
     }
 
 
-def validar_becado_update_data(*, id_becado: int, carnet: str, id_beca: int, fecha_aplicacion: str) -> dict:
+def validar_becado_update_data(
+    *,
+    id_becado: int,
+    carnet: str,
+    id_beca: int,
+    fecha_aplicacion: str,
+) -> dict:
     return validar_becado_create_data(
         id_becado=id_becado,
         carnet=carnet,
@@ -83,7 +95,12 @@ def validar_becado_refs(conn, *, carnet: str, id_beca: int) -> None:
         raise ValidationError("La beca indicada no existe.")
 
 
-def validar_becado_unicidad_activa(conn, *, carnet: str, exclude_id: int | None = None) -> None:
+def validar_becado_unicidad_activa(
+    conn,
+    *,
+    carnet: str,
+    exclude_id: int | None = None,
+) -> None:
     if exists_becado_activo_by_carnet(conn, carnet, exclude_id=exclude_id):
         raise ValidationError("El estudiante ya tiene una beca activa.")
 
@@ -91,3 +108,33 @@ def validar_becado_unicidad_activa(conn, *, carnet: str, exclude_id: int | None 
 def validar_becado_existente(conn, *, id_becado: int) -> None:
     if not exists_id_becado(conn, int(id_becado)):
         raise ValidationError("El registro de beca no existe.")
+
+
+# =========================================================
+# COMPATIBILIDAD CON VERSIONES VIEJAS DEL ENDPOINT
+# =========================================================
+
+def validar_becado_data(
+    *,
+    id_becado: int | None = None,
+    carnet: str,
+    id_beca: int,
+    fecha_aplicacion: str,
+) -> dict:
+    return validar_becado_create_data(
+        id_becado=id_becado,
+        carnet=carnet,
+        id_beca=id_beca,
+        fecha_aplicacion=fecha_aplicacion,
+    )
+
+
+def validar_becado_unicidad(
+    conn,
+    *,
+    id_becado: int | None = None,
+    carnet: str,
+    id_beca: int,
+) -> None:
+    validar_becado_refs(conn, carnet=carnet, id_beca=id_beca)
+    validar_becado_unicidad_activa(conn, carnet=carnet, exclude_id=id_becado)

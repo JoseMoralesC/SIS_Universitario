@@ -1,13 +1,9 @@
-# app/repositories/mantenimientos/periodos_repo.py
 from __future__ import annotations
 
 import pyodbc
 from datetime import date
 
 
-# =========================================================
-# Helpers
-# =========================================================
 def get_estado_codigo_by_desc(conn: pyodbc.Connection, estado_desc: str) -> int:
     cur = conn.cursor()
     cur.execute(
@@ -39,6 +35,10 @@ def fetch_estados_generales(conn: pyodbc.Connection) -> list[tuple[int, str]]:
     return [(int(r[0]), str(r[1])) for r in cur.fetchall()]
 
 
+def fetch_estados(conn: pyodbc.Connection) -> list[tuple[int, str]]:
+    return fetch_estados_generales(conn)
+
+
 # =========================================================
 # Grid
 # =========================================================
@@ -51,12 +51,48 @@ def list_periodos(conn: pyodbc.Connection) -> list[tuple]:
             p.Periodo_Codigo,
             p.Anio,
             p.Numero_Periodo,
-            p.Fecha_Inicio,
-            p.Fecha_Fin,
+            CONVERT(VARCHAR(10), p.Fecha_Inicio, 23) AS Fecha_Inicio,
+            CONVERT(VARCHAR(10), p.Fecha_Fin, 23) AS Fecha_Fin,
             eg.Estado_Desc
         FROM dbo.Periodos p
         INNER JOIN dbo.Estado_General eg
             ON eg.Estado_Codigo = p.Estado_Codigo
+        ORDER BY p.Anio DESC, p.Numero_Periodo ASC;
+        """
+    )
+
+    rows: list[tuple] = []
+    for r in cur.fetchall():
+        rows.append(
+            (
+                int(r[0]),
+                str(r[1]),
+                int(r[2]),
+                int(r[3]),
+                str(r[4]),
+                str(r[5]),
+                str(r[6]),
+            )
+        )
+    return rows
+
+
+def list_periodos_join_activos(conn: pyodbc.Connection) -> list[tuple]:
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT
+            p.Periodo_Id,
+            p.Periodo_Codigo,
+            p.Anio,
+            p.Numero_Periodo,
+            CONVERT(VARCHAR(10), p.Fecha_Inicio, 23) AS Fecha_Inicio,
+            CONVERT(VARCHAR(10), p.Fecha_Fin, 23) AS Fecha_Fin,
+            eg.Estado_Desc
+        FROM dbo.Periodos p
+        INNER JOIN dbo.Estado_General eg
+            ON eg.Estado_Codigo = p.Estado_Codigo
+        WHERE eg.Estado_Desc <> 'Inactivo'
         ORDER BY p.Anio DESC, p.Numero_Periodo ASC;
         """
     )
@@ -167,10 +203,10 @@ def insert_periodo(
     periodo_codigo: str,
     anio: int,
     numero_periodo: int,
-    fecha_inicio: date,
-    fecha_fin: date,
+    fecha_inicio: date | str,
+    fecha_fin: date | str,
     estado_codigo: int,
-) -> None:
+) -> int:
     cur = conn.cursor()
     cur.execute(
         """
@@ -183,6 +219,7 @@ def insert_periodo(
             Fecha_Fin,
             Estado_Codigo
         )
+        OUTPUT INSERTED.Periodo_Id
         VALUES (?, ?, ?, ?, ?, ?);
         """,
         (
@@ -194,7 +231,9 @@ def insert_periodo(
             int(estado_codigo),
         ),
     )
+    row = cur.fetchone()
     conn.commit()
+    return int(row[0]) if row and row[0] is not None else 0
 
 
 def update_periodo(
@@ -204,8 +243,8 @@ def update_periodo(
     periodo_codigo: str,
     anio: int,
     numero_periodo: int,
-    fecha_inicio: date,
-    fecha_fin: date,
+    fecha_inicio: date | str,
+    fecha_fin: date | str,
     estado_codigo: int,
 ) -> None:
     cur = conn.cursor()

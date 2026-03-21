@@ -1,4 +1,3 @@
-# app/endpoints/mantenimiento/becados_endpoints.py
 from __future__ import annotations
 
 from app.core.db import connect
@@ -7,14 +6,18 @@ from app.core.auditoria import Mov, Tab
 from app.repositories.auditoria_repo import insert_auditoria
 
 from app.services.mantenimiento.becados_service import (
-    validar_becado_data,
-    validar_becado_unicidad,
+    validar_becado_create_data,
+    validar_becado_update_data,
+    validar_becado_refs,
+    validar_becado_unicidad_activa,
+    validar_becado_existente,
 )
 
 from app.repositories.mantenimiento.becados_repo import (
-    fetch_estados,
+    fetch_estudiantes_disponibles_lookup,
     fetch_becas,
     list_becados_join_activos,
+    next_id_becado,
     insert_becado,
     update_becado,
     soft_delete_becado,
@@ -39,16 +42,18 @@ def _registrar_auditoria(
             id_row_tabla=id_row_tabla,
         )
     except Exception:
-        # No romper el flujo principal por fallo de auditoría
         pass
 
 
 def get_lookups(db_user: str, db_pass: str):
     conn = connect(db_user, db_pass)
     try:
-        estados = fetch_estados(conn)
+        estudiantes = fetch_estudiantes_disponibles_lookup(conn)
         becas = fetch_becas(conn)
-        return estados, becas
+        return {
+            "estudiantes": estudiantes,
+            "becas": becas,
+        }
     finally:
         conn.close()
 
@@ -58,12 +63,21 @@ def listar_becados(
     db_pass: str,
     codigo_usuario: int | None = None,
 ):
-    """
-    Lista becados visibles en el grid.
-    """
     conn = connect(db_user, db_pass)
     try:
         return list_becados_join_activos(conn)
+    finally:
+        conn.close()
+
+
+def siguiente_id_becado(
+    db_user: str,
+    db_pass: str,
+    codigo_usuario: int | None = None,
+) -> int:
+    conn = connect(db_user, db_pass)
+    try:
+        return next_id_becado(conn)
     finally:
         conn.close()
 
@@ -73,39 +87,41 @@ def crear_becado(
     db_pass: str,
     carnet: str,
     id_beca: int,
-    estado_codigo: int,
+    fecha_aplicacion: str,
     codigo_usuario: int | None = None,
 ) -> bool:
     conn = connect(db_user, db_pass)
     try:
-        data = validar_becado_data(
+        data = validar_becado_create_data(
             carnet=carnet,
             id_beca=id_beca,
-            estado_codigo=estado_codigo,
+            fecha_aplicacion=fecha_aplicacion,
         )
 
-        validar_becado_unicidad(
+        validar_becado_refs(
             conn,
-            id_becado=None,
             carnet=data["carnet"],
             id_beca=data["id_beca"],
+        )
+
+        validar_becado_unicidad_activa(
+            conn,
+            carnet=data["carnet"],
+            exclude_id=None,
         )
 
         id_becado = insert_becado(
             conn,
             carnet=data["carnet"],
             id_beca=data["id_beca"],
-            estado_codigo=data["estado_codigo"],
+            fecha_aplicacion=data["fecha_aplicacion"],
         )
-
-        # fallback seguro
-        row_id = id_becado if id_becado is not None else f"{data['carnet']}|{data['id_beca']}"
 
         _registrar_auditoria(
             conn,
             codigo_usuario,
             Mov.BECADO_CREADO,
-            id_row_tabla=row_id,
+            id_row_tabla=id_becado,
         )
 
         return True
@@ -119,7 +135,7 @@ def actualizar_becado(
     id_becado: int,
     carnet: str,
     id_beca: int,
-    estado_codigo: int,
+    fecha_aplicacion: str,
     codigo_usuario: int | None = None,
 ) -> bool:
     if not id_becado:
@@ -129,17 +145,25 @@ def actualizar_becado(
     try:
         id_becado = int(id_becado)
 
-        data = validar_becado_data(
+        validar_becado_existente(conn, id_becado=id_becado)
+
+        data = validar_becado_update_data(
+            id_becado=id_becado,
             carnet=carnet,
             id_beca=id_beca,
-            estado_codigo=estado_codigo,
+            fecha_aplicacion=fecha_aplicacion,
         )
 
-        validar_becado_unicidad(
+        validar_becado_refs(
             conn,
-            id_becado=id_becado,
             carnet=data["carnet"],
             id_beca=data["id_beca"],
+        )
+
+        validar_becado_unicidad_activa(
+            conn,
+            carnet=data["carnet"],
+            exclude_id=id_becado,
         )
 
         update_becado(
@@ -147,7 +171,7 @@ def actualizar_becado(
             id_becado=id_becado,
             carnet=data["carnet"],
             id_beca=data["id_beca"],
-            estado_codigo=data["estado_codigo"],
+            fecha_aplicacion=data["fecha_aplicacion"],
         )
 
         _registrar_auditoria(
@@ -168,9 +192,6 @@ def eliminar_becado(
     id_becado: int,
     codigo_usuario: int | None = None,
 ) -> bool:
-    """
-    Borrado lógico
-    """
     if not id_becado:
         raise ValidationError("Debe seleccionar un becado para eliminar.")
 
@@ -178,7 +199,9 @@ def eliminar_becado(
     try:
         id_becado = int(id_becado)
 
-        soft_delete_becado(conn, id_becado)
+        validar_becado_existente(conn, id_becado=id_becado)
+
+        soft_delete_becado(conn, id_becado=id_becado)
 
         _registrar_auditoria(
             conn,
