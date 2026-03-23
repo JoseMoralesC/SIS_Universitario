@@ -21,19 +21,18 @@ def _to_int(value, field_name: str) -> int:
         raise ValueError(f"{field_name} inválido.")
 
 
-def _build_row_id(
-    materia_cod: int,
-    dia: str,
-    hora_inicio: str,
-) -> str:
-    """
-    Identificador compuesto para horarios de materia.
-    """
-    return compose_named_row_id(
-        Materia_Cod=int(materia_cod),
-        Dia=(dia or "").strip(),
-        Hora_Inicio=(hora_inicio or "").strip(),
-    )
+def _resolver_movimiento(default_value: int | str | None) -> int:
+    if isinstance(default_value, int):
+        return default_value
+
+    if isinstance(default_value, str) and hasattr(Mov, default_value):
+        return int(getattr(Mov, default_value))
+
+    return 0
+
+
+def _open_conn(db_user: str, db_pass: str):
+    return connect(db_user, db_pass)
 
 
 def _registrar_auditoria(
@@ -57,27 +56,68 @@ def _registrar_auditoria(
         pass
 
 
-def _resolver_movimiento(default_value: int | str | None) -> int:
-    if isinstance(default_value, int):
-        return default_value
-
-    if isinstance(default_value, str) and hasattr(Mov, default_value):
-        return int(getattr(Mov, default_value))
-
-    return 0
+def _build_row_id_por_pk(horario_id: int) -> int:
+    return int(horario_id)
 
 
-def _open_conn(db_user: str, db_pass: str):
-    return connect(db_user, db_pass)
+def _build_row_id_por_componentes(
+    materia_cod: int,
+    dia_cod: str,
+    jornada_id: int,
+) -> str:
+    """
+    Fallback de identificador compuesto para auditoría.
+    """
+    return compose_named_row_id(
+        Materia_Cod=int(materia_cod),
+        Dia_Cod=str(dia_cod).strip(),
+        Jornada_Id=int(jornada_id),
+    )
 
 
 # =========================================================
 # Lookups
 # =========================================================
-def fetch_materias_activos_horario(
+def fetch_cursos_activos_materia_horario(
     db_user: str,
     db_pass: str,
-):
+) -> list[tuple[int, str]]:
+    conn = _open_conn(db_user, db_pass)
+    try:
+        service = MateriaHorarioService(conn)
+        return service.obtener_cursos_activos()
+    finally:
+        conn.close()
+
+
+def fetch_dias_semana_materia_horario(
+    db_user: str,
+    db_pass: str,
+) -> list[tuple[str, str]]:
+    conn = _open_conn(db_user, db_pass)
+    try:
+        service = MateriaHorarioService(conn)
+        return service.obtener_dias_semana()
+    finally:
+        conn.close()
+
+
+def fetch_jornadas_materia_horario(
+    db_user: str,
+    db_pass: str,
+) -> list[tuple[int, str]]:
+    conn = _open_conn(db_user, db_pass)
+    try:
+        service = MateriaHorarioService(conn)
+        return service.obtener_jornadas()
+    finally:
+        conn.close()
+
+
+def fetch_materias_activas_materia_horario(
+    db_user: str,
+    db_pass: str,
+) -> list[tuple[int, str]]:
     conn = _open_conn(db_user, db_pass)
     try:
         service = MateriaHorarioService(conn)
@@ -86,18 +126,18 @@ def fetch_materias_activos_horario(
         conn.close()
 
 
-def fetch_dias_semana():
-    """
-    Puede ser fijo o venir del service.
-    """
-    return [
-        "Lunes",
-        "Martes",
-        "Miércoles",
-        "Jueves",
-        "Viernes",
-        "Sábado",
-    ]
+def fetch_materias_por_curso_con_docente_materia_horario(
+    db_user: str,
+    db_pass: str,
+    curso_cod: int,
+) -> list[tuple[int, str]]:
+    conn = _open_conn(db_user, db_pass)
+    try:
+        service = MateriaHorarioService(conn)
+        curso_cod = _to_int(curso_cod, "Curso")
+        return service.obtener_materias_por_curso_con_docente(curso_cod)
+    finally:
+        conn.close()
 
 
 # =========================================================
@@ -106,25 +146,11 @@ def fetch_dias_semana():
 def list_materia_horario_rows(
     db_user: str,
     db_pass: str,
-):
+) -> list[tuple]:
     conn = _open_conn(db_user, db_pass)
     try:
         service = MateriaHorarioService(conn)
         return service.listar_horarios()
-    finally:
-        conn.close()
-
-
-def list_materia_horario_por_materia(
-    db_user: str,
-    db_pass: str,
-    materia_cod: int,
-):
-    conn = _open_conn(db_user, db_pass)
-    try:
-        service = MateriaHorarioService(conn)
-        materia_cod = _to_int(materia_cod, "Materia")
-        return service.listar_horarios_por_materia(materia_cod)
     finally:
         conn.close()
 
@@ -137,9 +163,9 @@ def assign_materia_horario(
     db_user: str,
     db_pass: str,
     materia_cod: int,
-    dia: str,
-    hora_inicio: str,
-    hora_fin: str,
+    dia_cod: str,
+    jornada_id: int,
+    estado_codigo: int = 1,
     codigo_usuario: int | None = None,
 ) -> str:
     conn = _open_conn(db_user, db_pass)
@@ -148,12 +174,15 @@ def assign_materia_horario(
         service = MateriaHorarioService(conn)
 
         materia_cod = _to_int(materia_cod, "Materia")
+        jornada_id = _to_int(jornada_id, "Jornada")
+        estado_codigo = _to_int(estado_codigo, "Estado")
+        dia_cod = str(dia_cod or "").strip().upper()
 
-        msg = service.asignar_horario(
+        msg = service.crear_horario_materia(
             materia_cod=materia_cod,
-            dia=dia,
-            hora_inicio=hora_inicio,
-            hora_fin=hora_fin,
+            dia_cod=dia_cod,
+            jornada_id=jornada_id,
+            estado_codigo=estado_codigo,
         )
 
         mov = _resolver_movimiento("MATERIA_HORARIO_CREADO")
@@ -162,10 +191,10 @@ def assign_materia_horario(
                 conn,
                 codigo_usuario,
                 mov,
-                id_row_tabla=_build_row_id(
-                    materia_cod,
-                    dia,
-                    hora_inicio,
+                id_row_tabla=_build_row_id_por_componentes(
+                    materia_cod=materia_cod,
+                    dia_cod=dia_cod,
+                    jornada_id=jornada_id,
                 ),
             )
 
@@ -175,14 +204,12 @@ def assign_materia_horario(
         conn.close()
 
 
-def update_materia_horario(
+def update_estado_materia_horario_endpoint(
     *,
     db_user: str,
     db_pass: str,
-    materia_cod: int,
-    dia: str,
-    hora_inicio: str,
-    hora_fin: str,
+    horario_id: int,
+    nuevo_estado: int,
     codigo_usuario: int | None = None,
 ) -> str:
     conn = _open_conn(db_user, db_pass)
@@ -190,13 +217,12 @@ def update_materia_horario(
     try:
         service = MateriaHorarioService(conn)
 
-        materia_cod = _to_int(materia_cod, "Materia")
+        horario_id = _to_int(horario_id, "Horario")
+        nuevo_estado = _to_int(nuevo_estado, "Estado")
 
-        msg = service.actualizar_horario(
-            materia_cod=materia_cod,
-            dia=dia,
-            hora_inicio=hora_inicio,
-            hora_fin=hora_fin,
+        msg = service.cambiar_estado_horario(
+            horario_id=horario_id,
+            nuevo_estado=nuevo_estado,
         )
 
         mov = _resolver_movimiento("MATERIA_HORARIO_ACTUALIZADO")
@@ -205,11 +231,7 @@ def update_materia_horario(
                 conn,
                 codigo_usuario,
                 mov,
-                id_row_tabla=_build_row_id(
-                    materia_cod,
-                    dia,
-                    hora_inicio,
-                ),
+                id_row_tabla=_build_row_id_por_pk(horario_id),
             )
 
         return msg
@@ -218,13 +240,11 @@ def update_materia_horario(
         conn.close()
 
 
-def delete_materia_horario(
+def delete_materia_horario_endpoint(
     *,
     db_user: str,
     db_pass: str,
-    materia_cod: int,
-    dia: str,
-    hora_inicio: str,
+    horario_id: int,
     codigo_usuario: int | None = None,
 ) -> str:
     conn = _open_conn(db_user, db_pass)
@@ -232,12 +252,10 @@ def delete_materia_horario(
     try:
         service = MateriaHorarioService(conn)
 
-        materia_cod = _to_int(materia_cod, "Materia")
+        horario_id = _to_int(horario_id, "Horario")
 
-        msg = service.eliminar_horario(
-            materia_cod=materia_cod,
-            dia=dia,
-            hora_inicio=hora_inicio,
+        msg = service.desactivar_horario(
+            horario_id=horario_id,
         )
 
         mov = _resolver_movimiento("MATERIA_HORARIO_ELIMINADO")
@@ -246,11 +264,7 @@ def delete_materia_horario(
                 conn,
                 codigo_usuario,
                 mov,
-                id_row_tabla=_build_row_id(
-                    materia_cod,
-                    dia,
-                    hora_inicio,
-                ),
+                id_row_tabla=_build_row_id_por_pk(horario_id),
             )
 
         return msg

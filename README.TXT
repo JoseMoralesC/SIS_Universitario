@@ -669,73 +669,121 @@ ENTREGABLE No. 5
 Descripción General del Entregable No. 5
 
 El Entregable No. 5 amplía el sistema SIS-Universitario incorporando el módulo de Asistencias Académicas, 
-permitiendo registrar, consultar y controlar la asistencia de los estudiantes en sus materias matriculadas, 
-bajo reglas de negocio reales, validaciones de consistencia académica y manteniendo la arquitectura modular 
-establecida desde los entregables anteriores.
+permitiendo registrar, editar, consultar y visualizar listas de asistencia dentro del contexto académico real 
+de cada grupo, materia, docente y período.
 
 Este entregable fortalece la cobertura funcional del sistema al integrar el proceso de asistencia dentro del 
-flujo académico general, reutilizando la estructura por capas (UI, Endpoints, Services, Repositories y Core) y 
-respetando el enfoque de escalabilidad, mantenibilidad y separación de responsabilidades del proyecto.
+flujo académico general, reutilizando la arquitectura modular ya establecida en el proyecto y manteniendo la 
+separación por capas (UI, Endpoints, Services, Repositories y Core).
+
+A diferencia de una implementación básica de asistencias, este entregable incorpora un flujo más completo, 
+permitiendo no solo registrar listas, sino también consultar listas previamente guardadas, cargarlas en modo 
+edición, visualizar su detalle y trabajar con filtros académicos consistentes con la matrícula por materias.
 
 Alcance del Entregable No. 5
 
-- Implementación del módulo de Asistencias Académicas.
-- Registro de asistencia de estudiantes por materia.
-- Validación de matrícula activa del estudiante antes de registrar asistencia.
-- Validación de correspondencia entre estudiante, materia, horario y fecha seleccionada.
-- Control de consistencia entre la fecha registrada y el horario académico asignado.
-- Prevención de registros inválidos o inconsistentes.
-- Consulta y visualización de información asociada al proceso de asistencia.
-- Integración del módulo con la arquitectura general del sistema.
-- Manejo controlado de errores desde interfaz, servicios y acceso a datos.
-- Preparación del sistema para futuros procesos académicos relacionados con evaluación y seguimiento estudiantil.
+- Implementación completa del módulo de Asistencias Académicas.
+- Registro de listas de asistencia por período, curso, materia, docente y fecha.
+- Separación del módulo en dos pestañas principales:
+  - Registrar / Editar
+  - Consultar listas
+- Carga dinámica de períodos activos.
+- Carga dependiente de cursos, materias y docentes según el contexto académico seleccionado.
+- Visualización del grupo real de estudiantes matriculados en la combinación académica seleccionada.
+- Clasificación de estudiantes en asistentes y ausentes.
+- Control visual de estudiantes pendientes por clasificar.
+- Carga de listas existentes mediante contexto académico y fecha.
+- Edición de listas ya registradas.
+- Consulta de listas de asistencia por filtros académicos y rango de fechas.
+- Visualización de detalle completo de una lista seleccionada.
+- Integración con el sistema de auditoría de movimientos.
+- Integración del módulo con la navegación principal del sistema.
 
 Gestión de Asistencias
 
 El módulo de Asistencias permite:
 
-- Seleccionar al estudiante correspondiente dentro del contexto académico válido.
-- Consultar la materia asociada a su proceso de matrícula.
-- Registrar la asistencia en una fecha determinada.
-- Validar que el estudiante tenga relación académica activa con la materia.
-- Verificar que la fecha seleccionada sea coherente con el horario de la materia.
-- Mantener consistencia entre los datos académicos y el registro generado.
-- Controlar errores antes de guardar la información en base de datos.
+- Seleccionar el período académico activo.
+- Seleccionar el curso asociado al período.
+- Seleccionar la materia correspondiente al curso.
+- Seleccionar el docente asociado a la materia dentro del contexto académico real.
+- Cargar el grupo de estudiantes matriculados en esa combinación.
+- Marcar estudiantes como asistentes.
+- Marcar estudiantes como ausentes.
+- Mantener estudiantes pendientes si aún no han sido clasificados.
+- Guardar listas nuevas de asistencia.
+- Cargar listas previamente existentes para continuar o corregir su edición.
+- Consultar listas generadas dentro de un contexto académico específico.
+- Ver el detalle completo de una lista desde la pestaña de consulta.
+- Enviar una lista desde la pestaña de consulta hacia la pestaña de edición.
 
 Validaciones y Reglas de Negocio
 
-El sistema aplica validaciones orientadas a garantizar la integridad del registro de asistencia, entre ellas:
+El sistema aplica validaciones orientadas a garantizar la integridad del proceso de asistencias, entre ellas:
 
-- Verificación de existencia de matrícula activa del estudiante.
-- Validación de existencia de matrícula por materia asociada al estudiante.
-- Verificación de que la materia seleccionada corresponda al contexto académico real.
-- Validación de fecha de clase contra el horario configurado de la materia.
-- Prevención de registros inconsistentes en el proceso de asistencia.
-- Manejo de errores controlado desde la interfaz gráfica, la capa de servicios y los repositorios.
-- Protección del flujo mediante validaciones previas antes de persistir la información.
+- Verificación de existencia del período seleccionado.
+- Validación de existencia real del curso, materia y docente.
+- Validación del contexto académico antes de cargar estudiantes.
+- Consulta de estudiantes únicamente desde grupos realmente matriculados.
+- Prevención de guardado sin contexto académico completo.
+- Validación de fecha obligatoria para la lista.
+- Validación de que exista al menos un estudiante clasificado antes de guardar.
+- Confirmación de guardado cuando todavía existan estudiantes pendientes.
+- Control de carga de listas existentes por llave de negocio:
+  - período
+  - curso
+  - materia
+  - docente
+  - fecha de clase
+- Control de errores desde interfaz, endpoints, services y repositories.
+- Protección del flujo mediante manejo controlado de excepciones.
 
 Interfaz Gráfica y Experiencia de Usuario
 
 La interfaz del Entregable No. 5 incorpora:
 
-- Una nueva pestaña especializada para el proceso de asistencias.
-- Flujo guiado para registrar asistencia académica.
-- Componentes gráficos consistentes con el resto del sistema.
-- Validaciones visuales para prevenir errores de entrada.
-- Mensajes de confirmación, advertencia y error según el resultado del proceso.
-- Integración visual con el menú principal del sistema.
-- Reutilización del tema gráfico y de componentes existentes para mantener uniformidad visual.
+- Un módulo principal de asistencias integrado al menú lateral del sistema.
+- Un contenedor principal con pestañas para separar el flujo de registro y consulta.
+- Pestaña "Registrar / Editar" con:
+  - filtros académicos
+  - resumen del grupo
+  - lista de estudiantes disponibles
+  - lista de asistentes
+  - lista de ausentes
+  - acciones para guardar, limpiar y refrescar
+- Pestaña "Consultar listas" con:
+  - filtros por período, curso, materia, docente y rango de fechas
+  - grilla de resultados
+  - resumen contextual de la lista seleccionada
+  - acciones para ver detalle, cargar en edición y refrescar
+- Popup de detalle de lista con encabezado, resumen y detalle por estudiante.
+- Integración visual consistente con el resto del sistema.
+- Mensajes de advertencia, confirmación e información para acompañar el flujo del usuario.
 
 Arquitectura y Diseño
 
 El Entregable No. 5 mantiene y refuerza la arquitectura modular del sistema mediante la incorporación de un 
-nuevo bloque funcional completo para asistencias:
+bloque funcional completo para asistencias:
 
-- UI: vista del módulo de asistencias, formularios y validaciones visuales.
-- Endpoints: coordinación del flujo entre la interfaz, la lógica de negocio y la base de datos.
-- Services: validaciones académicas, reglas de negocio y control del proceso de asistencia.
-- Repositories: acceso estructurado a la información de asistencias, matrícula por materia y horarios.
-- Core: reutilización de componentes de conexión, sesión, manejo de errores y auditoría.
+- UI:
+  - contenedor principal del módulo de asistencias
+  - tab de registro / edición
+  - tab de consulta
+  - popup de detalle
+  - validaciones visuales y resumen de estado
+- Endpoints:
+  - coordinación entre interfaz, lógica de negocio, auditoría y acceso a datos
+- Services:
+  - validaciones académicas
+  - reglas de negocio
+  - normalización y control del proceso de asistencias
+- Repositories:
+  - acceso estructurado a períodos, cursos, materias, docentes, matrícula por materia y listas de asistencia
+- Core:
+  - conexión a base de datos
+  - manejo de errores
+  - auditoría
+  - sesión
 
 Módulos y Componentes Incorporados en el Entregable No. 5
 
@@ -744,21 +792,11 @@ Se incorporan nuevos componentes organizados por capa para el módulo de asisten
 - Endpoint de asistencias.
 - Repositorio de asistencias.
 - Servicio de asistencias.
-- Vista gráfica del módulo de asistencias.
-- Integración del módulo al sistema principal para su uso dentro del flujo académico.
-
-Estado del Proyecto
-
-Con la finalización del Entregable No. 5:
-
-- El sistema amplía su cobertura funcional sobre los procesos académicos principales.
-- La arquitectura se mantiene estable, modular y escalable.
-- El proyecto continúa consolidándose como una solución académica integral.
-- El sistema queda preparado para futuros módulos como:
-  - Notas académicas
-  - Reportes avanzados
-  - Indicadores de rendimiento
-  - Procesos complementarios de control académico
+- Contenedor principal del módulo de asistencias.
+- Tab de registro y edición de listas.
+- Tab de consulta de listas.
+- Popup de detalle de lista.
+- Integración del módulo al menú principal del sistema.
 
 Estructura del Proyecto (Entregable No. 5)
 
@@ -782,19 +820,61 @@ SIS_Universitario/
 │   └── ui/
 │       ├── asistencias/
 │       │   ├── __init__.py
+│       │   ├── asistencia_registro_tab.py
+│       │   ├── asistencia_consulta_tab.py
 │       │   └── asistencias_tab.py
 │       │
 │       └── views/
-│           └── (integración con la navegación principal del sistema)
+│           └── main_menu_view.py
+
+Flujo Funcional del Módulo
+
+El flujo principal del módulo de asistencias funciona de la siguiente manera:
+
+1. El usuario accede al módulo desde el menú lateral principal.
+2. Selecciona el contexto académico:
+   - período
+   - curso
+   - materia
+   - docente
+3. El sistema carga los estudiantes del grupo real matriculado.
+4. El usuario clasifica estudiantes como asistentes o ausentes.
+5. El sistema actualiza el resumen:
+   - total grupo
+   - asistentes
+   - ausentes
+   - registrados
+   - pendientes
+6. El usuario guarda la lista.
+7. Posteriormente puede:
+   - cargar una lista existente
+   - consultar listas del mismo contexto
+   - abrir el detalle de una lista
+   - enviar una lista a edición desde la pestaña de consulta
+
+Estado del Proyecto
+
+Con la finalización del Entregable No. 5:
+
+- El sistema amplía su cobertura funcional sobre procesos académicos clave.
+- El módulo de asistencias ya no se limita a registro básico, sino que incluye consulta y edición.
+- La arquitectura se mantiene estable, modular y escalable.
+- El proyecto continúa consolidándose como una solución académica integral.
+- El sistema queda preparado para futuros módulos como:
+  - Notas académicas
+  - Reportes avanzados
+  - Indicadores de rendimiento
+  - Procesos complementarios de control académico
 
 Observaciones Finales
 
-El Entregable No. 5 fortalece el SIS-Universitario al incorporar el control de asistencias como parte del 
-flujo académico del sistema, 
-permitiendo un manejo más completo y realista de la información estudiantil.
+El Entregable No. 5 fortalece significativamente el SIS-Universitario al incorporar un flujo completo de 
+listas de asistencia, alineado con la lógica académica real del sistema y con integración directa a la 
+matrícula por materias.
 
 La implementación mantiene coherencia con la arquitectura definida desde los entregables anteriores, 
-favoreciendo la mantenibilidad, reutilización de código, validación centralizada y escalabilidad del sistema.
+favoreciendo la mantenibilidad, reutilización de código, validación centralizada, trazabilidad mediante 
+auditoría y escalabilidad del sistema.
 
 Este entregable consolida aún más la base funcional del proyecto y deja preparado el sistema para continuar 
 con módulos académicos de mayor profundidad y análisis.

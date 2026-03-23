@@ -112,8 +112,15 @@ class MantenimientosView(ttk.Frame):
         overlay.columnconfigure(0, weight=1)
         overlay.rowconfigure(0, weight=1)
 
-        # ---- Tabs CRUD ----
-        self.tab_docentes = DocentesTab(
+        # =====================================================
+        # Tabs CRUD
+        # =====================================================
+        self.tab_periodos = PeriodosTab(
+            self.notebook,
+            db_user=self.db_user,
+            db_pass=self.db_pass,
+        )
+        self.tab_programas = ProgramasTab(
             self.notebook,
             db_user=self.db_user,
             db_pass=self.db_pass,
@@ -125,19 +132,19 @@ class MantenimientosView(ttk.Frame):
             db_pass=self.db_pass,
             codigo_usuario=self.codigo_usuario,
         )
-        self.tab_estudiantes = EstudiantesTab(
-            self.notebook,
-            db_user=self.db_user,
-            db_pass=self.db_pass,
-            codigo_usuario=self.codigo_usuario,
-        )
-        self.tab_programas = ProgramasTab(
+        self.tab_docentes = DocentesTab(
             self.notebook,
             db_user=self.db_user,
             db_pass=self.db_pass,
             codigo_usuario=self.codigo_usuario,
         )
         self.tab_asignacion = AsignacionTab(
+            self.notebook,
+            db_user=self.db_user,
+            db_pass=self.db_pass,
+            codigo_usuario=self.codigo_usuario,
+        )
+        self.tab_estudiantes = EstudiantesTab(
             self.notebook,
             db_user=self.db_user,
             db_pass=self.db_pass,
@@ -155,21 +162,19 @@ class MantenimientosView(ttk.Frame):
             db_pass=self.db_pass,
             codigo_usuario=self.codigo_usuario,
         )
-        self.tab_periodos = PeriodosTab(
-            self.notebook,
-            db_user=self.db_user,
-            db_pass=self.db_pass,
-        )
 
+        # =====================================================
+        # Orden de tabs
+        # =====================================================
         self.notebook.add(self.tab_home, text="Inicio")
-        self.notebook.add(self.tab_docentes, text="Docentes")
-        self.notebook.add(self.tab_cursos, text="Cursos")
-        self.notebook.add(self.tab_estudiantes, text="Estudiantes")
+        self.notebook.add(self.tab_periodos, text="Períodos")
         self.notebook.add(self.tab_programas, text="Programas")
+        self.notebook.add(self.tab_cursos, text="Cursos")
+        self.notebook.add(self.tab_docentes, text="Docentes")
         self.notebook.add(self.tab_asignacion, text="Asignación")
+        self.notebook.add(self.tab_estudiantes, text="Estudiantes")
         self.notebook.add(self.tab_becas, text="Becas")
         self.notebook.add(self.tab_becados, text="Becados")
-        self.notebook.add(self.tab_periodos, text="Períodos")
 
         self.notebook.bind("<<NotebookTabChanged>>", self._on_tab_changed)
 
@@ -196,5 +201,20 @@ class MantenimientosView(ttk.Frame):
     def select_home(self):
         try:
             self.notebook.select(self.tab_home)
+        except Exception:
+            pass
+
+    def select_asignacion(self):
+        """
+        Muestra directamente el tab de Asignación Docentes
+        reutilizando el módulo ya existente dentro de Mantenimientos.
+        """
+        try:
+            self.tab_asignacion.ensure_loaded()
+        except Exception:
+            pass
+
+        try:
+            self.notebook.select(self.tab_asignacion)
         except Exception:
             pass

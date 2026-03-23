@@ -1,4 +1,3 @@
-# app/ui/views/main_menu_view.py
 from __future__ import annotations
 
 import tkinter as tk
@@ -114,9 +113,7 @@ class MainMenuView(ttk.Frame):
         add_menu_btn("Matrícula por Materias", "matricula_materias", 4)
         add_menu_btn("Asistencias", "asistencias", 5)
         add_menu_btn("Asignación Docentes", "asignacion_docentes", 6)
-        add_menu_btn("Plan de Programas", "plan_programas", 7)
-        add_menu_btn("Contenidos", "contenidos", 8)
-        add_menu_btn("Malla Programas/Cursos", "malla", 9)
+
 
         btn_salir = tk.Button(
             sb_inner,
@@ -350,6 +347,10 @@ class MainMenuView(ttk.Frame):
         if key == "mantenimiento":
             self.view_mantenimientos.grid()
             self.view_mantenimientos.select_home()
+
+        elif key == "asignacion_docentes":
+            self.view_mantenimientos.grid()
+            self.view_mantenimientos.select_asignacion()
 
         elif key == "matriculas":
             self.view_matriculas.grid()
