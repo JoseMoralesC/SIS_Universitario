@@ -1,7 +1,7 @@
 # app/endpoints/mantenimiento/programas_endpoints.py
 from __future__ import annotations
 
-from app.core.db import connect
+from app.core.db import connect_app
 from app.services.mantenimiento.programas_service import (
     validar_programa_data,
     validar_programa_unicidad,
@@ -20,6 +20,13 @@ from app.repositories.mantenimiento.programas_repo import (
 
 from app.core.auditoria import Mov, Tab
 from app.repositories.auditoria_repo import insert_auditoria
+
+
+def _get_conn():
+    """
+    Obtiene la conexión técnica de la aplicación.
+    """
+    return connect_app()
 
 
 def _registrar_auditoria(
@@ -44,8 +51,8 @@ def _registrar_auditoria(
         pass
 
 
-def get_lookups(db_user: str, db_pass: str):
-    conn = connect(db_user, db_pass)
+def get_lookups(db_user: str | None = None, db_pass: str | None = None):
+    conn = _get_conn()
     try:
         estados = fetch_estados(conn)
         return estados
@@ -54,8 +61,8 @@ def get_lookups(db_user: str, db_pass: str):
 
 
 def listar_programas(
-    db_user: str,
-    db_pass: str,
+    db_user: str | None = None,
+    db_pass: str | None = None,
     codigo_usuario: int | None = None,
 ):
     """
@@ -64,10 +71,11 @@ def listar_programas(
     - Sí incluye Activo y Suspendido
       (y cualquier otro excepto Inactivo)
 
+    db_user y db_pass se conservan por compatibilidad temporal.
     codigo_usuario se acepta por consistencia
     (y futuras auditorías de listado).
     """
-    conn = connect(db_user, db_pass)
+    conn = _get_conn()
     try:
         return list_programas_join_activos(conn)
     finally:
@@ -75,15 +83,16 @@ def listar_programas(
 
 
 def siguiente_curso_cod(
-    db_user: str,
-    db_pass: str,
+    db_user: str | None = None,
+    db_pass: str | None = None,
     codigo_usuario: int | None = None,
 ) -> int:
     """
     Siguiente ID para Cursos_Programas.
+    db_user y db_pass se conservan por compatibilidad temporal.
     codigo_usuario se acepta por consistencia.
     """
-    conn = connect(db_user, db_pass)
+    conn = _get_conn()
     try:
         return next_curso_cod(conn)
     finally:
@@ -91,20 +100,22 @@ def siguiente_curso_cod(
 
 
 def obtener_jornadas_programa(
-    db_user: str,
-    db_pass: str,
-    curso_cod: int,
+    db_user: str | None = None,
+    db_pass: str | None = None,
+    curso_cod: int = 0,
     codigo_usuario: int | None = None,
 ) -> list[int]:
     """
     Devuelve las jornadas (1=Mañana, 2=Tarde, 3=Noche)
     asociadas al curso.
+
+    db_user y db_pass se conservan por compatibilidad temporal.
     codigo_usuario se acepta por consistencia.
     """
     if not curso_cod:
         return []
 
-    conn = connect(db_user, db_pass)
+    conn = _get_conn()
     try:
         return get_curso_jornadas(conn, int(curso_cod))
     finally:
@@ -112,8 +123,8 @@ def obtener_jornadas_programa(
 
 
 def crear_programa(
-    db_user: str,
-    db_pass: str,
+    db_user: str | None,
+    db_pass: str | None,
     curso_cod: int,
     descripcion: str,
     horario_tipo_id: int | None,
@@ -122,7 +133,7 @@ def crear_programa(
     estado_codigo: int,
     codigo_usuario: int | None = None,
 ) -> bool:
-    conn = connect(db_user, db_pass)
+    conn = _get_conn()
     try:
         data = validar_programa_data(
             descripcion=descripcion,
@@ -170,8 +181,8 @@ def crear_programa(
 
 
 def actualizar_programa(
-    db_user: str,
-    db_pass: str,
+    db_user: str | None,
+    db_pass: str | None,
     curso_cod: int,
     descripcion: str,
     horario_tipo_id: int | None,
@@ -183,7 +194,7 @@ def actualizar_programa(
     if not curso_cod:
         raise ValidationError("Debe seleccionar un programa para actualizar.")
 
-    conn = connect(db_user, db_pass)
+    conn = _get_conn()
     try:
         curso_cod = int(curso_cod)
 
@@ -231,8 +242,8 @@ def actualizar_programa(
 
 
 def eliminar_programa(
-    db_user: str,
-    db_pass: str,
+    db_user: str | None,
+    db_pass: str | None,
     curso_cod: int,
     codigo_usuario: int | None = None,
 ) -> bool:
@@ -244,7 +255,7 @@ def eliminar_programa(
     if not curso_cod:
         raise ValidationError("Debe seleccionar un programa para eliminar.")
 
-    conn = connect(db_user, db_pass)
+    conn = _get_conn()
     try:
         curso_cod = int(curso_cod)
 

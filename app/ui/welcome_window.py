@@ -1,4 +1,3 @@
-# app/ui/welcome_window.py
 from __future__ import annotations
 
 import os
@@ -6,10 +5,18 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 
 from app.ui.views.main_menu_view import MainMenuView
-from app.core.db import connect
-from app.repositories.usuarios_repo import existe_usuario_en_tabla, get_codigo_usuario
+from app.core.db import connect_app
+from app.core.session import set_session, clear_session, get_session
+from app.services.auth_service import (
+    login_sistema,
+    CredencialesInvalidasError,
+    UsuarioInactivoError,
+    UsuarioBloqueadoError,
+    RolNoAsignadoError,
+)
 from app.repositories.auditoria_repo import insert_auditoria
 from app.core.auditoria import Mov
+from app.core.exceptions import ValidationError
 
 # Pillow (para .jpg)
 try:
@@ -141,7 +148,6 @@ class WelcomeWindow(tk.Tk):
         status_line("Modo", "Académico")
         status_line("Versión", "4.1")
 
-        # Botón iniciar sesión
         btn_login = tk.Button(
             left,
             text="Iniciar sesión",
@@ -159,7 +165,6 @@ class WelcomeWindow(tk.Tk):
         )
         btn_login.grid(row=3, column=0, sticky="ew", padx=24, pady=(6, 10))
 
-        # Salir (cierra TODO el programa)
         btn_exit = tk.Button(
             left,
             text="Salir",
@@ -190,7 +195,6 @@ class WelcomeWindow(tk.Tk):
         self.wrap.columnconfigure(0, weight=1)
         self.wrap.rowconfigure(0, weight=1)
 
-        # Contenido informativo (Welcome)
         self.info_wrap = tk.Frame(self.wrap, bg=self.bg_right)
         self.info_wrap.grid(row=0, column=0, sticky="nsew")
         self.info_wrap.columnconfigure(0, weight=1)
@@ -224,7 +228,6 @@ class WelcomeWindow(tk.Tk):
             font=("Segoe UI", 9),
         ).grid(row=3, column=0, sticky="w", pady=(14, 0))
 
-        # Panel Login (overlay embebido)
         self.login_panel = LoginPanel(
             parent=self.wrap,
             on_success=self._open_main_menu_embedded,
@@ -233,13 +236,10 @@ class WelcomeWindow(tk.Tk):
         self.login_panel.place_forget()
         self._login_open = False
 
-        # Main menu embebido (overlay, oculto)
         self.main_menu_view: MainMenuView | None = None
-        # Capa full-screen para "pantallas" (MainMenu)
         self.main_layer = tk.Frame(self, bg=self.bg_right)
         self.main_layer.place_forget()
 
-        # Para que el panel calcule posiciones
         self.after(50, lambda: None)
 
     def _card(self, parent, r, c, title, desc):
@@ -248,7 +248,7 @@ class WelcomeWindow(tk.Tk):
         ttk.Label(lf, text=desc, style="Card.TLabel", justify="left").grid(row=0, column=0, sticky="w")
 
     # -----------------------------
-    #  Login panel show/hide
+    # Login panel show/hide
     # -----------------------------
     def toggle_login_panel(self):
         if self._login_open:
@@ -260,7 +260,7 @@ class WelcomeWindow(tk.Tk):
         self._login_open = True
 
         self.update_idletasks()
-        parent = self.login_panel.master  # wrap
+        parent = self.login_panel.master
         pw = parent.winfo_width()
         ph = parent.winfo_height()
 
@@ -314,11 +314,11 @@ class WelcomeWindow(tk.Tk):
         tick(x_from)
 
     # -----------------------------
-    #  MainMenu embebido (overlay)
+    # MainMenu embebido (overlay)
     # -----------------------------
-    def _open_main_menu_embedded(self, usuario: str, contra: str, codigo_usuario: int):
+    def _open_main_menu_embedded(self, session_data: dict):
         """
-        Login OK -> mostrar MainMenuView embebido ocupando TODA la ventana (fullscreen overlay).
+        Login OK -> mostrar MainMenuView embebido ocupando toda la ventana.
         """
         def _after_login_hidden():
             self.update_idletasks()
@@ -330,40 +330,51 @@ class WelcomeWindow(tk.Tk):
                 pass
             self.update_idletasks()
 
-            # Preparar overlay fullscreen
             start_x = w
             end_x = 0
 
             self.main_layer.place(x=start_x, y=0, width=w, height=h)
             self.main_layer.lift()
 
+            usuario = session_data.get("usuario")
+            codigo_usuario = session_data.get("codigo_usuario")
+
             if self.main_menu_view is None:
                 self.main_menu_view = MainMenuView(
-                    parent=self.main_layer,      
+                    parent=self.main_layer,
                     usuario=usuario,
-                    db_user=usuario,
-                    db_pass=contra,
+                    db_user=None,
+                    db_pass=None,
                     codigo_usuario=codigo_usuario,
-                    on_exit_request=self._on_main_menu_exit_request
-                    
+                    on_exit_request=self._on_main_menu_exit_request,
                 )
                 self.main_menu_view.pack(fill="both", expand=True)
             else:
-                # Si ya existe, solo refrescar usuario/cred si lo querés (opcional)
-                # Por ahora lo dejamos tal cual.
-                pass
+                try:
+                    self.main_menu_view.destroy()
+                except Exception:
+                    pass
 
-            # Animación: mover la capa completa (no el view)
+                self.main_menu_view = MainMenuView(
+                    parent=self.main_layer,
+                    usuario=usuario,
+                    db_user=None,
+                    db_pass=None,
+                    codigo_usuario=codigo_usuario,
+                    on_exit_request=self._on_main_menu_exit_request,
+                )
+                self.main_menu_view.pack(fill="both", expand=True)
+
             self._slide(self.main_layer, start_x, end_x, step=40)
 
         self.hide_login_panel(on_done=_after_login_hidden)
 
     def _on_main_menu_exit_request(self, salir_todo: bool):
         if salir_todo:
+            clear_session()
             self.destroy()
             return
 
-        # NO: animar salida del overlay y volver al welcome
         self.update_idletasks()
         w = self.winfo_width()
 
@@ -372,31 +383,26 @@ class WelcomeWindow(tk.Tk):
 
         def _done():
             self.main_layer.place_forget()
-            # Welcome queda visible debajo automáticamente
+            clear_session()
 
         self._slide(self.main_layer, current_x, end_x, step=44, on_done=_done)
 
 
 class LoginPanel(ttk.Frame):
-
-
     def __init__(self, parent, on_success, on_cancel):
         super().__init__(parent, style="LP.TFrame")
 
         self.on_success = on_success
         self.on_cancel = on_cancel
 
-        # Assets
         self.assets_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "users")
         self._avatar_index = self._build_avatar_index(self.assets_dir)
 
-        # Vars
         self.var_user = tk.StringVar()
         self.var_pass = tk.StringVar()
 
         self.var_user.trace_add("write", lambda *_: self._update_avatar())
 
-        # UI
         self._build_ui()
         self._update_avatar()
 
@@ -412,7 +418,6 @@ class LoginPanel(ttk.Frame):
         return idx
 
     def _build_ui(self):
-        # “card” look
         card = tk.Frame(self, bg="white", highlightbackground="#d6dde6", highlightthickness=1)
         card.pack(fill="both", expand=True, padx=16, pady=16)
 
@@ -430,7 +435,6 @@ class LoginPanel(ttk.Frame):
         sep = ttk.Separator(card)
         sep.grid(row=1, column=0, sticky="ew", padx=16, pady=(4, 12))
 
-        # Avatar
         av_wrap = tk.Frame(card, bg="white")
         av_wrap.grid(row=2, column=0, sticky="ew", padx=16, pady=(0, 12))
         av_wrap.columnconfigure(1, weight=1)
@@ -446,7 +450,6 @@ class LoginPanel(ttk.Frame):
         self.ent_pass = ttk.Entry(av_wrap, textvariable=self.var_pass, show="*")
         self.ent_pass.grid(row=3, column=1, sticky="ew", pady=(4, 0))
 
-        # Info tip
         tip = tk.Label(
             card,
             text="Tip: al escribir el usuario, la foto se carga automáticamente.",
@@ -456,7 +459,6 @@ class LoginPanel(ttk.Frame):
         )
         tip.grid(row=3, column=0, sticky="w", padx=16, pady=(6, 10))
 
-        # Buttons
         btns = tk.Frame(card, bg="white")
         btns.grid(row=4, column=0, sticky="ew", padx=16, pady=(0, 16))
         btns.columnconfigure((0, 1), weight=1)
@@ -495,7 +497,6 @@ class LoginPanel(ttk.Frame):
         )
         btn_cancel.grid(row=0, column=1, sticky="ew", padx=(8, 0))
 
-        # Bindings
         self.ent_user.bind("<Return>", lambda e: self.ent_pass.focus_set())
         self.ent_pass.bind("<Return>", lambda e: self._submit())
         self.ent_pass.bind("<Escape>", lambda e: self.on_cancel())
@@ -541,6 +542,27 @@ class LoginPanel(ttk.Frame):
         except Exception:
             self.lbl_avatar.configure(image="", text="")
 
+    def _registrar_auditoria(self, codigo_usuario: int | None, movimiento_cod: int) -> None:
+        """
+        Registra auditoría usando la conexión técnica.
+        Si falla, no bloquea el flujo de login.
+        """
+        if codigo_usuario is None:
+            return
+
+        conn = None
+        try:
+            conn = connect_app()
+            insert_auditoria(conn, codigo_usuario=codigo_usuario, movimiento_cod=movimiento_cod)
+        except Exception:
+            pass
+        finally:
+            if conn is not None:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+
     def _submit(self):
         u = self.var_user.get().strip()
         p = self.var_pass.get().strip()
@@ -549,45 +571,39 @@ class LoginPanel(ttk.Frame):
             messagebox.showwarning("Validación", "Debe ingresar usuario y contraseña.")
             return
 
-        # Validación real contra SQL + tabla dbo.Usuarios
         try:
-            conn = connect(u, p)
+            session_data = login_sistema(u, p)
+            set_session(session_data)
+
+            codigo_usuario = session_data.get("codigo_usuario")
+            self._registrar_auditoria(codigo_usuario, Mov.LOGIN_OK)
+
+            self.var_pass.set("")
+            self.on_success(session_data)
+
+        except CredencialesInvalidasError as e:
+            self._registrar_auditoria(None, Mov.LOGIN_FAIL)
+            messagebox.showerror("Login", str(e))
+
+        except UsuarioInactivoError as e:
+            self._registrar_auditoria(None, Mov.LOGIN_FAIL)
+            messagebox.showerror("Login", str(e))
+
+        except UsuarioBloqueadoError as e:
+            self._registrar_auditoria(None, Mov.LOGIN_FAIL)
+            messagebox.showerror("Login", str(e))
+
+        except RolNoAsignadoError as e:
+            self._registrar_auditoria(None, Mov.LOGIN_FAIL)
+            messagebox.showerror("Login", str(e))
+
+        except ValidationError as e:
+            self._registrar_auditoria(None, Mov.LOGIN_FAIL)
+            messagebox.showerror("Login", str(e))
+
         except Exception as e:
-            # No hay conexión -> no se puede registrar auditoría con ese usuario.
-            messagebox.showerror("Login", f"No fue posible conectar a SQL Server.\n\nDetalle: {e}")
-            return
-
-        try:
-            codigo_usuario = get_codigo_usuario(conn, u)
-            if codigo_usuario is None:
-                messagebox.showerror("Login", "El usuario existe, pero no tiene Codigo_Usuario en dbo.Usuarios.")
-                return
-            if not existe_usuario_en_tabla(conn, u):
-                # Conecta pero no existe en dbo.Usuarios
-                try:
-                    insert_auditoria(conn, codigo_usuario=codigo_usuario, movimiento_cod=Mov.LOGIN_FAIL)
-                except Exception:
-                    pass
-                messagebox.showerror(
-                    "Login",
-                    "Usuario con permiso en SQL, pero, no registrado en la tabla de la Base de Datos",
-                )
-                return
-
-            # Login OK
-            try:
-                insert_auditoria(conn, codigo_usuario=codigo_usuario, movimiento_cod=Mov.LOGIN_OK)
-            except Exception:
-                # Si falla auditoría no bloqueamos el ingreso.
-                pass
-
-        finally:
-            try:
-                conn.close()
-            except Exception:
-                pass
-
-        self.on_success(u, p, codigo_usuario)
+            self._registrar_auditoria(None, Mov.LOGIN_FAIL)
+            messagebox.showerror("Login", f"Ocurrió un error inesperado.\n\nDetalle: {e}")
 
 
 def run_welcome_window():

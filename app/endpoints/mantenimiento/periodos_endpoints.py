@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.core.db import connect
+from app.core.db import connect_app
 from app.core.exceptions import ValidationError
 from app.core.auditoria import Mov, Tab
 from app.repositories.auditoria_repo import insert_auditoria
@@ -17,6 +17,13 @@ from app.repositories.mantenimiento.periodos_repo import (
     update_periodo,
     soft_delete_periodo,
 )
+
+
+def _get_conn():
+    """
+    Obtiene la conexión técnica de la aplicación.
+    """
+    return connect_app()
 
 
 def _registrar_auditoria(
@@ -43,8 +50,8 @@ def _registrar_auditoria(
 # =========================================================
 # API interna alineada con la UI actual
 # =========================================================
-def fetch_estados_periodos(db_user: str, db_pass: str):
-    conn = connect(db_user, db_pass)
+def fetch_estados_periodos(db_user: str | None = None, db_pass: str | None = None):
+    conn = _get_conn()
     try:
         return fetch_estados(conn)
     finally:
@@ -52,20 +59,20 @@ def fetch_estados_periodos(db_user: str, db_pass: str):
 
 
 def list_periodos_rows(
-    db_user: str,
-    db_pass: str,
+    db_user: str | None = None,
+    db_pass: str | None = None,
     codigo_usuario: int | None = None,
 ):
-    conn = connect(db_user, db_pass)
+    conn = _get_conn()
     try:
         return list_periodos_join_activos(conn)
     finally:
         conn.close()
 
 
-def create_periodo(
-    db_user: str,
-    db_pass: str,
+def _create_periodo_impl(
+    db_user: str | None,
+    db_pass: str | None,
     anio: int,
     numero_periodo: int,
     fecha_inicio: str,
@@ -73,7 +80,7 @@ def create_periodo(
     estado_codigo: int,
     codigo_usuario: int | None = None,
 ) -> str:
-    conn = connect(db_user, db_pass)
+    conn = _get_conn()
     try:
         data = validar_periodo_data(
             periodo_codigo=None,
@@ -115,8 +122,8 @@ def create_periodo(
 
 
 def update_periodo_endpoint(
-    db_user: str,
-    db_pass: str,
+    db_user: str | None,
+    db_pass: str | None,
     periodo_id: int,
     anio: int,
     numero_periodo: int,
@@ -128,7 +135,7 @@ def update_periodo_endpoint(
     if not periodo_id:
         raise ValidationError("Debe seleccionar un período para actualizar.")
 
-    conn = connect(db_user, db_pass)
+    conn = _get_conn()
     try:
         periodo_id = int(periodo_id)
 
@@ -173,15 +180,15 @@ def update_periodo_endpoint(
 
 
 def delete_periodo_endpoint(
-    db_user: str,
-    db_pass: str,
+    db_user: str | None,
+    db_pass: str | None,
     periodo_id: int,
     codigo_usuario: int | None = None,
 ) -> str:
     if not periodo_id:
         raise ValidationError("Debe seleccionar un período para eliminar.")
 
-    conn = connect(db_user, db_pass)
+    conn = _get_conn()
     try:
         periodo_id = int(periodo_id)
         soft_delete_periodo(conn, periodo_id=periodo_id)
@@ -201,17 +208,21 @@ def delete_periodo_endpoint(
 # =========================================================
 # Alias de compatibilidad
 # =========================================================
-def get_lookups(db_user: str, db_pass: str):
+def get_lookups(db_user: str | None = None, db_pass: str | None = None):
     return fetch_estados_periodos(db_user, db_pass)
 
 
-def listar_periodos(db_user: str, db_pass: str, codigo_usuario: int | None = None):
+def listar_periodos(
+    db_user: str | None = None,
+    db_pass: str | None = None,
+    codigo_usuario: int | None = None,
+):
     return list_periodos_rows(db_user, db_pass, codigo_usuario=codigo_usuario)
 
 
 def crear_periodo(
-    db_user: str,
-    db_pass: str,
+    db_user: str | None,
+    db_pass: str | None,
     periodo_codigo: str | None = None,
     anio: int = 0,
     numero_periodo: int = 0,
@@ -220,7 +231,7 @@ def crear_periodo(
     estado_codigo: int = 0,
     codigo_usuario: int | None = None,
 ) -> bool:
-    create_periodo(
+    _create_periodo_impl(
         db_user=db_user,
         db_pass=db_pass,
         anio=anio,
@@ -234,8 +245,8 @@ def crear_periodo(
 
 
 def actualizar_periodo(
-    db_user: str,
-    db_pass: str,
+    db_user: str | None,
+    db_pass: str | None,
     periodo_id: int,
     periodo_codigo: str | None = None,
     anio: int = 0,
@@ -260,8 +271,8 @@ def actualizar_periodo(
 
 
 def eliminar_periodo(
-    db_user: str,
-    db_pass: str,
+    db_user: str | None,
+    db_pass: str | None,
     periodo_id: int,
     codigo_usuario: int | None = None,
 ) -> bool:

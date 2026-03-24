@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.core.db import connect
+from app.core.db import connect_app
 from app.core.exceptions import ValidationError
 from app.core.auditoria import Mov, Tab
 from app.repositories.auditoria_repo import insert_auditoria
@@ -19,6 +19,13 @@ from app.repositories.mantenimiento.becas_repo import (
     update_beca,
     soft_delete_beca,
 )
+
+
+def _get_conn():
+    """
+    Obtiene la conexión técnica de la aplicación.
+    """
+    return connect_app()
 
 
 def _registrar_auditoria(
@@ -42,8 +49,8 @@ def _registrar_auditoria(
         pass
 
 
-def get_lookups(db_user: str, db_pass: str):
-    conn = connect(db_user, db_pass)
+def get_lookups(db_user: str | None = None, db_pass: str | None = None):
+    conn = _get_conn()
     try:
         return fetch_estados(conn)
     finally:
@@ -51,11 +58,11 @@ def get_lookups(db_user: str, db_pass: str):
 
 
 def listar_becas(
-    db_user: str,
-    db_pass: str,
+    db_user: str | None = None,
+    db_pass: str | None = None,
     codigo_usuario: int | None = None,
 ):
-    conn = connect(db_user, db_pass)
+    conn = _get_conn()
     try:
         return list_becas_join_activos(conn)
     finally:
@@ -63,11 +70,11 @@ def listar_becas(
 
 
 def siguiente_id_beca(
-    db_user: str,
-    db_pass: str,
+    db_user: str | None = None,
+    db_pass: str | None = None,
     codigo_usuario: int | None = None,
 ) -> int:
-    conn = connect(db_user, db_pass)
+    conn = _get_conn()
     try:
         return next_id_beca(conn)
     finally:
@@ -75,14 +82,14 @@ def siguiente_id_beca(
 
 
 def crear_beca(
-    db_user: str,
-    db_pass: str,
+    db_user: str | None,
+    db_pass: str | None,
     nombre_beca: str,
     porcentaje_descuento: int,
     estado_codigo: int = 1,
     codigo_usuario: int | None = None,
 ) -> bool:
-    conn = connect(db_user, db_pass)
+    conn = _get_conn()
     try:
         data = validar_beca_data(
             nombre_beca=nombre_beca,
@@ -110,8 +117,8 @@ def crear_beca(
 
 
 def actualizar_beca(
-    db_user: str,
-    db_pass: str,
+    db_user: str | None,
+    db_pass: str | None,
     id_beca: int,
     nombre_beca: str,
     porcentaje_descuento: int,
@@ -121,7 +128,7 @@ def actualizar_beca(
     if not id_beca:
         raise ValidationError("Debe seleccionar una beca para actualizar.")
 
-    conn = connect(db_user, db_pass)
+    conn = _get_conn()
     try:
         id_beca = int(id_beca)
 
@@ -153,15 +160,15 @@ def actualizar_beca(
 
 
 def eliminar_beca(
-    db_user: str,
-    db_pass: str,
+    db_user: str | None,
+    db_pass: str | None,
     id_beca: int,
     codigo_usuario: int | None = None,
 ) -> bool:
     if not id_beca:
         raise ValidationError("Debe seleccionar una beca para eliminar.")
 
-    conn = connect(db_user, db_pass)
+    conn = _get_conn()
     try:
         id_beca = int(id_beca)
         validar_beca_puede_eliminarse(conn, id_beca=id_beca)

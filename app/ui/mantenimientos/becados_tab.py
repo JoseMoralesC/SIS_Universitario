@@ -13,6 +13,9 @@ from app.endpoints.mantenimiento.becados_endpoints import (
     eliminar_becado,
 )
 from app.core.error_handler import handle_exception, show_info, show_warning
+from app.services.security.permission_service import (
+    get_maintenance_permissions_state,
+)
 from app.ui.components.confirm_dialog import show_confirm
 
 
@@ -23,6 +26,8 @@ class BecadosTab(ttk.Frame):
         self.db_user = db_user
         self.db_pass = db_pass
         self.codigo_usuario = codigo_usuario
+
+        self.resource_key = "becados"
 
         self.estudiante_display_to_carnet: dict[str, str] = {}
         self.carnet_to_estudiante_display: dict[str, str] = {}
@@ -41,12 +46,194 @@ class BecadosTab(ttk.Frame):
         self.vars: dict[str, tk.StringVar] = {}
         self.tree: ttk.Treeview | None = None
 
+        self.permissions_state: dict = {
+            "resource": self.resource_key,
+            "is_admin": False,
+            "access": True,
+            "create": True,
+            "update": True,
+            "delete": True,
+            "matched": {},
+            "candidates": {},
+        }
+
         self._build_ui()
+        self.refresh_permissions()
         self.reset_view_blank()
 
+    # =====================================================
+    # Permisos
+    # =====================================================
+    def _safe_permissions_state(self) -> dict:
+        try:
+            state = get_maintenance_permissions_state(self.resource_key)
+            if isinstance(state, dict) and state:
+                return state
+        except Exception:
+            pass
+
+        return {
+            "resource": self.resource_key,
+            "is_admin": False,
+            "access": True,
+            "create": True,
+            "update": True,
+            "delete": True,
+            "matched": {},
+            "candidates": {},
+        }
+
+    def refresh_permissions(self):
+        self.permissions_state = self._safe_permissions_state()
+        self._apply_permissions_to_ui()
+
+    def _is_action_allowed(self, action_key: str) -> bool:
+        access = bool(self.permissions_state.get("access", False))
+        create = bool(self.permissions_state.get("create", False))
+        update = bool(self.permissions_state.get("update", False))
+        delete = bool(self.permissions_state.get("delete", False))
+
+        if action_key == "access":
+            return access
+        if action_key == "create":
+            return access and create
+        if action_key == "update":
+            return access and update
+        if action_key == "delete":
+            return access and delete
+        return False
+
+    def _action_label(self, action_key: str) -> str:
+        labels = {
+            "access": "acceder",
+            "create": "guardar",
+            "update": "actualizar",
+            "delete": "eliminar",
+        }
+        return labels.get(action_key, action_key)
+
+    def _deny_action(self, action_key: str):
+        accion = self._action_label(action_key)
+        show_warning(
+            self,
+            "Permisos",
+            f"No tienes permisos para {accion} en Becados.",
+        )
+
+    def _set_button_enabled(self, button: ttk.Button | None, enabled: bool):
+        if button is None:
+            return
+        try:
+            if enabled:
+                button.state(("!disabled",))
+            else:
+                button.state(("disabled",))
+        except Exception:
+            pass
+
+    def _set_children_state(self, parent, *, enabled: bool):
+        for child in parent.winfo_children():
+            try:
+                if isinstance(child, ttk.Frame) or isinstance(child, ttk.LabelFrame):
+                    self._set_children_state(child, enabled=enabled)
+                    continue
+
+                if isinstance(child, ttk.Treeview):
+                    if enabled:
+                        child.state(("!disabled",))
+                    else:
+                        child.state(("disabled",))
+                    continue
+
+                if isinstance(child, ttk.Label) or isinstance(child, ttk.Separator):
+                    continue
+
+                if isinstance(child, ttk.Entry):
+                    states = set(child.state())
+                    is_readonly = "readonly" in states
+                    if enabled:
+                        if is_readonly:
+                            child.state(("readonly",))
+                        else:
+                            child.state(("!disabled",))
+                    else:
+                        child.state(("disabled",))
+                    continue
+
+                if isinstance(child, ttk.Combobox):
+                    current_state = str(child.cget("state"))
+                    if enabled:
+                        if current_state == "readonly":
+                            child.configure(state="readonly")
+                        else:
+                            child.configure(state="normal")
+                    else:
+                        child.configure(state="disabled")
+                    continue
+
+                if isinstance(child, ttk.Button):
+                    if enabled:
+                        child.state(("!disabled",))
+                    else:
+                        child.state(("disabled",))
+                    continue
+
+                try:
+                    if enabled:
+                        child.state(("!disabled",))
+                    else:
+                        child.state(("disabled",))
+                except Exception:
+                    pass
+
+            except Exception:
+                continue
+
+    def _apply_permissions_to_ui(self):
+        access = bool(self.permissions_state.get("access", False))
+        can_create = bool(self.permissions_state.get("create", False))
+        can_update = bool(self.permissions_state.get("update", False))
+        can_delete = bool(self.permissions_state.get("delete", False))
+
+        if hasattr(self, "top"):
+            self._set_children_state(self.top, enabled=access)
+        if hasattr(self, "bottom"):
+            self._set_children_state(self.bottom, enabled=access)
+
+        self._set_button_enabled(getattr(self, "btn_nuevo", None), access)
+        self._set_button_enabled(getattr(self, "btn_guardar", None), access and can_create)
+        self._set_button_enabled(getattr(self, "btn_actualizar", None), access and can_update)
+        self._set_button_enabled(getattr(self, "btn_eliminar", None), access and can_delete)
+
+        # Campos que deben seguir readonly si hay acceso
+        if access:
+            try:
+                if hasattr(self, "entry_id"):
+                    self.entry_id.configure(state="readonly")
+                if hasattr(self, "entry_carnet"):
+                    self.entry_carnet.configure(state="readonly")
+                if hasattr(self, "entry_pct"):
+                    self.entry_pct.configure(state="readonly")
+                if hasattr(self, "entry_fecha"):
+                    self.entry_fecha.configure(state="readonly")
+                if hasattr(self, "cbo_est"):
+                    self.cbo_est.configure(state="readonly")
+                if hasattr(self, "cbo_beca"):
+                    self.cbo_beca.configure(state="readonly")
+            except Exception:
+                pass
+
+    # =====================================================
+    # Lifecycle
+    # =====================================================
     def ensure_loaded(self):
+        if not self._is_action_allowed("access"):
+            self._loaded = True
+            return
+
         if getattr(self, "_loaded", False):
             return
+
         self._load_lookups()
         self.refresh_grid()
         self._loaded = True
@@ -74,7 +261,11 @@ class BecadosTab(ttk.Frame):
         """
         carnets: set[str] = set()
         try:
-            rows = listar_becados(self.db_user, self.db_pass) or []
+            rows = listar_becados(
+                self.db_user,
+                self.db_pass,
+                codigo_usuario=self.codigo_usuario,
+            ) or []
             for r in rows:
                 try:
                     carnet = str(r[1]).strip()
@@ -110,15 +301,16 @@ class BecadosTab(ttk.Frame):
         self.vars["porcentaje"].set("")
         self.vars["fecha_aplicacion"].set(self._today())
 
-        self._load_next_id()
+        if self._is_action_allowed("access"):
+            self._load_next_id()
 
-        # Cargar combos si ya existen widgets
-        try:
-            self._load_lookups()
-        except Exception:
-            pass
+            try:
+                self._load_lookups()
+            except Exception:
+                pass
+        else:
+            self.vars["id_becado"].set("")
 
-        # Fecha siempre readonly
         try:
             if hasattr(self, "entry_fecha"):
                 self.entry_fecha.configure(state="readonly")
@@ -132,6 +324,8 @@ class BecadosTab(ttk.Frame):
                 self.tree.selection_remove(self.tree.selection())
         except Exception:
             pass
+
+        self._apply_permissions_to_ui()
 
     def _build_ui(self):
         self._ensure_vars()
@@ -255,7 +449,13 @@ class BecadosTab(ttk.Frame):
     # Lookups
     # -----------------------------
     def _load_lookups(self):
-        data = get_lookups(self.db_user, self.db_pass)
+        if not self._is_action_allowed("access"):
+            return
+
+        data = get_lookups(
+            self.db_user,
+            self.db_pass,
+        )
 
         estudiantes = data.get("estudiantes") or []
         becas = data.get("becas") or []
@@ -326,6 +526,10 @@ class BecadosTab(ttk.Frame):
             self.cbo_est["values"] = list(self.estudiante_display_to_carnet.keys())
 
     def _on_estudiante_selected(self, _evt=None):
+        if not self._is_action_allowed("access"):
+            self._deny_action("access")
+            return
+
         try:
             self._ensure_vars()
             est_disp = (self.vars["estudiante"].get() or "").strip()
@@ -335,6 +539,10 @@ class BecadosTab(ttk.Frame):
             handle_exception(self, e)
 
     def _on_beca_selected(self, _evt=None):
+        if not self._is_action_allowed("access"):
+            self._deny_action("access")
+            return
+
         try:
             self._ensure_vars()
             beca_display = (self.vars["beca"].get() or "").strip()
@@ -388,10 +596,17 @@ class BecadosTab(ttk.Frame):
             if self.tree is None:
                 return
 
-            rows = listar_becados(self.db_user, self.db_pass)
-
             for item in self.tree.get_children():
                 self.tree.delete(item)
+
+            if not self._is_action_allowed("access"):
+                return
+
+            rows = listar_becados(
+                self.db_user,
+                self.db_pass,
+                codigo_usuario=self.codigo_usuario,
+            )
 
             for r in rows:
                 # esperado: (id_becado, carnet, nombre_est, id_beca, nombre_beca, pct, fecha)
@@ -409,12 +624,24 @@ class BecadosTab(ttk.Frame):
     def _load_next_id(self):
         try:
             self._ensure_vars()
-            next_id = siguiente_id_becado(self.db_user, self.db_pass)
+            if not self._is_action_allowed("access"):
+                self.vars["id_becado"].set("")
+                return
+
+            next_id = siguiente_id_becado(
+                self.db_user,
+                self.db_pass,
+                codigo_usuario=self.codigo_usuario,
+            )
             self.vars["id_becado"].set(str(next_id))
         except Exception as e:
             handle_exception(self, e)
 
     def _on_row_selected(self, _evt=None):
+        if not self._is_action_allowed("access"):
+            self._deny_action("access")
+            return
+
         try:
             self._ensure_vars()
             if self.tree is None:
@@ -466,6 +693,10 @@ class BecadosTab(ttk.Frame):
     # CRUD
     # -----------------------------
     def on_nuevo(self):
+        if not self._is_action_allowed("access"):
+            self._deny_action("access")
+            return
+
         self.reset_view_blank()
 
     def on_guardar(self):
@@ -474,6 +705,10 @@ class BecadosTab(ttk.Frame):
         - Fecha: hoy automática (readonly)
         - Estudiante solo de disponibles (no becados)
         """
+        if not self._is_action_allowed("create"):
+            self._deny_action("create")
+            return
+
         try:
             self._ensure_vars()
             carnet, id_beca = self._get_selected_ids()
@@ -492,10 +727,12 @@ class BecadosTab(ttk.Frame):
                 carnet,
                 id_beca,
                 fecha,
+                codigo_usuario=self.codigo_usuario,
             )
             if ok:
                 show_info(self, "Éxito", "Beca asignada correctamente.")
                 self.reset_view_blank()
+
         except Exception as e:
             handle_exception(self, e)
 
@@ -505,6 +742,10 @@ class BecadosTab(ttk.Frame):
         - Si NO cambia la beca: mantener fecha original
         - Si cambia la beca: fecha = hoy
         """
+        if not self._is_action_allowed("update"):
+            self._deny_action("update")
+            return
+
         try:
             self._ensure_vars()
 
@@ -533,6 +774,7 @@ class BecadosTab(ttk.Frame):
                 carnet,
                 int(id_beca),
                 fecha,
+                codigo_usuario=self.codigo_usuario,
             )
             if ok:
                 show_info(self, "Éxito", "Registro actualizado correctamente.")
@@ -543,6 +785,10 @@ class BecadosTab(ttk.Frame):
             handle_exception(self, e)
 
     def on_eliminar(self):
+        if not self._is_action_allowed("delete"):
+            self._deny_action("delete")
+            return
+
         try:
             self._ensure_vars()
 
@@ -554,9 +800,15 @@ class BecadosTab(ttk.Frame):
             if not show_confirm(self, "Confirmar", "¿Deseas eliminar esta asignación de beca?"):
                 return
 
-            ok = eliminar_becado(self.db_user, self.db_pass, int(id_becado_txt))
+            ok = eliminar_becado(
+                self.db_user,
+                self.db_pass,
+                int(id_becado_txt),
+                codigo_usuario=self.codigo_usuario,
+            )
             if ok:
                 show_info(self, "Éxito", "Asignación eliminada correctamente.")
                 self.reset_view_blank()
+
         except Exception as e:
             handle_exception(self, e)

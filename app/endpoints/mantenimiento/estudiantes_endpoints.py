@@ -1,7 +1,7 @@
 # app/endpoints/estudiantes_endpoints.py
 from __future__ import annotations
 
-from app.core.db import connect
+from app.core.db import connect_app
 from app.services.mantenimiento.estudiantes_service import (
     validar_estudiante_data,
     validar_estudiante_unicidad,
@@ -18,6 +18,13 @@ from app.repositories.mantenimiento.estudiantes_repo import (
 
 from app.core.auditoria import Mov, Tab
 from app.repositories.auditoria_repo import insert_auditoria
+
+
+def _get_conn():
+    """
+    Obtiene la conexión técnica de la aplicación.
+    """
+    return connect_app()
 
 
 def _registrar_auditoria(
@@ -42,8 +49,8 @@ def _registrar_auditoria(
         pass
 
 
-def get_lookups(db_user: str, db_pass: str):
-    conn = connect(db_user, db_pass)
+def get_lookups(db_user: str | None = None, db_pass: str | None = None):
+    conn = _get_conn()
     try:
         return fetch_estados(conn)
     finally:
@@ -51,24 +58,26 @@ def get_lookups(db_user: str, db_pass: str):
 
 
 def listar_estudiantes(
-    db_user: str,
-    db_pass: str,
+    db_user: str | None = None,
+    db_pass: str | None = None,
     codigo_usuario: int | None = None,
 ):
     """
     Lista estudiantes visibles en el grid
     (según repo: normalmente excluye Inactivo).
+
+    db_user y db_pass se conservan por compatibilidad temporal.
     codigo_usuario se acepta por consistencia.
     """
-    conn = connect(db_user, db_pass)
+    conn = _get_conn()
     try:
         return list_estudiantes_join_activos(conn)
     finally:
         conn.close()
 
 
-def siguiente_carnet(db_user: str, db_pass: str) -> str:
-    conn = connect(db_user, db_pass)
+def siguiente_carnet(db_user: str | None = None, db_pass: str | None = None) -> str:
+    conn = _get_conn()
     try:
         return next_carnet(conn)
     finally:
@@ -76,8 +85,8 @@ def siguiente_carnet(db_user: str, db_pass: str) -> str:
 
 
 def crear_estudiante(
-    db_user: str,
-    db_pass: str,
+    db_user: str | None,
+    db_pass: str | None,
     carnet: str,
     identificacion: str,
     nombre_completo: str,
@@ -86,7 +95,7 @@ def crear_estudiante(
     estado_codigo: int,
     codigo_usuario: int | None = None,
 ) -> bool:
-    conn = connect(db_user, db_pass)
+    conn = _get_conn()
     try:
         data = validar_estudiante_data(
             carnet=carnet,
@@ -120,8 +129,8 @@ def crear_estudiante(
 
 
 def actualizar_estudiante(
-    db_user: str,
-    db_pass: str,
+    db_user: str | None,
+    db_pass: str | None,
     carnet: str,
     identificacion: str,
     nombre_completo: str,
@@ -134,7 +143,7 @@ def actualizar_estudiante(
     if not carnet:
         raise ValidationError("Debe seleccionar un estudiante para actualizar.")
 
-    conn = connect(db_user, db_pass)
+    conn = _get_conn()
     try:
         data = validar_estudiante_data(
             carnet=carnet,
@@ -171,8 +180,8 @@ def actualizar_estudiante(
 
 
 def eliminar_estudiante(
-    db_user: str,
-    db_pass: str,
+    db_user: str | None,
+    db_pass: str | None,
     carnet: str,
     codigo_usuario: int | None = None,
 ) -> bool:
@@ -180,7 +189,7 @@ def eliminar_estudiante(
     if not carnet:
         raise ValidationError("Debe seleccionar un estudiante para eliminar.")
 
-    conn = connect(db_user, db_pass)
+    conn = _get_conn()
     try:
         soft_delete_estudiante(conn, carnet)
 

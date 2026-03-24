@@ -38,15 +38,33 @@ class CursosTab(MaintenanceTab):
 
         self._loaded = False
 
-        super().__init__(parent, "Cursos")
+        super().__init__(parent, "Cursos", resource_key="cursos")
         self.reset_view_blank()
 
+    # ------------------------------------------------
+    # LOAD
+    # ------------------------------------------------
     def ensure_loaded(self):
+        if not self.can_access():
+            self._loaded = True
+            self._clear_grid()
+            return
+
         if getattr(self, "_loaded", False):
             return
+
         self._load_lookups()
         self.refresh_grid()
         self._loaded = True
+
+    # ------------------------------------------------
+    # HELPERS
+    # ------------------------------------------------
+    def _clear_grid(self):
+        if not self.tree:
+            return
+        for it in self.tree.get_children():
+            self.tree.delete(it)
 
     # -----------------------------
     # UI
@@ -73,14 +91,24 @@ class CursosTab(MaintenanceTab):
         add_entry("Descripción", "Descripcion")
 
         ttk.Label(parent, text="Programa:").grid(row=r, column=0, sticky="w", pady=6)
-        self.cb_programa = ttk.Combobox(parent, textvariable=self.vars["Programa"], state="readonly", width=26)
+        self.cb_programa = ttk.Combobox(
+            parent,
+            textvariable=self.vars["Programa"],
+            state="readonly",
+            width=26,
+        )
         self.cb_programa.grid(row=r, column=1, sticky="ew", padx=(10, 0), pady=6)
         r += 1
 
         add_entry("Precio", "Precio")
 
         ttk.Label(parent, text="Estado:").grid(row=r, column=0, sticky="w", pady=6)
-        self.cb_estado = ttk.Combobox(parent, textvariable=self.vars["Estado"], state="readonly", width=26)
+        self.cb_estado = ttk.Combobox(
+            parent,
+            textvariable=self.vars["Estado"],
+            state="readonly",
+            width=26,
+        )
         self.cb_estado.grid(row=r, column=1, sticky="ew", padx=(10, 0), pady=6)
         r += 1
 
@@ -131,7 +159,7 @@ class CursosTab(MaintenanceTab):
             self.tree.column(col, width=max_w)
 
     # -----------------------------
-    # blank/reset + data
+    # BLANK / RESET + DATA
     # -----------------------------
     def reset_view_blank(self):
         self.vars["Materia_Cod"].set("")
@@ -147,11 +175,25 @@ class CursosTab(MaintenanceTab):
         self.vars["Programa"].set("")
         self.vars["Estado"].set("")
 
-        if self.tree:
-            for it in self.tree.get_children():
-                self.tree.delete(it)
+        self._clear_grid()
 
     def _load_lookups(self):
+        if not self.can_access():
+            self.estado_desc_to_cod = {}
+            self.estado_cod_to_desc = {}
+            self.programa_desc_to_cod = {}
+            self.programa_cod_to_desc = {}
+
+            try:
+                self.cb_programa["values"] = []
+                self.cb_estado["values"] = []
+            except Exception:
+                pass
+
+            self.vars["Programa"].set("")
+            self.vars["Estado"].set("")
+            return
+
         try:
             estados, programas = get_lookups(self.db_user, self.db_pass)
         except Exception as e:
@@ -168,17 +210,24 @@ class CursosTab(MaintenanceTab):
 
         if self.cb_estado["values"]:
             self.vars["Estado"].set(self.cb_estado["values"][0])
+        else:
+            self.vars["Estado"].set("")
+
         if self.cb_programa["values"]:
             self.vars["Programa"].set(self.cb_programa["values"][0])
+        else:
+            self.vars["Programa"].set("")
 
     def refresh_grid(self):
         if not self.tree:
             return
-        for it in self.tree.get_children():
-            self.tree.delete(it)
+
+        self._clear_grid()
+
+        if not self.can_access():
+            return
 
         try:
-            # ✅ FIX: endpoint no acepta codigo_usuario en listar
             rows = listar_cursos(self.db_user, self.db_pass)
         except Exception as e:
             handle_exception(self, e, context="Cargar cursos")
@@ -190,7 +239,7 @@ class CursosTab(MaintenanceTab):
         self._autosize_columns()
 
     # -----------------------------
-    # selection
+    # SELECTION
     # -----------------------------
     def _selected_id(self) -> int | None:
         if not self.tree:
@@ -205,8 +254,12 @@ class CursosTab(MaintenanceTab):
             return None
 
     def on_row_select(self, _evt=None):
+        if not self.can_access():
+            return
+
         if not self.tree:
             return
+
         sel = self.tree.selection()
         if not sel:
             return
@@ -219,7 +272,6 @@ class CursosTab(MaintenanceTab):
         if prog_name in self.programa_desc_to_cod:
             self.vars["Programa"].set(prog_name)
         else:
-            # fallback seguro
             if self.cb_programa["values"]:
                 self.vars["Programa"].set(self.cb_programa["values"][0])
             else:
@@ -232,6 +284,10 @@ class CursosTab(MaintenanceTab):
     # CRUD
     # -----------------------------
     def on_nuevo(self):
+        if not self.can_access():
+            self._deny_action("access")
+            return
+
         self.ensure_loaded()
 
         try:
@@ -246,13 +302,22 @@ class CursosTab(MaintenanceTab):
 
         if self.cb_programa["values"]:
             self.vars["Programa"].set(self.cb_programa["values"][0])
+        else:
+            self.vars["Programa"].set("")
+
         if self.cb_estado["values"]:
             self.vars["Estado"].set(self.cb_estado["values"][0])
+        else:
+            self.vars["Estado"].set("")
 
         if self.tree:
             self.tree.selection_remove(self.tree.selection())
 
     def on_guardar(self):
+        if not self.can_create():
+            self._deny_action("create")
+            return
+
         self.ensure_loaded()
 
         id_txt = self.vars["Materia_Cod"].get().strip()
@@ -277,7 +342,6 @@ class CursosTab(MaintenanceTab):
             return
 
         try:
-            # ✅ FIX: no pasar codigo_usuario si endpoint no lo recibe (por ahora)
             crear_curso(
                 self.db_user,
                 self.db_pass,
@@ -296,6 +360,10 @@ class CursosTab(MaintenanceTab):
         show_info(self, "Éxito", "Curso guardado correctamente.")
 
     def on_actualizar(self):
+        if not self.can_update():
+            self._deny_action("update")
+            return
+
         self.ensure_loaded()
 
         materia_cod = self._selected_id()
@@ -337,6 +405,10 @@ class CursosTab(MaintenanceTab):
         show_info(self, "Éxito", "Curso actualizado correctamente.")
 
     def on_eliminar(self):
+        if not self.can_delete():
+            self._deny_action("delete")
+            return
+
         self.ensure_loaded()
 
         materia_cod = self._selected_id()

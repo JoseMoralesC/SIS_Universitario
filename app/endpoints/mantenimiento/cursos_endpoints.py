@@ -1,7 +1,7 @@
 # app/endpoints/cursos_endpoints.py
 from __future__ import annotations
 
-from app.core.db import connect
+from app.core.db import connect_app
 from app.services.mantenimiento.cursos_service import (
     validar_curso_data,
     validar_curso_unicidad,
@@ -19,6 +19,13 @@ from app.repositories.mantenimiento.cursos_repo import (
 
 from app.core.auditoria import Mov, Tab
 from app.repositories.auditoria_repo import insert_auditoria
+
+
+def _get_conn():
+    """
+    Obtiene la conexión técnica de la aplicación.
+    """
+    return connect_app()
 
 
 def _registrar_auditoria(
@@ -43,8 +50,8 @@ def _registrar_auditoria(
         pass
 
 
-def get_lookups(db_user: str, db_pass: str):
-    conn = connect(db_user, db_pass)
+def get_lookups(db_user: str | None = None, db_pass: str | None = None):
+    conn = _get_conn()
     try:
         estados = fetch_estados(conn)
         programas = fetch_programas(conn)
@@ -54,8 +61,8 @@ def get_lookups(db_user: str, db_pass: str):
 
 
 def listar_cursos(
-    db_user: str,
-    db_pass: str,
+    db_user: str | None = None,
+    db_pass: str | None = None,
     codigo_usuario: int | None = None,
 ):
     """
@@ -63,18 +70,19 @@ def listar_cursos(
     - NO incluye estado Inactivo
     - Sí incluye Activo y Suspendido (y cualquier otro excepto Inactivo)
 
+    db_user y db_pass se conservan por compatibilidad temporal.
     codigo_usuario se acepta por consistencia
     (y futuras auditorías de listado).
     """
-    conn = connect(db_user, db_pass)
+    conn = _get_conn()
     try:
         return list_cursos_join_activos(conn)
     finally:
         conn.close()
 
 
-def siguiente_materia_cod(db_user: str, db_pass: str) -> int:
-    conn = connect(db_user, db_pass)
+def siguiente_materia_cod(db_user: str | None = None, db_pass: str | None = None) -> int:
+    conn = _get_conn()
     try:
         return next_materia_cod(conn)
     finally:
@@ -82,8 +90,8 @@ def siguiente_materia_cod(db_user: str, db_pass: str) -> int:
 
 
 def crear_curso(
-    db_user: str,
-    db_pass: str,
+    db_user: str | None,
+    db_pass: str | None,
     materia_cod: int,
     descripcion: str,
     curso_cod: int,
@@ -91,7 +99,7 @@ def crear_curso(
     estado_codigo: int,
     codigo_usuario: int | None = None,
 ) -> bool:
-    conn = connect(db_user, db_pass)
+    conn = _get_conn()
     try:
         data = validar_curso_data(
             descripcion=descripcion,
@@ -128,8 +136,8 @@ def crear_curso(
 
 
 def actualizar_curso(
-    db_user: str,
-    db_pass: str,
+    db_user: str | None,
+    db_pass: str | None,
     materia_cod: int,
     descripcion: str,
     curso_cod: int,
@@ -140,7 +148,7 @@ def actualizar_curso(
     if not materia_cod:
         raise ValidationError("Debe seleccionar un curso para actualizar.")
 
-    conn = connect(db_user, db_pass)
+    conn = _get_conn()
     try:
         materia_cod = int(materia_cod)
 
@@ -177,8 +185,8 @@ def actualizar_curso(
 
 
 def eliminar_curso(
-    db_user: str,
-    db_pass: str,
+    db_user: str | None,
+    db_pass: str | None,
     materia_cod: int,
     codigo_usuario: int | None = None,
 ) -> bool:
@@ -190,7 +198,7 @@ def eliminar_curso(
     if not materia_cod:
         raise ValidationError("Debe seleccionar un curso para eliminar.")
 
-    conn = connect(db_user, db_pass)
+    conn = _get_conn()
     try:
         materia_cod = int(materia_cod)
 

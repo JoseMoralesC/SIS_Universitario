@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.core.db import connect
+from app.core.db import connect_app
 from app.core.exceptions import ValidationError
 from app.core.auditoria import Mov, Tab
 from app.repositories.auditoria_repo import insert_auditoria
@@ -24,6 +24,13 @@ from app.repositories.mantenimiento.becados_repo import (
 )
 
 
+def _get_conn():
+    """
+    Obtiene la conexión técnica de la aplicación.
+    """
+    return connect_app()
+
+
 def _registrar_auditoria(
     conn,
     codigo_usuario: int | None,
@@ -45,8 +52,8 @@ def _registrar_auditoria(
         pass
 
 
-def get_lookups(db_user: str, db_pass: str):
-    conn = connect(db_user, db_pass)
+def get_lookups(db_user: str | None = None, db_pass: str | None = None):
+    conn = _get_conn()
     try:
         estudiantes = fetch_estudiantes_disponibles_lookup(conn)
         becas = fetch_becas(conn)
@@ -59,11 +66,11 @@ def get_lookups(db_user: str, db_pass: str):
 
 
 def listar_becados(
-    db_user: str,
-    db_pass: str,
+    db_user: str | None = None,
+    db_pass: str | None = None,
     codigo_usuario: int | None = None,
 ):
-    conn = connect(db_user, db_pass)
+    conn = _get_conn()
     try:
         return list_becados_join_activos(conn)
     finally:
@@ -71,11 +78,11 @@ def listar_becados(
 
 
 def siguiente_id_becado(
-    db_user: str,
-    db_pass: str,
+    db_user: str | None = None,
+    db_pass: str | None = None,
     codigo_usuario: int | None = None,
 ) -> int:
-    conn = connect(db_user, db_pass)
+    conn = _get_conn()
     try:
         return next_id_becado(conn)
     finally:
@@ -83,14 +90,14 @@ def siguiente_id_becado(
 
 
 def crear_becado(
-    db_user: str,
-    db_pass: str,
+    db_user: str | None,
+    db_pass: str | None,
     carnet: str,
     id_beca: int,
     fecha_aplicacion: str,
     codigo_usuario: int | None = None,
 ) -> bool:
-    conn = connect(db_user, db_pass)
+    conn = _get_conn()
     try:
         data = validar_becado_create_data(
             carnet=carnet,
@@ -130,8 +137,8 @@ def crear_becado(
 
 
 def actualizar_becado(
-    db_user: str,
-    db_pass: str,
+    db_user: str | None,
+    db_pass: str | None,
     id_becado: int,
     carnet: str,
     id_beca: int,
@@ -141,7 +148,7 @@ def actualizar_becado(
     if not id_becado:
         raise ValidationError("Debe seleccionar un becado para actualizar.")
 
-    conn = connect(db_user, db_pass)
+    conn = _get_conn()
     try:
         id_becado = int(id_becado)
 
@@ -187,15 +194,15 @@ def actualizar_becado(
 
 
 def eliminar_becado(
-    db_user: str,
-    db_pass: str,
+    db_user: str | None,
+    db_pass: str | None,
     id_becado: int,
     codigo_usuario: int | None = None,
 ) -> bool:
     if not id_becado:
         raise ValidationError("Debe seleccionar un becado para eliminar.")
 
-    conn = connect(db_user, db_pass)
+    conn = _get_conn()
     try:
         id_becado = int(id_becado)
 

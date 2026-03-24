@@ -28,7 +28,7 @@ class AsignacionTab(MaintenanceTab):
     Trabaja sobre dbo.Curso_Docente.
     """
 
-    def __init__(self, parent, db_user: str, db_pass: str, codigo_usuario: int):
+    def __init__(self, parent, db_user: str | None, db_pass: str | None, codigo_usuario: int | None):
         self.db_user = db_user
         self.db_pass = db_pass
         self.codigo_usuario = codigo_usuario
@@ -41,18 +41,33 @@ class AsignacionTab(MaintenanceTab):
 
         self._loaded = False
 
-        super().__init__(parent, "Asignación")
+        super().__init__(parent, "Asignación", resource_key="asignacion")
         self.reset_view_blank()
 
     # ------------------------------------------------
     # LOAD
     # ------------------------------------------------
     def ensure_loaded(self):
+        if not self.can_access():
+            self._loaded = True
+            self._clear_grid()
+            return
+
         if getattr(self, "_loaded", False):
             return
+
         self._load_lookups()
         self.refresh_grid()
         self._loaded = True
+
+    # ------------------------------------------------
+    # HELPERS
+    # ------------------------------------------------
+    def _clear_grid(self):
+        if not self.tree:
+            return
+        for item in self.tree.get_children():
+            self.tree.delete(item)
 
     # ------------------------------------------------
     # UI
@@ -147,9 +162,7 @@ class AsignacionTab(MaintenanceTab):
         self.vars["Programa"].set("")
         self.vars["Docente"].set("")
 
-        if self.tree:
-            for item in self.tree.get_children():
-                self.tree.delete(item)
+        self._clear_grid()
 
     # ------------------------------------------------
     # HELPERS UI
@@ -161,11 +174,17 @@ class AsignacionTab(MaintenanceTab):
         return f"{int(docente_cod)} - {nombre}"
 
     def _on_programa_change(self, _evt=None):
+        if not self.can_access():
+            return
+
         value = self.vars["Programa"].get().strip()
         curso_cod = self.programa_desc_to_cod.get(value)
         self.vars["Curso_Cod"].set("" if curso_cod is None else str(curso_cod))
 
     def _on_docente_change(self, _evt=None):
+        if not self.can_access():
+            return
+
         value = self.vars["Docente"].get().strip()
         docente_cod = self.docente_desc_to_cod.get(value)
         self.vars["Docente_Cod"].set("" if docente_cod is None else str(docente_cod))
@@ -174,6 +193,24 @@ class AsignacionTab(MaintenanceTab):
     # DATA
     # ------------------------------------------------
     def _load_lookups(self):
+        if not self.can_access():
+            self.programa_desc_to_cod = {}
+            self.programa_cod_to_desc = {}
+            self.docente_desc_to_cod = {}
+            self.docente_cod_to_desc = {}
+
+            try:
+                self.cb_programa["values"] = []
+                self.cb_docente["values"] = []
+            except Exception:
+                pass
+
+            self.vars["Programa"].set("")
+            self.vars["Docente"].set("")
+            self.vars["Curso_Cod"].set("")
+            self.vars["Docente_Cod"].set("")
+            return
+
         try:
             programas, docentes = get_lookups(self.db_user, self.db_pass)
         except Exception as e:
@@ -213,17 +250,25 @@ class AsignacionTab(MaintenanceTab):
         if programa_displays:
             self.vars["Programa"].set(programa_displays[0])
             self._on_programa_change()
+        else:
+            self.vars["Programa"].set("")
+            self.vars["Curso_Cod"].set("")
 
         if docente_displays:
             self.vars["Docente"].set(docente_displays[0])
             self._on_docente_change()
+        else:
+            self.vars["Docente"].set("")
+            self.vars["Docente_Cod"].set("")
 
     def refresh_grid(self):
         if not self.tree:
             return
 
-        for item in self.tree.get_children():
-            self.tree.delete(item)
+        self._clear_grid()
+
+        if not self.can_access():
+            return
 
         try:
             rows = listar_asignaciones(
@@ -289,6 +334,9 @@ class AsignacionTab(MaintenanceTab):
             return None
 
     def on_row_select(self, _evt=None):
+        if not self.can_access():
+            return
+
         if not self.tree:
             return
 
@@ -314,6 +362,10 @@ class AsignacionTab(MaintenanceTab):
     # CRUD
     # ------------------------------------------------
     def on_nuevo(self):
+        if not self.can_access():
+            self._deny_action("access")
+            return
+
         self.ensure_loaded()
 
         if self.cb_programa["values"]:
@@ -334,6 +386,10 @@ class AsignacionTab(MaintenanceTab):
             self.tree.selection_remove(self.tree.selection())
 
     def on_guardar(self):
+        if not self.can_create():
+            self._deny_action("create")
+            return
+
         self.ensure_loaded()
 
         programa_desc = self.vars["Programa"].get().strip()
@@ -367,6 +423,10 @@ class AsignacionTab(MaintenanceTab):
         show_info(self, "Éxito", "Asignación guardada correctamente.")
 
     def on_actualizar(self):
+        if not self.can_update():
+            self._deny_action("update")
+            return
+
         self.ensure_loaded()
 
         selected = self._selected_pair()
@@ -407,6 +467,10 @@ class AsignacionTab(MaintenanceTab):
         show_info(self, "Éxito", "Asignación actualizada correctamente.")
 
     def on_eliminar(self):
+        if not self.can_delete():
+            self._deny_action("delete")
+            return
+
         self.ensure_loaded()
 
         selected = self._selected_pair()

@@ -3,6 +3,14 @@ from __future__ import annotations
 import tkinter as tk
 from tkinter import ttk, messagebox
 
+from app.core.session import (
+    get_session,
+    get_nombre_usuario,
+    get_rol_codigo,
+    get_rol_nombre,
+    has_permission,
+    is_admin,
+)
 from app.ui.views.mantenimientos_view import MantenimientosView
 
 
@@ -16,8 +24,8 @@ class MainMenuView(ttk.Frame):
         self,
         parent,
         usuario: str | None,
-        db_user: str,
-        db_pass: str,
+        db_user: str | None,
+        db_pass: str | None,
         codigo_usuario: int,
         on_exit_request=None
     ):
@@ -27,7 +35,12 @@ class MainMenuView(ttk.Frame):
         self.db_user = db_user
         self.db_pass = db_pass
         self.codigo_usuario = codigo_usuario
-        self.on_exit_request = on_exit_request  # callback para salir/volver a welcome
+        self.on_exit_request = on_exit_request
+
+        self.session_data = get_session() or {}
+        self.nombre_usuario = get_nombre_usuario() or self.usuario or ""
+        self.codigo_rol = (get_rol_codigo() or "").strip().upper()
+        self.nombre_rol = get_rol_nombre() or self.codigo_rol or "SIN ROL"
 
         # Matrículas (lazy-load)
         self._matriculas_loaded = False
@@ -41,8 +54,57 @@ class MainMenuView(ttk.Frame):
         self._asistencias_loaded = False
         self._asistencias_view = None
 
+        self.menu_buttons: dict[str, tk.Button] = {}
+        self._menu_definitions: dict[str, dict] = {}
+
         self._build_ui()
 
+    # =====================================================
+    # Permisos / acceso
+    # =====================================================
+    def _can_access_mantenimientos(self) -> bool:
+        if is_admin():
+            return True
+        return has_permission("MANTENIMIENTOS.ACCESO")
+
+    def _can_access_matriculas(self) -> bool:
+        if is_admin():
+            return True
+        return has_permission("MATRICULAS.ACCESO")
+
+    def _can_access_matricula_materias(self) -> bool:
+        if is_admin():
+            return True
+        return has_permission("MATRICULA_MATERIAS.ACCESO")
+
+    def _can_access_asistencias(self) -> bool:
+        if is_admin():
+            return True
+        return has_permission("ASISTENCIAS.ACCESO")
+
+    def _has_access(self, key: str) -> bool:
+        access_map = {
+            "mantenimiento": self._can_access_mantenimientos(),
+            "asignacion_docentes": self._can_access_mantenimientos(),
+            "matriculas": self._can_access_matriculas(),
+            "matricula_materias": self._can_access_matricula_materias(),
+            "asistencias": self._can_access_asistencias(),
+        }
+        return access_map.get(key, False)
+
+    def _deny_access(self, key: str) -> None:
+        mensajes = {
+            "mantenimiento": "Tu rol actual no tiene acceso al módulo de Mantenimientos.",
+            "asignacion_docentes": "Tu rol actual no tiene acceso a Asignación de Docentes.",
+            "matriculas": "Tu rol actual no tiene acceso al módulo de Matrículas.",
+            "matricula_materias": "Tu rol actual no tiene acceso al módulo de Matrícula por Materias.",
+            "asistencias": "Tu rol actual no tiene acceso al módulo de Asistencias.",
+        }
+        messagebox.showwarning("Acceso restringido", mensajes.get(key, "No tienes permisos para acceder a este módulo."))
+
+    # =====================================================
+    # UI
+    # =====================================================
     def _build_ui(self):
         self.columnconfigure(1, weight=1)
         self.rowconfigure(0, weight=1)
@@ -70,7 +132,10 @@ class MainMenuView(ttk.Frame):
         sb_inner.bind("<Configure>", _sb_on_configure)
 
         def _sb_on_mousewheel(event):
-            sb_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+            try:
+                sb_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+            except Exception:
+                pass
 
         sb_canvas.bind_all("<MouseWheel>", _sb_on_mousewheel)
 
@@ -85,35 +150,61 @@ class MainMenuView(ttk.Frame):
             sb_inner,
             text=user_txt,
             style="SidebarUser.TLabel"
-        ).grid(row=1, column=0, sticky="w", padx=16, pady=(0, 16))
+        ).grid(row=1, column=0, sticky="w", padx=16, pady=(0, 4))
 
-        self.menu_buttons: dict[str, tk.Button] = {}
+        nombre_txt = f"Nombre: {self.nombre_usuario}" if self.nombre_usuario else "Nombre: -"
+        ttk.Label(
+            sb_inner,
+            text=nombre_txt,
+            style="SidebarUser.TLabel"
+        ).grid(row=2, column=0, sticky="w", padx=16, pady=(0, 4))
 
-        def add_menu_btn(text: str, key: str, row: int):
+        rol_txt = f"Rol: {self.nombre_rol}" if self.nombre_rol else "Rol: SIN ROL"
+        ttk.Label(
+            sb_inner,
+            text=rol_txt,
+            style="SidebarUser.TLabel"
+        ).grid(row=3, column=0, sticky="w", padx=16, pady=(0, 16))
+
+        def add_menu_btn(text: str, key: str, row: int, enabled: bool = True):
             btn = tk.Button(
                 sb_inner,
                 text=text,
-                bg="#223142",
-                fg="white",
-                activebackground="#2f445d",
+                bg="#223142" if enabled else "#3d4852",
+                fg="white" if enabled else "#c6cbd1",
+                activebackground="#2f445d" if enabled else "#3d4852",
                 activeforeground="white",
                 relief="groove",
                 bd=2,
                 font=("Segoe UI", 11, "bold"),
-                cursor="hand2",
+                cursor="hand2" if enabled else "arrow",
                 padx=8,
                 pady=10,
+                state="normal" if enabled else "disabled",
                 command=lambda: self.on_menu_click(key),
             )
             btn.grid(row=row, column=0, sticky="ew", padx=14, pady=6)
             self.menu_buttons[key] = btn
+            self._menu_definitions[key] = {
+                "text": text,
+                "enabled": enabled,
+            }
 
-        add_menu_btn("Mantenimiento", "mantenimiento", 2)
-        add_menu_btn("Matrículas", "matriculas", 3)
-        add_menu_btn("Matrícula por Materias", "matricula_materias", 4)
-        add_menu_btn("Asistencias", "asistencias", 5)
-        add_menu_btn("Asignación Docentes", "asignacion_docentes", 6)
-
+        add_menu_btn("Mantenimiento", "mantenimiento", 4, self._can_access_mantenimientos())
+        add_menu_btn("Matrículas", "matriculas", 5, self._can_access_matriculas())
+        add_menu_btn(
+            "Matrícula por Materias",
+            "matricula_materias",
+            6,
+            self._can_access_matricula_materias(),
+        )
+        add_menu_btn("Asistencias", "asistencias", 7, self._can_access_asistencias())
+        add_menu_btn(
+            "Asignación Docentes",
+            "asignacion_docentes",
+            8,
+            self._can_access_mantenimientos(),
+        )
 
         btn_salir = tk.Button(
             sb_inner,
@@ -130,9 +221,8 @@ class MainMenuView(ttk.Frame):
             pady=10,
             command=self.on_exit,
         )
-        btn_salir.grid(row=10, column=0, sticky="ew", padx=14, pady=(18, 14))
+        btn_salir.grid(row=20, column=0, sticky="ew", padx=14, pady=(18, 14))
 
-        # Ajuste ancho sidebar
         self.update_idletasks()
         req_w = sb_inner.winfo_reqwidth()
         target_w = req_w + 8
@@ -223,7 +313,21 @@ class MainMenuView(ttk.Frame):
         )
         self.placeholder_label.grid(row=0, column=0, sticky="nsew")
 
-        self.on_menu_click("mantenimiento")
+        default_key = self._get_default_menu_key()
+        self.on_menu_click(default_key)
+
+    def _get_default_menu_key(self) -> str:
+        preferred_order = [
+            "mantenimiento",
+            "matriculas",
+            "matricula_materias",
+            "asistencias",
+            "asignacion_docentes",
+        ]
+        for key in preferred_order:
+            if self._has_access(key):
+                return key
+        return "placeholder"
 
     def _hide_all_views(self):
         self.view_mantenimientos.grid_remove()
@@ -339,8 +443,16 @@ class MainMenuView(ttk.Frame):
             )
 
     def on_menu_click(self, key: str):
+        if key != "placeholder" and not self._has_access(key):
+            self._deny_access(key)
+            return
+
         for k, b in self.menu_buttons.items():
-            b.configure(bg="#2f445d" if k == key else "#223142")
+            enabled = self._menu_definitions.get(k, {}).get("enabled", True)
+            if not enabled:
+                b.configure(bg="#3d4852", fg="#c6cbd1")
+            else:
+                b.configure(bg="#2f445d" if k == key else "#223142", fg="white")
 
         self._hide_all_views()
 
@@ -366,13 +478,21 @@ class MainMenuView(ttk.Frame):
 
         else:
             self.view_placeholder.grid()
-            self.placeholder_label.configure(
-                text=(
-                    f"Módulo '{key}' en construcción.\n"
-                    "Para Entregable #3, el foco es: Matrículas, Asistencias y Reportes.\n"
-                    "Mantenimientos ya está completo desde el Entregable #2 y versionado como 3.0"
+            if not any(self._has_access(k) for k in self.menu_buttons.keys()):
+                self.placeholder_label.configure(
+                    text=(
+                        "Tu usuario no tiene módulos habilitados actualmente.\n"
+                        "Consulta con el administrador del sistema."
+                    )
                 )
-            )
+            else:
+                self.placeholder_label.configure(
+                    text=(
+                        f"Módulo '{key}' en construcción.\n"
+                        "Para Entregable #3, el foco es: Matrículas, Asistencias y Reportes.\n"
+                        "Mantenimientos ya está completo desde el Entregable #2 y versionado como 3.0"
+                    )
+                )
 
     def on_exit(self):
         salir_todo = messagebox.askyesno(

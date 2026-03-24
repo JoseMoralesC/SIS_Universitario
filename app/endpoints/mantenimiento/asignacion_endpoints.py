@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.core.db import connect
+from app.core.db import connect_app
 from app.core.exceptions import ValidationError
 from app.core.auditoria import Mov, Tab, compose_named_row_id
 from app.repositories.auditoria_repo import insert_auditoria
@@ -19,6 +19,13 @@ from app.services.mantenimiento.asignacion_service import (
     validar_asignacion_creacion,
     validar_asignacion_actualizacion,
 )
+
+
+def _get_conn():
+    """
+    Obtiene la conexión técnica de la aplicación.
+    """
+    return connect_app()
 
 
 def _build_row_id(curso_cod: int, docente_cod: int) -> str:
@@ -53,8 +60,8 @@ def _registrar_auditoria(
         pass
 
 
-def get_lookups(db_user: str, db_pass: str):
-    conn = connect(db_user, db_pass)
+def get_lookups(db_user: str | None = None, db_pass: str | None = None):
+    conn = _get_conn()
     try:
         programas = fetch_programas_activos(conn)
         docentes = fetch_docentes_activos(conn)
@@ -64,11 +71,11 @@ def get_lookups(db_user: str, db_pass: str):
 
 
 def listar_asignaciones(
-    db_user: str,
-    db_pass: str,
+    db_user: str | None = None,
+    db_pass: str | None = None,
     codigo_usuario: int | None = None,
 ):
-    conn = connect(db_user, db_pass)
+    conn = _get_conn()
     try:
         return list_asignaciones(conn)
     finally:
@@ -76,13 +83,13 @@ def listar_asignaciones(
 
 
 def crear_asignacion(
-    db_user: str,
-    db_pass: str,
+    db_user: str | None,
+    db_pass: str | None,
     curso_cod: int,
     docente_cod: int,
     codigo_usuario: int | None = None,
 ) -> bool:
-    conn = connect(db_user, db_pass)
+    conn = _get_conn()
     try:
         data = validar_asignacion_data(
             curso_cod=curso_cod,
@@ -109,8 +116,8 @@ def crear_asignacion(
 
 
 def actualizar_asignacion(
-    db_user: str,
-    db_pass: str,
+    db_user: str | None,
+    db_pass: str | None,
     curso_cod_original: int,
     docente_cod_original: int,
     curso_cod_nuevo: int,
@@ -120,7 +127,7 @@ def actualizar_asignacion(
     if not curso_cod_original or not docente_cod_original:
         raise ValidationError("Debe seleccionar una asignación para actualizar.")
 
-    conn = connect(db_user, db_pass)
+    conn = _get_conn()
     try:
         data_nueva = validar_asignacion_data(
             curso_cod=curso_cod_nuevo,
@@ -159,8 +166,8 @@ def actualizar_asignacion(
 
 
 def eliminar_asignacion(
-    db_user: str,
-    db_pass: str,
+    db_user: str | None,
+    db_pass: str | None,
     curso_cod: int,
     docente_cod: int,
     codigo_usuario: int | None = None,
@@ -168,7 +175,7 @@ def eliminar_asignacion(
     if not curso_cod or not docente_cod:
         raise ValidationError("Debe seleccionar una asignación para eliminar.")
 
-    conn = connect(db_user, db_pass)
+    conn = _get_conn()
     try:
         curso_cod = int(curso_cod)
         docente_cod = int(docente_cod)

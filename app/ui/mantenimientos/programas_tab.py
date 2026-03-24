@@ -43,15 +43,21 @@ class ProgramasTab(MaintenanceTab):
 
         self._loaded = False
 
-        super().__init__(parent, "Programas")
+        super().__init__(parent, "Programas", resource_key="programas")
         self.reset_view_blank()
 
     # ------------------------------------------------
     # LOAD
     # ------------------------------------------------
     def ensure_loaded(self):
+        if not self.can_access():
+            self._loaded = True
+            self._clear_grid()
+            return
+
         if getattr(self, "_loaded", False):
             return
+
         self._load_lookups()
         self.refresh_grid()
         self._loaded = True
@@ -59,6 +65,12 @@ class ProgramasTab(MaintenanceTab):
     # ------------------------------------------------
     # Helpers
     # ------------------------------------------------
+    def _clear_grid(self):
+        if not self.tree:
+            return
+        for it in self.tree.get_children():
+            self.tree.delete(it)
+
     def _get_jornadas_ids(self) -> list[int]:
         ids: list[int] = []
         if self.vars["J_Mañana"].get():
@@ -201,11 +213,19 @@ class ProgramasTab(MaintenanceTab):
             pass
         self.vars["Estado"].set("")
 
-        if self.tree:
-            for it in self.tree.get_children():
-                self.tree.delete(it)
+        self._clear_grid()
 
     def _load_lookups(self):
+        if not self.can_access():
+            self.estado_desc_to_cod = {}
+            self.estado_cod_to_desc = {}
+            try:
+                self.cb_estado["values"] = []
+            except Exception:
+                pass
+            self.vars["Estado"].set("")
+            return
+
         try:
             estados = get_lookups(self.db_user, self.db_pass)
         except Exception as e:
@@ -218,13 +238,17 @@ class ProgramasTab(MaintenanceTab):
         self.cb_estado["values"] = list(self.estado_desc_to_cod.keys())
         if self.cb_estado["values"]:
             self.vars["Estado"].set(self.cb_estado["values"][0])
+        else:
+            self.vars["Estado"].set("")
 
     def refresh_grid(self):
         if not self.tree:
             return
 
-        for it in self.tree.get_children():
-            self.tree.delete(it)
+        self._clear_grid()
+
+        if not self.can_access():
+            return
 
         try:
             rows = listar_programas(self.db_user, self.db_pass, codigo_usuario=self.codigo_usuario)
@@ -240,6 +264,9 @@ class ProgramasTab(MaintenanceTab):
     # SELECTION
     # ------------------------------------------------
     def _selected_id(self) -> int | None:
+        if not self.tree:
+            return None
+
         sel = self.tree.selection()
         if not sel:
             return None
@@ -250,6 +277,12 @@ class ProgramasTab(MaintenanceTab):
             return None
 
     def on_row_select(self, _evt=None):
+        if not self.can_access():
+            return
+
+        if not self.tree:
+            return
+
         sel = self.tree.selection()
         if not sel:
             return
@@ -279,7 +312,12 @@ class ProgramasTab(MaintenanceTab):
     # CRUD
     # ------------------------------------------------
     def on_nuevo(self):
+        if not self.can_access():
+            self._deny_action("access")
+            return
+
         self.ensure_loaded()
+
         try:
             new_id = siguiente_curso_cod(self.db_user, self.db_pass, codigo_usuario=self.codigo_usuario)
             self.vars["Curso_Cod"].set(str(new_id))
@@ -294,10 +332,20 @@ class ProgramasTab(MaintenanceTab):
 
         if self.cb_estado["values"]:
             self.vars["Estado"].set(self.cb_estado["values"][0])
+        else:
+            self.vars["Estado"].set("")
 
-        self.tree.selection_remove(self.tree.selection())
+        try:
+            if self.tree:
+                self.tree.selection_remove(self.tree.selection())
+        except Exception:
+            pass
 
     def on_guardar(self):
+        if not self.can_create():
+            self._deny_action("create")
+            return
+
         self.ensure_loaded()
 
         id_txt = self.vars["Curso_Cod"].get().strip()
@@ -338,7 +386,12 @@ class ProgramasTab(MaintenanceTab):
         show_info(self, "Éxito", "Programa guardado correctamente.")
 
     def on_actualizar(self):
+        if not self.can_update():
+            self._deny_action("update")
+            return
+
         self.ensure_loaded()
+
         curso_cod = self._selected_id()
         if not curso_cod:
             show_warning(self, "Actualizar", "Seleccione un programa del listado para actualizar.")
@@ -375,7 +428,12 @@ class ProgramasTab(MaintenanceTab):
         show_info(self, "Éxito", "Programa actualizado correctamente.")
 
     def on_eliminar(self):
+        if not self.can_delete():
+            self._deny_action("delete")
+            return
+
         self.ensure_loaded()
+
         curso_cod = self._selected_id()
         if not curso_cod:
             show_warning(self, "Eliminar", "Seleccione un programa del listado para eliminar.")

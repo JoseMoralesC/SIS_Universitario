@@ -1,17 +1,26 @@
+# app/ui/mantenimientos/becas_tab.py
 from __future__ import annotations
 
 import tkinter as tk
+import tkinter.font as tkfont
 from tkinter import ttk
 
 from app.ui.mantenimientos.base_tab import MaintenanceTab
 from app.endpoints.mantenimiento.becas_endpoints import (
+    get_lookups,
     listar_becas,
-    siguiente_id_beca,
+    siguiente_beca_id,
     crear_beca,
     actualizar_beca,
     eliminar_beca,
 )
-from app.core.error_handler import handle_exception, show_info, show_warning
+
+from app.core.error_handler import (
+    handle_exception,
+    show_info,
+    show_warning,
+)
+
 from app.ui.components.confirm_dialog import show_confirm
 
 
@@ -19,225 +28,433 @@ class BecasTab(MaintenanceTab):
     def __init__(self, parent, db_user: str, db_pass: str, codigo_usuario: int):
         self.db_user = db_user
         self.db_pass = db_pass
-        self._loaded = False
         self.codigo_usuario = codigo_usuario
 
-        super().__init__(parent, "Becas")
+        self.estado_desc_to_cod: dict[str, int] = {}
+        self.estado_cod_to_desc: dict[int, str] = {}
+
+        self._loaded = False
+
+        super().__init__(parent, "Becas", resource_key="becas")
         self.reset_view_blank()
 
+    # ------------------------------------------------
+    # LOAD
+    # ------------------------------------------------
     def ensure_loaded(self):
+        if not self.can_access():
+            self._loaded = True
+            self._clear_grid()
+            return
+
         if getattr(self, "_loaded", False):
             return
+
+        self._load_lookups()
         self.refresh_grid()
         self._loaded = True
 
-    # -----------------------------
-    # Helpers
-    # -----------------------------
-    def _ensure_vars(self):
-        if not isinstance(getattr(self, "vars", None), dict):
-            self.vars = {}
-        self.vars.setdefault("id_beca", tk.StringVar())
-        self.vars.setdefault("nombre_beca", tk.StringVar())
-        self.vars.setdefault("porcentaje_descuento", tk.StringVar())
+    # ------------------------------------------------
+    # HELPERS
+    # ------------------------------------------------
+    def _clear_grid(self):
+        if not self.tree:
+            return
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+
+    def _selected_id(self) -> int | None:
+        if not self.tree:
+            return None
+        sel = self.tree.selection()
+        if not sel:
+            return None
+        values = self.tree.item(sel[0], "values")
+        try:
+            return int(values[0])
+        except Exception:
+            return None
 
     # -----------------------------
     # UI
     # -----------------------------
-    def reset_view_blank(self):
-        self._ensure_vars()
-        self.vars["nombre_beca"].set("")
-        self.vars["porcentaje_descuento"].set("")
-        self._load_next_id()
-        self.refresh_grid()
-        try:
-            if self.tree is not None:
-                self.tree.selection_remove(self.tree.selection())
-        except Exception:
-            pass
-
     def _build_form(self, parent: ttk.LabelFrame):
-        self._ensure_vars()
+        self.vars["Id_Beca"] = tk.StringVar(value="")
+        self.vars["Nombre_Beca"] = tk.StringVar(value="")
+        self.vars["Descripcion"] = tk.StringVar(value="")
+        self.vars["Porcentaje_Descuento"] = tk.StringVar(value="")
+        self.vars["Estado"] = tk.StringVar(value="")
 
-        lbl_font = ("Segoe UI", 10)
-        entry_font = ("Segoe UI", 10)
+        r = 0
 
-        title = ttk.Label(parent, text="Gestión de Tipos de Beca", font=("Segoe UI", 12, "bold"))
-        title.grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 8))
+        def add_entry(label: str, key: str, readonly: bool = False):
+            nonlocal r
+            ttk.Label(parent, text=f"{label}:").grid(row=r, column=0, sticky="w", pady=6)
+            ent = ttk.Entry(parent, textvariable=self.vars[key])
+            ent.grid(row=r, column=1, sticky="ew", padx=(10, 0), pady=6)
+            if readonly:
+                ent.state(["readonly"])
+            r += 1
+            return ent
 
-        ttk.Label(parent, text="ID Beca:", font=lbl_font).grid(row=1, column=0, sticky="w", pady=4)
-        self.entry_id = ttk.Entry(
+        add_entry("ID", "Id_Beca", readonly=True)
+        add_entry("Nombre", "Nombre_Beca")
+        add_entry("Descripción", "Descripcion")
+        add_entry("% Descuento", "Porcentaje_Descuento")
+
+        ttk.Label(parent, text="Estado:").grid(row=r, column=0, sticky="w", pady=6)
+        self.cb_estado = ttk.Combobox(
             parent,
-            textvariable=self.vars["id_beca"],
-            font=entry_font,
+            textvariable=self.vars["Estado"],
             state="readonly",
-            width=18,
+            width=26,
         )
-        self.entry_id.grid(row=1, column=1, sticky="ew", pady=4)
-
-        ttk.Label(parent, text="Nombre Beca:", font=lbl_font).grid(row=2, column=0, sticky="w", pady=4)
-        self.entry_nombre = ttk.Entry(parent, textvariable=self.vars["nombre_beca"], font=entry_font)
-        self.entry_nombre.grid(row=2, column=1, sticky="ew", pady=4)
-
-        ttk.Label(parent, text="% Descuento:", font=lbl_font).grid(row=3, column=0, sticky="w", pady=4)
-        self.entry_pct = ttk.Entry(parent, textvariable=self.vars["porcentaje_descuento"], font=entry_font, width=18)
-        self.entry_pct.grid(row=3, column=1, sticky="ew", pady=4)
-
-        parent.columnconfigure(1, weight=1)
+        self.cb_estado.grid(row=r, column=1, sticky="ew", padx=(10, 0), pady=6)
+        r += 1
 
     def _build_grid(self, parent: ttk.LabelFrame):
-        self._ensure_vars()
+        parent.rowconfigure(0, weight=1)
+        parent.columnconfigure(0, weight=1)
 
-        cols = ("id_beca", "nombre_beca", "porcentaje_descuento")
-        self.tree = ttk.Treeview(parent, columns=cols, show="headings", height=18)
+        cols = ("ID", "Nombre", "Descripción", "Porcentaje", "Estado")
+        self.tree = ttk.Treeview(parent, columns=cols, show="headings")
 
-        self.tree.heading("id_beca", text="ID")
-        self.tree.heading("nombre_beca", text="Nombre")
-        self.tree.heading("porcentaje_descuento", text="%")
+        base_widths = {
+            "ID": 60,
+            "Nombre": 180,
+            "Descripción": 260,
+            "Porcentaje": 110,
+            "Estado": 100,
+        }
 
-        self.tree.column("id_beca", width=90, anchor="center")
-        self.tree.column("nombre_beca", width=280, anchor="w")
-        self.tree.column("porcentaje_descuento", width=90, anchor="center")
+        for c in cols:
+            self.tree.heading(c, text=c)
+            self.tree.column(c, width=base_widths.get(c, 140), anchor="w", stretch=True)
 
-        self.tree.pack(fill="both", expand=True)
-        self.tree.bind("<<TreeviewSelect>>", self._on_row_selected)
+        vsb = ttk.Scrollbar(parent, orient="vertical", command=self.tree.yview)
+        hsb = ttk.Scrollbar(parent, orient="horizontal", command=self.tree.xview)
+        self.tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
 
-        self.refresh_grid()
+        self.tree.grid(row=0, column=0, sticky="nsew")
+        vsb.grid(row=0, column=1, sticky="ns")
+        hsb.grid(row=1, column=0, sticky="ew")
 
-    # -----------------------------
-    # Data
-    # -----------------------------
-    def refresh_grid(self):
-        try:
-            if self.tree is None:
-                return
+        self.tree.bind("<<TreeviewSelect>>", self.on_row_select)
 
-            rows = listar_becas(self.db_user, self.db_pass)
+    def _autosize_columns(self):
+        if not self.tree:
+            return
 
+        font = tkfont.nametofont("TkDefaultFont")
+        for col in self.tree["columns"]:
+            max_w = font.measure(col) + 20
             for item in self.tree.get_children():
-                self.tree.delete(item)
+                v = self.tree.set(item, col)
+                w = font.measure(str(v)) + 20
+                if w > max_w:
+                    max_w = w
 
-            for r in rows:
-                if isinstance(r, dict):
-                    id_beca = r.get("id_beca")
-                    nombre = r.get("nombre_beca")
-                    pct = r.get("porcentaje_descuento")
-                else:
-                    id_beca, nombre, pct = r[0], r[1], r[2]
+            if col == "ID":
+                max_w = min(max_w, 70)
+            elif col in ("Porcentaje", "Estado"):
+                max_w = min(max_w, 130)
+            else:
+                max_w = min(max_w, 420)
 
-                self.tree.insert("", "end", values=(id_beca, nombre, pct))
+            self.tree.column(col, width=max_w)
 
-        except Exception as e:
-            handle_exception(self, e)
+    # -----------------------------
+    # blank/reset + data
+    # -----------------------------
+    def reset_view_blank(self):
+        self.vars["Id_Beca"].set("")
+        self.vars["Nombre_Beca"].set("")
+        self.vars["Descripcion"].set("")
+        self.vars["Porcentaje_Descuento"].set("")
 
-    def _load_next_id(self):
         try:
-            self._ensure_vars()
-            next_id = siguiente_id_beca(self.db_user, self.db_pass)
-            self.vars["id_beca"].set(str(next_id))
-        except Exception as e:
-            handle_exception(self, e)
+            self.cb_estado["values"] = []
+        except Exception:
+            pass
+        self.vars["Estado"].set("")
 
-    def _on_row_selected(self, _evt=None):
+        self._clear_grid()
+
+    def _load_lookups(self):
+        if not self.can_access():
+            self.estado_desc_to_cod = {}
+            self.estado_cod_to_desc = {}
+
+            try:
+                self.cb_estado["values"] = []
+            except Exception:
+                pass
+
+            self.vars["Estado"].set("")
+            return
+
         try:
-            self._ensure_vars()
-            if self.tree is None:
-                return
-            sel = self.tree.selection()
-            if not sel:
-                return
-            vals = self.tree.item(sel[0], "values")
-            if not vals:
-                return
-
-            self.vars["id_beca"].set(str(vals[0]))
-            self.vars["nombre_beca"].set(str(vals[1]))
-            self.vars["porcentaje_descuento"].set(str(vals[2]))
+            estados = get_lookups(self.db_user, self.db_pass)
         except Exception as e:
-            handle_exception(self, e)
+            handle_exception(self, e, context="Cargar estados (Becas)")
+            estados = []
+
+        self.estado_desc_to_cod = {desc: cod for cod, desc in estados}
+        self.estado_cod_to_desc = {cod: desc for cod, desc in estados}
+
+        self.cb_estado["values"] = list(self.estado_desc_to_cod.keys())
+        if self.cb_estado["values"]:
+            self.vars["Estado"].set(self.cb_estado["values"][0])
+        else:
+            self.vars["Estado"].set("")
+
+    def refresh_grid(self):
+        if not self.tree:
+            return
+
+        self._clear_grid()
+
+        if not self.can_access():
+            return
+
+        try:
+            rows = listar_becas(self.db_user, self.db_pass, codigo_usuario=self.codigo_usuario)
+        except TypeError:
+            # compatibilidad con endpoint antiguo si aún no recibe codigo_usuario
+            try:
+                rows = listar_becas(self.db_user, self.db_pass)
+            except Exception as e:
+                handle_exception(self, e, context="Cargar becas")
+                return
+        except Exception as e:
+            handle_exception(self, e, context="Cargar becas")
+            return
+
+        for r in rows:
+            self.tree.insert("", "end", values=(r[0], r[1], r[2], r[3], r[4]))
+
+        self._autosize_columns()
+
+    # -----------------------------
+    # selection
+    # -----------------------------
+    def on_row_select(self, _evt=None):
+        if not self.can_access():
+            return
+
+        if not self.tree:
+            return
+
+        sel = self.tree.selection()
+        if not sel:
+            return
+
+        v = self.tree.item(sel[0], "values")
+        self.vars["Id_Beca"].set(str(v[0]))
+        self.vars["Nombre_Beca"].set(str(v[1]))
+        self.vars["Descripcion"].set(str(v[2]))
+        self.vars["Porcentaje_Descuento"].set(str(v[3]))
+        self.vars["Estado"].set(str(v[4]))
 
     # -----------------------------
     # CRUD
     # -----------------------------
     def on_nuevo(self):
-        self.reset_view_blank()
+        if not self.can_access():
+            self._deny_action("access")
+            return
+
+        self.ensure_loaded()
+
+        try:
+            try:
+                new_id = siguiente_beca_id(
+                    self.db_user,
+                    self.db_pass,
+                    codigo_usuario=self.codigo_usuario,
+                )
+            except TypeError:
+                # compatibilidad con endpoint antiguo
+                new_id = siguiente_beca_id(self.db_user, self.db_pass)
+
+            self.vars["Id_Beca"].set(str(new_id))
+        except Exception as e:
+            handle_exception(self, e, context="Generar ID (Becas)")
+            self.vars["Id_Beca"].set("")
+
+        self.vars["Nombre_Beca"].set("")
+        self.vars["Descripcion"].set("")
+        self.vars["Porcentaje_Descuento"].set("")
+
+        if self.cb_estado["values"]:
+            self.vars["Estado"].set(self.cb_estado["values"][0])
+        else:
+            self.vars["Estado"].set("")
+
+        if self.tree:
+            self.tree.selection_remove(self.tree.selection())
 
     def on_guardar(self):
+        if not self.can_create():
+            self._deny_action("create")
+            return
+
+        self.ensure_loaded()
+
+        id_txt = self.vars["Id_Beca"].get().strip()
+        if not id_txt.isdigit():
+            show_warning(self, "Validación", "Debe presionar 'Nuevo' para generar el ID antes de guardar.")
+            return
+
+        nombre = self.vars["Nombre_Beca"].get().strip()
+        descripcion = self.vars["Descripcion"].get().strip()
+        porcentaje_txt = self.vars["Porcentaje_Descuento"].get().strip()
+        estado_desc = self.vars["Estado"].get().strip()
+
+        if not nombre:
+            show_warning(self, "Validación", "El nombre de la beca es requerido.")
+            return
+
+        if not porcentaje_txt:
+            show_warning(self, "Validación", "El porcentaje de descuento es requerido.")
+            return
+
+        if estado_desc not in self.estado_desc_to_cod:
+            show_warning(self, "Validación", "Estado inválido.")
+            return
+
         try:
-            self._ensure_vars()
-            nombre = (self.vars["nombre_beca"].get() or "").strip()
-            pct_txt = (self.vars["porcentaje_descuento"].get() or "").strip()
+            porcentaje = int(porcentaje_txt)
+        except ValueError:
+            show_warning(self, "Validación", "El porcentaje de descuento debe ser un número entero.")
+            return
 
-            if not nombre:
-                show_warning(self, "Validación", "Debe ingresar el nombre de la beca.")
-                return
-
-            if not pct_txt.isdigit():
-                show_warning(self, "Validación", "El porcentaje debe ser un número entero.")
-                return
-
-            pct = int(pct_txt)
-            if pct < 0 or pct > 100:
-                show_warning(self, "Validación", "El porcentaje debe estar entre 0 y 100.")
-                return
-
-            # ✅ FIX: endpoint no recibe codigo_usuario (por ahora)
-            ok = crear_beca(self.db_user, self.db_pass, nombre, str(pct))
-            if ok:
-                show_info(self, "Éxito", "Beca creada correctamente.")
-                self.reset_view_blank()
+        try:
+            try:
+                crear_beca(
+                    self.db_user,
+                    self.db_pass,
+                    id_beca=int(id_txt),
+                    nombre_beca=nombre,
+                    descripcion=descripcion,
+                    porcentaje_descuento=porcentaje,
+                    estado_codigo=self.estado_desc_to_cod[estado_desc],
+                    codigo_usuario=self.codigo_usuario,
+                )
+            except TypeError:
+                # compatibilidad con endpoint antiguo
+                crear_beca(
+                    self.db_user,
+                    self.db_pass,
+                    id_beca=int(id_txt),
+                    nombre_beca=nombre,
+                    descripcion=descripcion,
+                    porcentaje_descuento=porcentaje,
+                    estado_codigo=self.estado_desc_to_cod[estado_desc],
+                )
         except Exception as e:
-            handle_exception(self, e)
+            handle_exception(self, e, context="Guardar beca")
+            return
+
+        self.refresh_grid()
+        self.on_nuevo()
+        show_info(self, "Éxito", "Beca guardada correctamente.")
 
     def on_actualizar(self):
+        if not self.can_update():
+            self._deny_action("update")
+            return
+
+        self.ensure_loaded()
+
+        id_beca = self._selected_id()
+        if not id_beca:
+            show_warning(self, "Actualizar", "Seleccione una beca del listado para actualizar.")
+            return
+
+        nombre = self.vars["Nombre_Beca"].get().strip()
+        descripcion = self.vars["Descripcion"].get().strip()
+        porcentaje_txt = self.vars["Porcentaje_Descuento"].get().strip()
+        estado_desc = self.vars["Estado"].get().strip()
+
+        if not nombre:
+            show_warning(self, "Validación", "El nombre de la beca es requerido.")
+            return
+
+        if not porcentaje_txt:
+            show_warning(self, "Validación", "El porcentaje de descuento es requerido.")
+            return
+
+        if estado_desc not in self.estado_desc_to_cod:
+            show_warning(self, "Validación", "Estado inválido.")
+            return
+
         try:
-            self._ensure_vars()
-            id_txt = (self.vars["id_beca"].get() or "").strip()
-            if not id_txt.isdigit():
-                show_warning(self, "Validación", "ID inválido.")
-                return
-            id_beca = int(id_txt)
+            porcentaje = int(porcentaje_txt)
+        except ValueError:
+            show_warning(self, "Validación", "El porcentaje de descuento debe ser un número entero.")
+            return
 
-            nombre = (self.vars["nombre_beca"].get() or "").strip()
-            pct_txt = (self.vars["porcentaje_descuento"].get() or "").strip()
-
-            if not nombre:
-                show_warning(self, "Validación", "Debe ingresar el nombre de la beca.")
-                return
-
-            if not pct_txt.isdigit():
-                show_warning(self, "Validación", "El porcentaje debe ser un número entero.")
-                return
-
-            pct = int(pct_txt)
-            if pct < 0 or pct > 100:
-                show_warning(self, "Validación", "El porcentaje debe estar entre 0 y 100.")
-                return
-
-            # ✅ FIX: endpoint no recibe codigo_usuario (por ahora)
-            ok = actualizar_beca(self.db_user, self.db_pass, id_beca, nombre, pct)
-            if ok:
-                show_info(self, "Éxito", "Beca actualizada correctamente.")
-                self.refresh_grid()
+        try:
+            try:
+                actualizar_beca(
+                    self.db_user,
+                    self.db_pass,
+                    id_beca=id_beca,
+                    nombre_beca=nombre,
+                    descripcion=descripcion,
+                    porcentaje_descuento=porcentaje,
+                    estado_codigo=self.estado_desc_to_cod[estado_desc],
+                    codigo_usuario=self.codigo_usuario,
+                )
+            except TypeError:
+                # compatibilidad con endpoint antiguo
+                actualizar_beca(
+                    self.db_user,
+                    self.db_pass,
+                    id_beca=id_beca,
+                    nombre_beca=nombre,
+                    descripcion=descripcion,
+                    porcentaje_descuento=porcentaje,
+                    estado_codigo=self.estado_desc_to_cod[estado_desc],
+                )
         except Exception as e:
-            handle_exception(self, e)
+            handle_exception(self, e, context="Actualizar beca")
+            return
+
+        self.refresh_grid()
+        show_info(self, "Éxito", "Beca actualizada correctamente.")
 
     def on_eliminar(self):
+        if not self.can_delete():
+            self._deny_action("delete")
+            return
+
+        self.ensure_loaded()
+
+        id_beca = self._selected_id()
+        if not id_beca:
+            show_warning(self, "Eliminar", "Seleccione una beca del listado para eliminar.")
+            return
+
+        if not show_confirm(self, "Confirmar", f"¿Pasar a INACTIVO la beca ID {id_beca}?"):
+            return
+
         try:
-            self._ensure_vars()
-            id_txt = (self.vars["id_beca"].get() or "").strip()
-            if not id_txt.isdigit():
-                show_warning(self, "Validación", "ID inválido.")
-                return
-            id_beca = int(id_txt)
-
-            if not show_confirm(self, "Confirmar", "¿Deseas eliminar esta beca?"):
-                return
-
-            # ✅ FIX: endpoint no recibe codigo_usuario (por ahora)
-            ok = eliminar_beca(self.db_user, self.db_pass, id_beca)
-            if ok:
-                show_info(self, "Éxito", "Beca eliminada correctamente.")
-                self.reset_view_blank()
+            try:
+                eliminar_beca(
+                    self.db_user,
+                    self.db_pass,
+                    id_beca,
+                    codigo_usuario=self.codigo_usuario,
+                )
+            except TypeError:
+                # compatibilidad con endpoint antiguo
+                eliminar_beca(self.db_user, self.db_pass, id_beca)
         except Exception as e:
-            handle_exception(self, e)
+            handle_exception(self, e, context="Eliminar beca")
+            return
+
+        self.refresh_grid()
+        self.on_nuevo()
+        show_info(self, "Éxito", "Beca pasada a INACTIVO correctamente.")

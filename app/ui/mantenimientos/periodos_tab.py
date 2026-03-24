@@ -7,8 +7,11 @@ import tkinter as tk
 from tkinter import ttk
 
 from app.core.error_handler import handle_exception, show_info, show_warning
-from app.ui.components.confirm_dialog import show_confirm
 from app.endpoints.mantenimiento import periodos_endpoints as p_ep
+from app.services.security.permission_service import (
+    get_maintenance_permissions_state,
+)
+from app.ui.components.confirm_dialog import show_confirm
 
 
 class _CalendarPopup(tk.Toplevel):
@@ -139,12 +142,20 @@ class _CalendarPopup(tk.Toplevel):
 
 
 class PeriodosTab(ttk.Frame):
-
-    def __init__(self, parent, db_user: str, db_pass: str):
+    def __init__(
+        self,
+        parent,
+        db_user: str | None,
+        db_pass: str | None,
+        codigo_usuario: int | None = None,
+    ):
         super().__init__(parent)
 
         self.db_user = db_user
         self.db_pass = db_pass
+        self.codigo_usuario = codigo_usuario
+
+        self.resource_key = "periodos"
 
         self.vars: dict[str, tk.StringVar] = {}
 
@@ -152,7 +163,22 @@ class PeriodosTab(ttk.Frame):
         self._selected_periodo_id: int | None = None
         self._loaded = False
 
+        self.permissions_state: dict = {
+            "resource": self.resource_key,
+            "is_admin": False,
+            "access": True,
+            "create": True,
+            "update": True,
+            "delete": True,
+            "matched": {},
+            "candidates": {},
+        }
+
+        self._btn_fecha_inicio: ttk.Button | None = None
+        self._btn_fecha_fin: ttk.Button | None = None
+
         self._build_ui()
+        self.refresh_permissions()
         self.reset_form()
 
     # =====================================================
@@ -165,6 +191,151 @@ class PeriodosTab(ttk.Frame):
         self.vars.setdefault("fecha_inicio", tk.StringVar())
         self.vars.setdefault("fecha_fin", tk.StringVar())
         self.vars.setdefault("estado", tk.StringVar())
+
+    # =====================================================
+    # Permisos
+    # =====================================================
+    def _safe_permissions_state(self) -> dict:
+        try:
+            state = get_maintenance_permissions_state(self.resource_key)
+            if isinstance(state, dict) and state:
+                return state
+        except Exception:
+            pass
+
+        return {
+            "resource": self.resource_key,
+            "is_admin": False,
+            "access": True,
+            "create": True,
+            "update": True,
+            "delete": True,
+            "matched": {},
+            "candidates": {},
+        }
+
+    def refresh_permissions(self):
+        self.permissions_state = self._safe_permissions_state()
+        self._apply_permissions_to_ui()
+
+    def _is_action_allowed(self, action_key: str) -> bool:
+        access = bool(self.permissions_state.get("access", False))
+        create = bool(self.permissions_state.get("create", False))
+        update = bool(self.permissions_state.get("update", False))
+        delete = bool(self.permissions_state.get("delete", False))
+
+        if action_key == "access":
+            return access
+        if action_key == "create":
+            return access and create
+        if action_key == "update":
+            return access and update
+        if action_key == "delete":
+            return access and delete
+        return False
+
+    def _action_label(self, action_key: str) -> str:
+        labels = {
+            "access": "acceder",
+            "create": "guardar",
+            "update": "actualizar",
+            "delete": "eliminar",
+        }
+        return labels.get(action_key, action_key)
+
+    def _deny_action(self, action_key: str):
+        accion = self._action_label(action_key)
+        show_warning(
+            self,
+            "Permisos",
+            f"No tienes permisos para {accion} en Períodos.",
+        )
+
+    def _set_button_enabled(self, button: ttk.Button | None, enabled: bool):
+        if button is None:
+            return
+        try:
+            if enabled:
+                button.state(("!disabled",))
+            else:
+                button.state(("disabled",))
+        except Exception:
+            pass
+
+    def _apply_permissions_to_ui(self):
+        access = bool(self.permissions_state.get("access", False))
+        can_create = bool(self.permissions_state.get("create", False))
+        can_update = bool(self.permissions_state.get("update", False))
+        can_delete = bool(self.permissions_state.get("delete", False))
+
+        self._set_children_state(self.top, enabled=access)
+        self._set_children_state(self.bottom, enabled=access)
+
+        self._set_button_enabled(self.btn_nuevo, access)
+        self._set_button_enabled(self.btn_guardar, access and can_create)
+        self._set_button_enabled(self.btn_actualizar, access and can_update)
+        self._set_button_enabled(self.btn_eliminar, access and can_delete)
+
+        self._set_button_enabled(self._btn_fecha_inicio, access)
+        self._set_button_enabled(self._btn_fecha_fin, access)
+
+    def _set_children_state(self, parent, *, enabled: bool):
+        for child in parent.winfo_children():
+            try:
+                if isinstance(child, ttk.Frame) or isinstance(child, ttk.LabelFrame):
+                    self._set_children_state(child, enabled=enabled)
+                    continue
+
+                if isinstance(child, ttk.Treeview):
+                    if enabled:
+                        child.state(("!disabled",))
+                    else:
+                        child.state(("disabled",))
+                    continue
+
+                if isinstance(child, ttk.Label) or isinstance(child, ttk.Separator):
+                    continue
+
+                if isinstance(child, ttk.Entry):
+                    states = set(child.state())
+                    is_readonly = "readonly" in states
+                    if enabled:
+                        if is_readonly:
+                            child.state(("readonly",))
+                        else:
+                            child.state(("!disabled",))
+                    else:
+                        child.state(("disabled",))
+                    continue
+
+                if isinstance(child, ttk.Combobox):
+                    current_state = str(child.cget("state"))
+                    if enabled:
+                        if current_state == "readonly":
+                            child.configure(state="readonly")
+                        else:
+                            child.configure(state="normal")
+                    else:
+                        child.configure(state="disabled")
+                    continue
+
+                if isinstance(child, ttk.Button):
+                    if enabled:
+                        child.state(("!disabled",))
+                    else:
+                        child.state(("disabled",))
+                    continue
+
+                try:
+                    if enabled:
+                        child.state(("!disabled",))
+                    else:
+                        child.state(("disabled",))
+                except Exception:
+                    pass
+
+            except Exception:
+                continue
 
     # =====================================================
     # UI
@@ -223,14 +394,20 @@ class PeriodosTab(ttk.Frame):
         fecha_inicio_row.grid(row=row, column=1, sticky="ew", pady=4)
         fecha_inicio_row.columnconfigure(0, weight=1)
 
-        self.ent_fecha_inicio = ttk.Entry(fecha_inicio_row, textvariable=self.vars["fecha_inicio"])
+        self.ent_fecha_inicio = ttk.Entry(
+            fecha_inicio_row,
+            textvariable=self.vars["fecha_inicio"],
+            state="readonly",
+        )
         self.ent_fecha_inicio.grid(row=0, column=0, sticky="ew")
-        ttk.Button(
+
+        self._btn_fecha_inicio = ttk.Button(
             fecha_inicio_row,
             text="📅",
             width=3,
             command=self._open_fecha_inicio_calendar,
-        ).grid(row=0, column=1, padx=(6, 0))
+        )
+        self._btn_fecha_inicio.grid(row=0, column=1, padx=(6, 0))
         row += 1
 
         ttk.Label(self.form_frame, text="Fecha fin:").grid(row=row, column=0, sticky="w", pady=4, padx=(0, 8))
@@ -238,14 +415,20 @@ class PeriodosTab(ttk.Frame):
         fecha_fin_row.grid(row=row, column=1, sticky="ew", pady=4)
         fecha_fin_row.columnconfigure(0, weight=1)
 
-        self.ent_fecha_fin = ttk.Entry(fecha_fin_row, textvariable=self.vars["fecha_fin"])
+        self.ent_fecha_fin = ttk.Entry(
+            fecha_fin_row,
+            textvariable=self.vars["fecha_fin"],
+            state="readonly",
+        )
         self.ent_fecha_fin.grid(row=0, column=0, sticky="ew")
-        ttk.Button(
+
+        self._btn_fecha_fin = ttk.Button(
             fecha_fin_row,
             text="📅",
             width=3,
             command=self._open_fecha_fin_calendar,
-        ).grid(row=0, column=1, padx=(6, 0))
+        )
+        self._btn_fecha_fin.grid(row=0, column=1, padx=(6, 0))
         row += 1
 
         ttk.Label(self.form_frame, text="Estado:").grid(row=row, column=0, sticky="w", pady=4, padx=(0, 8))
@@ -322,6 +505,10 @@ class PeriodosTab(ttk.Frame):
     # Lifecycle
     # =====================================================
     def ensure_loaded(self):
+        if not self._is_action_allowed("access"):
+            self._loaded = True
+            return
+
         if self._loaded:
             return
 
@@ -333,6 +520,9 @@ class PeriodosTab(ttk.Frame):
     # Load
     # =====================================================
     def _load_lookups(self):
+        if not self._is_action_allowed("access"):
+            return
+
         try:
             estados = p_ep.fetch_estados_periodos(self.db_user, self.db_pass)
 
@@ -374,12 +564,20 @@ class PeriodosTab(ttk.Frame):
         self._update_periodo_codigo_preview()
 
     def _open_fecha_inicio_calendar(self):
+        if not self._is_action_allowed("access"):
+            self._deny_action("access")
+            return
+
         def _set(d: _dt.date):
             self.vars["fecha_inicio"].set(d.isoformat())
 
         _CalendarPopup(self, "Seleccionar fecha de inicio", on_pick=_set)
 
     def _open_fecha_fin_calendar(self):
+        if not self._is_action_allowed("access"):
+            self._deny_action("access")
+            return
+
         def _set(d: _dt.date):
             self.vars["fecha_fin"].set(d.isoformat())
 
@@ -389,8 +587,18 @@ class PeriodosTab(ttk.Frame):
     # Grid
     # =====================================================
     def refresh_grid(self):
+        if not self._is_action_allowed("access"):
+            for item in self.tree.get_children():
+                self.tree.delete(item)
+            self._selected_periodo_id = None
+            return
+
         try:
-            rows = p_ep.list_periodos_rows(self.db_user, self.db_pass)
+            rows = p_ep.list_periodos_rows(
+                self.db_user,
+                self.db_pass,
+                codigo_usuario=self.codigo_usuario,
+            )
 
             for item in self.tree.get_children():
                 self.tree.delete(item)
@@ -404,6 +612,10 @@ class PeriodosTab(ttk.Frame):
             handle_exception(self, e, context="Listado Períodos")
 
     def _on_row_selected(self, _evt=None):
+        if not self._is_action_allowed("access"):
+            self._selected_periodo_id = None
+            return
+
         try:
             sel = self.tree.selection()
             if not sel:
@@ -431,9 +643,17 @@ class PeriodosTab(ttk.Frame):
     # Actions
     # =====================================================
     def on_nuevo(self):
+        if not self._is_action_allowed("access"):
+            self._deny_action("access")
+            return
+
         self.reset_form()
 
     def on_guardar(self):
+        if not self._is_action_allowed("create"):
+            self._deny_action("create")
+            return
+
         try:
             anio = (self.vars["anio"].get() or "").strip()
             numero_periodo = (self.vars["numero_periodo"].get() or "").strip()
@@ -446,7 +666,7 @@ class PeriodosTab(ttk.Frame):
                 show_warning(self, "Validación", "Debes seleccionar un estado.")
                 return
 
-            msg = p_ep.create_periodo(
+            msg = p_ep._create_periodo_impl(
                 db_user=self.db_user,
                 db_pass=self.db_pass,
                 anio=int(anio),
@@ -454,6 +674,7 @@ class PeriodosTab(ttk.Frame):
                 fecha_inicio=fecha_inicio,
                 fecha_fin=fecha_fin,
                 estado_codigo=int(estado_codigo),
+                codigo_usuario=self.codigo_usuario,
             )
 
             show_info(self, "Períodos", msg)
@@ -464,6 +685,10 @@ class PeriodosTab(ttk.Frame):
             handle_exception(self, e, context="Guardar Período")
 
     def on_actualizar(self):
+        if not self._is_action_allowed("update"):
+            self._deny_action("update")
+            return
+
         try:
             if not self._selected_periodo_id:
                 show_warning(self, "Validación", "Selecciona un período del listado.")
@@ -489,6 +714,7 @@ class PeriodosTab(ttk.Frame):
                 fecha_inicio=fecha_inicio,
                 fecha_fin=fecha_fin,
                 estado_codigo=int(estado_codigo),
+                codigo_usuario=self.codigo_usuario,
             )
 
             show_info(self, "Períodos", msg)
@@ -498,6 +724,10 @@ class PeriodosTab(ttk.Frame):
             handle_exception(self, e, context="Actualizar Período")
 
     def on_eliminar(self):
+        if not self._is_action_allowed("delete"):
+            self._deny_action("delete")
+            return
+
         try:
             if not self._selected_periodo_id:
                 show_warning(self, "Validación", "Selecciona un período del listado.")
@@ -517,6 +747,7 @@ class PeriodosTab(ttk.Frame):
                 db_user=self.db_user,
                 db_pass=self.db_pass,
                 periodo_id=int(self._selected_periodo_id),
+                codigo_usuario=self.codigo_usuario,
             )
 
             show_info(self, "Períodos", msg)

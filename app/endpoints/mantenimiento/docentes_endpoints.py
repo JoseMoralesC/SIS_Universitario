@@ -1,7 +1,7 @@
 # app/endpoints/docentes_endpoints.py
 from __future__ import annotations
 
-from app.core.db import connect
+from app.core.db import connect_app
 from app.services.mantenimiento.docentes_service import (
     validar_docente_data,
     validar_docente_unicidad,
@@ -19,6 +19,13 @@ from app.repositories.mantenimiento.docentes_repo import (
 
 from app.core.auditoria import Mov, Tab
 from app.repositories.auditoria_repo import insert_auditoria
+
+
+def _get_conn():
+    """
+    Obtiene la conexión técnica de la aplicación.
+    """
+    return connect_app()
 
 
 def _registrar_auditoria(
@@ -43,16 +50,16 @@ def _registrar_auditoria(
         pass
 
 
-def siguiente_docente_cod(db_user: str, db_pass: str) -> int:
-    conn = connect(db_user, db_pass)
+def siguiente_docente_cod(db_user: str | None = None, db_pass: str | None = None) -> int:
+    conn = _get_conn()
     try:
         return next_docente_cod(conn)
     finally:
         conn.close()
 
 
-def get_lookups(db_user: str, db_pass: str):
-    conn = connect(db_user, db_pass)
+def get_lookups(db_user: str | None = None, db_pass: str | None = None):
+    conn = _get_conn()
     try:
         estados = fetch_estados(conn)
         profesiones = fetch_profesiones(conn)
@@ -62,8 +69,8 @@ def get_lookups(db_user: str, db_pass: str):
 
 
 def listar_docentes(
-    db_user: str,
-    db_pass: str,
+    db_user: str | None = None,
+    db_pass: str | None = None,
     codigo_usuario: int | None = None,
 ):
     """
@@ -71,10 +78,10 @@ def listar_docentes(
     - NO incluye estado Inactivo
     - Sí incluye Activo y Suspendido (y cualquier otro excepto Inactivo)
 
-    codigo_usuario se acepta por consistencia
-    (y futuras auditorías de listado).
+    db_user y db_pass se conservan por compatibilidad temporal.
+    codigo_usuario se acepta por consistencia y auditoría futura.
     """
-    conn = connect(db_user, db_pass)
+    conn = _get_conn()
     try:
         return list_docentes_join_activos(conn)
     finally:
@@ -82,8 +89,8 @@ def listar_docentes(
 
 
 def crear_docente(
-    db_user: str,
-    db_pass: str,
+    db_user: str | None,
+    db_pass: str | None,
     docente_cod: int,
     identificacion: str,
     usuario_docente: str,
@@ -92,7 +99,7 @@ def crear_docente(
     profesion_cod: int,
     codigo_usuario: int | None = None,
 ) -> bool:
-    conn = connect(db_user, db_pass)
+    conn = _get_conn()
     try:
         data = validar_docente_data(
             identificacion=identificacion,
@@ -130,8 +137,8 @@ def crear_docente(
 
 
 def actualizar_docente(
-    db_user: str,
-    db_pass: str,
+    db_user: str | None,
+    db_pass: str | None,
     docente_cod: int,
     identificacion: str,
     usuario_docente: str,
@@ -143,7 +150,7 @@ def actualizar_docente(
     if not docente_cod:
         raise ValidationError("Debe seleccionar un docente para actualizar.")
 
-    conn = connect(db_user, db_pass)
+    conn = _get_conn()
     try:
         data = validar_docente_data(
             identificacion=identificacion,
@@ -181,8 +188,8 @@ def actualizar_docente(
 
 
 def eliminar_docente(
-    db_user: str,
-    db_pass: str,
+    db_user: str | None,
+    db_pass: str | None,
     docente_cod: int,
     codigo_usuario: int | None = None,
 ) -> bool:
@@ -194,7 +201,7 @@ def eliminar_docente(
     if not docente_cod:
         raise ValidationError("Debe seleccionar un docente para eliminar.")
 
-    conn = connect(db_user, db_pass)
+    conn = _get_conn()
     try:
         docente_cod = int(docente_cod)
 

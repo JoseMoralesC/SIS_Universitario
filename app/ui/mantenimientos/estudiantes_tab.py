@@ -35,15 +35,33 @@ class EstudiantesTab(MaintenanceTab):
 
         self._loaded = False
 
-        super().__init__(parent, "Estudiantes")
+        super().__init__(parent, "Estudiantes", resource_key="estudiantes")
         self.reset_view_blank()
 
+    # ------------------------------------------------
+    # LOAD
+    # ------------------------------------------------
     def ensure_loaded(self):
+        if not self.can_access():
+            self._loaded = True
+            self._clear_grid()
+            return
+
         if getattr(self, "_loaded", False):
             return
+
         self._load_lookups()
         self.refresh_grid()
         self._loaded = True
+
+    # ------------------------------------------------
+    # HELPERS
+    # ------------------------------------------------
+    def _clear_grid(self):
+        if not self.tree:
+            return
+        for item in self.tree.get_children():
+            self.tree.delete(item)
 
     # -----------------------------
     # UI
@@ -77,7 +95,12 @@ class EstudiantesTab(MaintenanceTab):
         add_entry("Teléfono", "Telefono")
 
         ttk.Label(parent, text="Estado:").grid(row=r, column=0, sticky="w", pady=6)
-        self.cb_estado = ttk.Combobox(parent, textvariable=self.vars["Estado"], state="readonly", width=26)
+        self.cb_estado = ttk.Combobox(
+            parent,
+            textvariable=self.vars["Estado"],
+            state="readonly",
+            width=26,
+        )
         self.cb_estado.grid(row=r, column=1, sticky="ew", padx=(10, 0), pady=6)
         r += 1
 
@@ -114,6 +137,7 @@ class EstudiantesTab(MaintenanceTab):
     def _autosize_columns(self):
         if not self.tree:
             return
+
         font = tkfont.nametofont("TkDefaultFont")
         for col in self.tree["columns"]:
             max_w = font.measure(col) + 20
@@ -148,13 +172,23 @@ class EstudiantesTab(MaintenanceTab):
             pass
         self.vars["Estado"].set("")
 
-        if self.tree:
-            for it in self.tree.get_children():
-                self.tree.delete(it)
+        self._clear_grid()
 
     def _load_lookups(self):
+        if not self.can_access():
+            self.estado_desc_to_cod = {}
+            self.estado_cod_to_desc = {}
+
+            try:
+                self.cb_estado["values"] = []
+            except Exception:
+                pass
+
+            self.vars["Estado"].set("")
+            return
+
         try:
-            # ✅ FIX: el endpoint solo recibe (db_user, db_pass)
+            # el endpoint actual solo recibe (db_user, db_pass)
             estados = get_lookups(self.db_user, self.db_pass)
         except Exception as e:
             handle_exception(self, e, context="Cargar estados (Estudiantes)")
@@ -166,15 +200,24 @@ class EstudiantesTab(MaintenanceTab):
         self.cb_estado["values"] = list(self.estado_desc_to_cod.keys())
         if self.cb_estado["values"]:
             self.vars["Estado"].set(self.cb_estado["values"][0])
+        else:
+            self.vars["Estado"].set("")
 
     def refresh_grid(self):
         if not self.tree:
             return
-        for it in self.tree.get_children():
-            self.tree.delete(it)
+
+        self._clear_grid()
+
+        if not self.can_access():
+            return
 
         try:
-            rows = listar_estudiantes(self.db_user, self.db_pass, codigo_usuario=self.codigo_usuario)
+            rows = listar_estudiantes(
+                self.db_user,
+                self.db_pass,
+                codigo_usuario=self.codigo_usuario,
+            )
         except Exception as e:
             handle_exception(self, e, context="Cargar estudiantes")
             return
@@ -198,6 +241,9 @@ class EstudiantesTab(MaintenanceTab):
         return carnet if carnet else None
 
     def on_row_select(self, _evt=None):
+        if not self.can_access():
+            return
+
         if not self.tree:
             return
         sel = self.tree.selection()
@@ -216,11 +262,15 @@ class EstudiantesTab(MaintenanceTab):
     # CRUD
     # -----------------------------
     def on_nuevo(self):
+        if not self.can_access():
+            self._deny_action("access")
+            return
+
         self.ensure_loaded()
 
         # Autogenera el carnet (CUC-000X) y lo deja readonly
         try:
-            # ✅ FIX: el endpoint no recibe codigo_usuario aquí
+            # el endpoint actual no recibe codigo_usuario aquí
             new_carnet = siguiente_carnet(self.db_user, self.db_pass)
             self.vars["Carnet"].set(str(new_carnet))
         except Exception as e:
@@ -234,11 +284,17 @@ class EstudiantesTab(MaintenanceTab):
 
         if self.cb_estado["values"]:
             self.vars["Estado"].set(self.cb_estado["values"][0])
+        else:
+            self.vars["Estado"].set("")
 
         if self.tree:
             self.tree.selection_remove(self.tree.selection())
 
     def on_guardar(self):
+        if not self.can_create():
+            self._deny_action("create")
+            return
+
         self.ensure_loaded()
 
         estado_desc = self.vars["Estado"].get().strip()
@@ -272,6 +328,10 @@ class EstudiantesTab(MaintenanceTab):
         show_info(self, "Éxito", "Estudiante guardado correctamente.")
 
     def on_actualizar(self):
+        if not self.can_update():
+            self._deny_action("update")
+            return
+
         self.ensure_loaded()
 
         carnet = self._selected_carnet()
@@ -304,6 +364,10 @@ class EstudiantesTab(MaintenanceTab):
         show_info(self, "Éxito", "Estudiante actualizado correctamente.")
 
     def on_eliminar(self):
+        if not self.can_delete():
+            self._deny_action("delete")
+            return
+
         self.ensure_loaded()
 
         carnet = self._selected_carnet()
@@ -315,7 +379,12 @@ class EstudiantesTab(MaintenanceTab):
             return
 
         try:
-            eliminar_estudiante(self.db_user, self.db_pass, carnet, codigo_usuario=self.codigo_usuario)
+            eliminar_estudiante(
+                self.db_user,
+                self.db_pass,
+                carnet,
+                codigo_usuario=self.codigo_usuario,
+            )
         except Exception as e:
             handle_exception(self, e, context="Eliminar estudiante")
             return

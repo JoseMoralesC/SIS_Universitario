@@ -48,7 +48,7 @@ class DocentesTab(MaintenanceTab):
         # lazy
         self._loaded = False
 
-        super().__init__(parent, "Docentes")
+        super().__init__(parent, "Docentes", resource_key="docentes")
 
         # deja todo en blanco
         self.reset_view_blank()
@@ -58,12 +58,26 @@ class DocentesTab(MaintenanceTab):
         Carga catálogos + grid solo una vez (lazy-load).
         Lo llama main_menu cuando el usuario entra a la pestaña Docentes.
         """
+        if not self.can_access():
+            self._loaded = True
+            self._clear_grid()
+            return
+
         if getattr(self, "_loaded", False):
             return
 
         self._load_lookups()
         self.refresh_grid()
         self._loaded = True
+
+    # -----------------------------
+    # Helpers
+    # -----------------------------
+    def _clear_grid(self):
+        if not self.tree:
+            return
+        for item in self.tree.get_children():
+            self.tree.delete(item)
 
     # -----------------------------
     #  UI
@@ -151,14 +165,28 @@ class DocentesTab(MaintenanceTab):
         self.vars["Estado"].set("")
         self.vars["Profesion"].set("")
 
-        if self.tree:
-            for item in self.tree.get_children():
-                self.tree.delete(item)
+        self._clear_grid()
 
     # -----------------------------
     #  Data loading
     # -----------------------------
     def _load_lookups(self):
+        if not self.can_access():
+            self.estado_desc_to_cod = {}
+            self.prof_desc_to_cod = {}
+            self.estado_cod_to_desc = {}
+            self.prof_cod_to_desc = {}
+
+            try:
+                self.cb_estado["values"] = []
+                self.cb_prof["values"] = []
+            except Exception:
+                pass
+
+            self.vars["Estado"].set("")
+            self.vars["Profesion"].set("")
+            return
+
         try:
             estados, profes = get_lookups(self.db_user, self.db_pass)
         except Exception as e:
@@ -175,15 +203,22 @@ class DocentesTab(MaintenanceTab):
 
         if self.cb_estado["values"]:
             self.vars["Estado"].set(self.cb_estado["values"][0])
+        else:
+            self.vars["Estado"].set("")
+
         if self.cb_prof["values"]:
             self.vars["Profesion"].set(self.cb_prof["values"][0])
+        else:
+            self.vars["Profesion"].set("")
 
     def refresh_grid(self):
         if not self.tree:
             return
 
-        for item in self.tree.get_children():
-            self.tree.delete(item)
+        self._clear_grid()
+
+        if not self.can_access():
+            return
 
         try:
             rows = listar_docentes(self.db_user, self.db_pass, codigo_usuario=self.codigo_usuario)
@@ -236,6 +271,9 @@ class DocentesTab(MaintenanceTab):
             return None
 
     def on_row_select(self, _evt=None):
+        if not self.can_access():
+            return
+
         if not self.tree:
             return
         sel = self.tree.selection()
@@ -253,6 +291,10 @@ class DocentesTab(MaintenanceTab):
     #  CRUD actions
     # -----------------------------
     def on_nuevo(self):
+        if not self.can_access():
+            self._deny_action("access")
+            return
+
         self.ensure_loaded()
 
         try:
@@ -268,13 +310,22 @@ class DocentesTab(MaintenanceTab):
 
         if getattr(self, "cb_estado", None) is not None and self.cb_estado["values"]:
             self.vars["Estado"].set(self.cb_estado["values"][0])
+        else:
+            self.vars["Estado"].set("")
+
         if getattr(self, "cb_prof", None) is not None and self.cb_prof["values"]:
             self.vars["Profesion"].set(self.cb_prof["values"][0])
+        else:
+            self.vars["Profesion"].set("")
 
         if self.tree:
             self.tree.selection_remove(self.tree.selection())
 
     def on_guardar(self):
+        if not self.can_create():
+            self._deny_action("create")
+            return
+
         self.ensure_loaded()
 
         identificacion = self.vars["Identificacion"].get().strip()
@@ -322,6 +373,10 @@ class DocentesTab(MaintenanceTab):
         show_info(self, "Éxito", "Docente guardado correctamente.")
 
     def on_actualizar(self):
+        if not self.can_update():
+            self._deny_action("update")
+            return
+
         self.ensure_loaded()
 
         docente_id = self._selected_id()
@@ -365,6 +420,10 @@ class DocentesTab(MaintenanceTab):
         show_info(self, "Éxito", "Docente actualizado correctamente.")
 
     def on_eliminar(self):
+        if not self.can_delete():
+            self._deny_action("delete")
+            return
+
         self.ensure_loaded()
 
         docente_id = self._selected_id()
@@ -372,7 +431,6 @@ class DocentesTab(MaintenanceTab):
             show_warning(self, "Eliminar", "Seleccione un docente del listado para eliminar.")
             return
 
-        # ✅ FIX: si NO confirma, NO elimina
         if not show_confirm(self, "Confirmar", f"¿Pasar a INACTIVO el docente ID {docente_id}?"):
             return
 
