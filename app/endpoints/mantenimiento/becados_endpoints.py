@@ -1,4 +1,3 @@
-# app/endpoints/mantenimiento/becados_endpoints.py
 from __future__ import annotations
 
 from app.core.db import connect_app
@@ -11,10 +10,9 @@ from app.services.mantenimiento.becados_service import (
     validar_becado_unicidad,
 )
 
-
 from app.repositories.mantenimiento.becados_repo import (
-    fetch_estudiantes_disponibles_lookup,  # <-- FIX
-    fetch_becas,                           # <-- FIX
+    fetch_estudiantes_disponibles_lookup,
+    fetch_becas,
     list_becados_join_activos,
     next_id_becado,
     insert_becado,
@@ -59,15 +57,11 @@ def _registrar_auditoria(
 # =========================================================
 # LOOKUPS
 # =========================================================
-def get_lookups(
-    db_user: str | None = None,
-    db_pass: str | None = None,
-):
+def get_lookups(db_user: str | None = None, db_pass: str | None = None):
     require_maintenance_access(RESOURCE_KEY)
 
     conn = _get_conn()
     try:
-    
         estudiantes = fetch_estudiantes_disponibles_lookup(conn)
         becas = fetch_becas(conn)
 
@@ -134,10 +128,12 @@ def crear_becado(
             fecha_aplicacion=fecha_aplicacion,
         )
 
+        
         validar_becado_unicidad(
             conn,
             id_becado=None,
             carnet=data["carnet"],
+            id_beca=data["id_beca"],
         )
 
         id_becado = insert_becado(
@@ -187,10 +183,12 @@ def actualizar_becado(
             fecha_aplicacion=fecha_aplicacion,
         )
 
+       
         validar_becado_unicidad(
             conn,
             id_becado=id_becado,
             carnet=data["carnet"],
+            id_beca=data["id_beca"],
         )
 
         update_becado(

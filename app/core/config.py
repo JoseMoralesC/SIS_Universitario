@@ -10,7 +10,7 @@ DB_DRIVER = "ODBC Driver 17 for SQL Server"
 
 # Cuenta técnica de la aplicación
 # Esta cuenta será la que use el sistema para conectarse siempre a SQL Server.
-DB_APP_USER = "sa"
+DB_APP_USER = "Administrador"
 DB_APP_PASS = "1234"
 
 

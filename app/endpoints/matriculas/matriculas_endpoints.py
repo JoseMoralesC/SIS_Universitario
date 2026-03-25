@@ -1,7 +1,7 @@
 # app/endpoints/matriculas/matriculas_endpoints.py
 from __future__ import annotations
 
-from app.core.db import connect
+from app.core.db import connect_app
 from app.core.auditoria import Mov, Tab, compose_named_row_id
 from app.repositories.auditoria_repo import insert_auditoria
 from app.services.security.permission_service import require_matriculas_action
@@ -29,14 +29,6 @@ from app.services.matriculas.matriculas_service import (
 
 
 def _build_row_id(carnet: str, curso_cod: int, periodo: int) -> str:
-    """
-    Construye el identificador compuesto de Matricula_Curso.
-
-    PK real en DB:
-    - Carnet
-    - Curso_Cod
-    - Periodo
-    """
     return compose_named_row_id(
         Carnet=(carnet or "").strip(),
         Curso_Cod=int(curso_cod),
@@ -62,54 +54,38 @@ def _registrar_auditoria(
             id_row_tabla=id_row_tabla,
         )
     except Exception:
-        # No romper el flujo principal por un fallo aislado de auditoría
         pass
 
 
-def get_lookups(
-    db_user: str,
-    db_pass: str,
-    codigo_usuario: int | None = None,
-) -> dict:
+def get_lookups(db_user: str, db_pass: str, codigo_usuario: int | None = None) -> dict:
     require_matriculas_action("consultar")
 
-    conn = connect(db_user, db_pass)
+    conn = connect_app()
     try:
         return {
             "estados": fetch_estados(conn),
             "estudiantes": fetch_estudiantes_activos(conn),
             "cursos": fetch_cursos_activos(conn),
-            # En matrículas el combo de docentes se carga por curso,
-            # pero mantenemos este catálogo general por compatibilidad.
             "docentes": fetch_docentes_activos(conn),
         }
     finally:
         conn.close()
 
 
-def get_docentes_por_curso(
-    db_user: str,
-    db_pass: str,
-    curso_cod: int,
-    codigo_usuario: int | None = None,
-) -> list:
+def get_docentes_por_curso(db_user: str, db_pass: str, curso_cod: int, codigo_usuario: int | None = None):
     require_matriculas_action("consultar")
 
-    conn = connect(db_user, db_pass)
+    conn = connect_app()
     try:
         return fetch_docentes_por_curso(conn, int(curso_cod))
     finally:
         conn.close()
 
 
-def listar_matriculas(
-    db_user: str,
-    db_pass: str,
-    codigo_usuario: int | None = None,
-):
+def listar_matriculas(db_user: str, db_pass: str, codigo_usuario: int | None = None):
     require_matriculas_action("consultar")
 
-    conn = connect(db_user, db_pass)
+    conn = connect_app()
     try:
         return list_matriculas(conn)
     finally:
@@ -129,7 +105,7 @@ def matricular(
 ) -> bool:
     require_matriculas_action("crear")
 
-    conn = connect(db_user, db_pass)
+    conn = connect_app()
     try:
         data = validar_matricula_data(
             carnet=carnet,
@@ -163,12 +139,7 @@ def matricular(
             periodo=data["periodo"],
         )
 
-        _registrar_auditoria(
-            conn,
-            codigo_usuario,
-            Mov.MATRICULA_CREADA,
-            id_row_tabla=row_id,
-        )
+        _registrar_auditoria(conn, codigo_usuario, Mov.MATRICULA_CREADA, row_id)
 
         return True
     finally:
@@ -187,37 +158,23 @@ def cambiar_estado(
 ) -> bool:
     require_matriculas_action("actualizar")
 
-    conn = connect(db_user, db_pass)
+    conn = connect_app()
     try:
         carnet_limpio = (carnet or "").strip()
-        curso_cod = int(curso_cod)
-        periodo = int(periodo)
 
-        nuevo_estado_cod = validar_cambio_estado(
-            conn,
-            nuevo_estado=nuevo_estado,
-        )
+        nuevo_estado_cod = validar_cambio_estado(conn, nuevo_estado=nuevo_estado)
 
         update_estado_matricula(
             conn,
             carnet=carnet_limpio,
-            curso_cod=curso_cod,
-            periodo=periodo,
+            curso_cod=int(curso_cod),
+            periodo=int(periodo),
             nuevo_estado_codigo=int(nuevo_estado_cod),
         )
 
-        row_id = _build_row_id(
-            carnet=carnet_limpio,
-            curso_cod=curso_cod,
-            periodo=periodo,
-        )
+        row_id = _build_row_id(carnet_limpio, curso_cod, periodo)
 
-        _registrar_auditoria(
-            conn,
-            codigo_usuario,
-            Mov.MATRICULA_ESTADO_CAMBIADO,
-            id_row_tabla=row_id,
-        )
+        _registrar_auditoria(conn, codigo_usuario, Mov.MATRICULA_ESTADO_CAMBIADO, row_id)
 
         return True
     finally:
@@ -235,46 +192,30 @@ def eliminar_matricula(
 ) -> bool:
     require_matriculas_action("eliminar")
 
-    conn = connect(db_user, db_pass)
+    conn = connect_app()
     try:
         carnet_limpio = (carnet or "").strip()
-        curso_cod = int(curso_cod)
-        periodo = int(periodo)
 
         delete_matricula(
             conn,
             carnet=carnet_limpio,
-            curso_cod=curso_cod,
-            periodo=periodo,
+            curso_cod=int(curso_cod),
+            periodo=int(periodo),
         )
 
-        row_id = _build_row_id(
-            carnet=carnet_limpio,
-            curso_cod=curso_cod,
-            periodo=periodo,
-        )
+        row_id = _build_row_id(carnet_limpio, curso_cod, periodo)
 
-        _registrar_auditoria(
-            conn,
-            codigo_usuario,
-            Mov.MATRICULA_ELIMINADA,
-            id_row_tabla=row_id,
-        )
+        _registrar_auditoria(conn, codigo_usuario, Mov.MATRICULA_ELIMINADA, row_id)
 
         return True
     finally:
         conn.close()
 
 
-def listar_matriculas_por_curso(
-    db_user: str,
-    db_pass: str,
-    curso_cod: int,
-    codigo_usuario: int | None = None,
-):
+def listar_matriculas_por_curso(db_user: str, db_pass: str, curso_cod: int, codigo_usuario: int | None = None):
     require_matriculas_action("consultar")
 
-    conn = connect(db_user, db_pass)
+    conn = connect_app()
     try:
         return list_matriculas_por_curso(conn, curso_cod=int(curso_cod))
     finally:
@@ -288,25 +229,19 @@ def reporte_estudiantes_por_curso(
     curso_cod: int,
     codigo_usuario: int,
 ):
-    """
-    Reporte: estudiantes matriculados por curso.
-    Devuelve lista de tuplas: (Periodo, Carnet, Estudiante, Estado)
-    """
     require_matriculas_action("report")
 
-    conn = connect(db_user, db_pass)
+    conn = connect_app()
     try:
-        curso_cod = int(curso_cod)
-        data = reporte_estudiantes_por_curso_repo(conn, curso_cod=curso_cod)
+        data = reporte_estudiantes_por_curso_repo(conn, curso_cod=int(curso_cod))
 
-        # Para reportes usamos el curso como identificador contextual
         row_id = compose_named_row_id(Curso_Cod=curso_cod)
 
         _registrar_auditoria(
             conn,
             codigo_usuario,
             Mov.REPORTE_ESTUDIANTES_POR_CURSO,
-            id_row_tabla=row_id,
+            row_id,
         )
 
         return data
@@ -320,10 +255,10 @@ def get_estudiantes_elegibles(
     curso_cod: int,
     periodo: int,
     codigo_usuario: int | None = None,
-) -> list:
+):
     require_matriculas_action("consultar")
 
-    conn = connect(db_user, db_pass)
+    conn = connect_app()
     try:
         return fetch_estudiantes_elegibles_para_curso(
             conn,

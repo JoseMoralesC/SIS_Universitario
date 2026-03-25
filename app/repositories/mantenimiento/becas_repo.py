@@ -32,9 +32,14 @@ def list_becas(conn: pyodbc.Connection) -> list[tuple]:
     cur = conn.cursor()
     cur.execute(
         """
-        SELECT id_beca, nombre_beca, porcentaje_descuento, Estado_Codigo
-        FROM dbo.Becas
-        ORDER BY id_beca DESC;
+        SELECT
+            b.id_beca,
+            b.nombre_beca,
+            CAST('' AS NVARCHAR(255)) AS descripcion,
+            b.porcentaje_descuento,
+            b.Estado_Codigo
+        FROM dbo.Becas b
+        ORDER BY b.id_beca DESC;
         """
     )
     return [tuple(r) for r in cur.fetchall()]
@@ -47,7 +52,9 @@ def list_becas_join_activos(conn: pyodbc.Connection) -> list[tuple]:
         SELECT
             b.id_beca,
             b.nombre_beca,
-            b.porcentaje_descuento
+            CAST('' AS NVARCHAR(255)) AS descripcion,
+            b.porcentaje_descuento,
+            ISNULL(eg.Estado_Desc, '') AS estado_desc
         FROM dbo.Becas b
         LEFT JOIN dbo.Estado_General eg
             ON eg.Estado_Codigo = b.Estado_Codigo
@@ -114,30 +121,32 @@ def is_beca_in_use(conn: pyodbc.Connection, id_beca: int) -> bool:
 def insert_beca(
     conn: pyodbc.Connection,
     *,
+    id_beca: int,
     nombre_beca: str,
+    descripcion: str,
     porcentaje_descuento: int,
     estado_codigo: int = 1,
 ) -> int:
     cur = conn.cursor()
     cur.execute(
         """
-        INSERT INTO dbo.Becas (nombre_beca, porcentaje_descuento, Estado_Codigo)
-        OUTPUT INSERTED.id_beca
-        VALUES (?, ?, ?);
+        INSERT INTO dbo.Becas (
+            id_beca,
+            nombre_beca,
+            porcentaje_descuento,
+            Estado_Codigo
+        )
+        VALUES (?, ?, ?, ?);
         """,
         (
+            int(id_beca),
             (nombre_beca or "").strip(),
             int(porcentaje_descuento),
             int(estado_codigo),
         ),
     )
-    row = cur.fetchone()
     conn.commit()
-
-    if not row or row[0] is None:
-        raise RuntimeError("No se pudo obtener el id_beca generado.")
-
-    return int(row[0])
+    return int(id_beca)
 
 
 def update_beca(
@@ -145,6 +154,7 @@ def update_beca(
     *,
     id_beca: int,
     nombre_beca: str,
+    descripcion: str,
     porcentaje_descuento: int,
     estado_codigo: int = 1,
 ) -> None:

@@ -115,7 +115,9 @@ def siguiente_id_beca(
 def crear_beca(
     db_user: str | None,
     db_pass: str | None,
+    id_beca: int,
     nombre_beca: str,
+    descripcion: str,
     porcentaje_descuento: int,
     estado_codigo: int = 1,
     codigo_usuario: int | None = None,
@@ -125,7 +127,9 @@ def crear_beca(
     conn = _get_conn()
     try:
         data = validar_beca_data(
+            id_beca=id_beca,
             nombre_beca=nombre_beca,
+            descripcion=descripcion,
             porcentaje_descuento=porcentaje_descuento,
             estado_codigo=estado_codigo,
         )
@@ -136,9 +140,11 @@ def crear_beca(
             nombre_beca=data["nombre_beca"],
         )
 
-        id_beca = insert_beca(
+        id_beca_creada = insert_beca(
             conn,
+            id_beca=data["id_beca"],
             nombre_beca=data["nombre_beca"],
+            descripcion=data["descripcion"],
             porcentaje_descuento=data["porcentaje_descuento"],
             estado_codigo=data["estado_codigo"],
         )
@@ -147,7 +153,7 @@ def crear_beca(
             conn,
             codigo_usuario,
             Mov.BECA_CREADA,
-            id_row_tabla=id_beca,
+            id_row_tabla=id_beca_creada,
         )
 
         return True
@@ -160,6 +166,7 @@ def actualizar_beca(
     db_pass: str | None,
     id_beca: int,
     nombre_beca: str,
+    descripcion: str,
     porcentaje_descuento: int,
     estado_codigo: int = 1,
     codigo_usuario: int | None = None,
@@ -176,6 +183,7 @@ def actualizar_beca(
         data = validar_beca_data(
             id_beca=id_beca,
             nombre_beca=nombre_beca,
+            descripcion=descripcion,
             porcentaje_descuento=porcentaje_descuento,
             estado_codigo=estado_codigo,
         )
@@ -190,6 +198,7 @@ def actualizar_beca(
             conn,
             id_beca=id_beca,
             nombre_beca=data["nombre_beca"],
+            descripcion=data["descripcion"],
             porcentaje_descuento=data["porcentaje_descuento"],
             estado_codigo=data["estado_codigo"],
         )

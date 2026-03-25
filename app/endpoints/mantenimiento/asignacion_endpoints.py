@@ -134,7 +134,7 @@ def crear_asignacion(
         _registrar_auditoria(
             conn,
             codigo_usuario,
-            Mov.ASIGNACION_CREADA,
+            Mov.CURSO_DOCENTE_CREADO,
             id_row_tabla=_compose_named_row_id(
                 data["curso_cod"],
                 data["docente_cod"],
@@ -190,7 +190,7 @@ def actualizar_asignacion(
         _registrar_auditoria(
             conn,
             codigo_usuario,
-            Mov.ASIGNACION_ACTUALIZADA,
+            Mov.CURSO_DOCENTE_ACTUALIZADO,
             id_row_tabla=(
                 f"{_compose_named_row_id(original['curso_cod'], original['docente_cod'])}"
                 f" -> "
@@ -228,7 +228,7 @@ def eliminar_asignacion(
         _registrar_auditoria(
             conn,
             codigo_usuario,
-            Mov.ASIGNACION_ELIMINADA,
+            Mov.CURSO_DOCENTE_ELIMINADO,
             id_row_tabla=_compose_named_row_id(
                 data["curso_cod"],
                 data["docente_cod"],
