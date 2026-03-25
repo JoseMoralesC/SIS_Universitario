@@ -8,9 +8,8 @@ from app.core.session import (
     get_nombre_usuario,
     get_rol_codigo,
     get_rol_nombre,
-    has_permission,
-    is_admin,
 )
+from app.services.security.permission_service import can_access_module
 from app.ui.views.mantenimientos_view import MantenimientosView
 
 
@@ -63,24 +62,16 @@ class MainMenuView(ttk.Frame):
     # Permisos / acceso
     # =====================================================
     def _can_access_mantenimientos(self) -> bool:
-        if is_admin():
-            return True
-        return has_permission("MANTENIMIENTOS.ACCESO")
+        return can_access_module("mantenimientos")
 
     def _can_access_matriculas(self) -> bool:
-        if is_admin():
-            return True
-        return has_permission("MATRICULAS.ACCESO")
+        return can_access_module("matriculas")
 
     def _can_access_matricula_materias(self) -> bool:
-        if is_admin():
-            return True
-        return has_permission("MATRICULA_MATERIAS.ACCESO")
+        return can_access_module("matricula_materias")
 
     def _can_access_asistencias(self) -> bool:
-        if is_admin():
-            return True
-        return has_permission("ASISTENCIAS.ACCESO")
+        return can_access_module("asistencias")
 
     def _has_access(self, key: str) -> bool:
         access_map = {
@@ -100,7 +91,10 @@ class MainMenuView(ttk.Frame):
             "matricula_materias": "Tu rol actual no tiene acceso al módulo de Matrícula por Materias.",
             "asistencias": "Tu rol actual no tiene acceso al módulo de Asistencias.",
         }
-        messagebox.showwarning("Acceso restringido", mensajes.get(key, "No tienes permisos para acceder a este módulo."))
+        messagebox.showwarning(
+            "Acceso restringido",
+            mensajes.get(key, "No tienes permisos para acceder a este módulo.")
+        )
 
     # =====================================================
     # UI

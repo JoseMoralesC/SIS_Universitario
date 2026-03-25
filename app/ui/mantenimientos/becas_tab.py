@@ -9,7 +9,7 @@ from app.ui.mantenimientos.base_tab import MaintenanceTab
 from app.endpoints.mantenimiento.becas_endpoints import (
     get_lookups,
     listar_becas,
-    siguiente_beca_id,
+    siguiente_id_beca,
     crear_beca,
     actualizar_beca,
     eliminar_beca,
@@ -268,14 +268,14 @@ class BecasTab(MaintenanceTab):
 
         try:
             try:
-                new_id = siguiente_beca_id(
+                new_id = siguiente_id_beca(
                     self.db_user,
                     self.db_pass,
                     codigo_usuario=self.codigo_usuario,
                 )
             except TypeError:
                 # compatibilidad con endpoint antiguo
-                new_id = siguiente_beca_id(self.db_user, self.db_pass)
+                new_id = siguiente_id_beca(self.db_user, self.db_pass)
 
             self.vars["Id_Beca"].set(str(new_id))
         except Exception as e:

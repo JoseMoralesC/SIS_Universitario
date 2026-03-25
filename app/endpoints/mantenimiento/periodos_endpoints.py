@@ -1,14 +1,10 @@
+# app/endpoints/mantenimiento/periodos_endpoints.py
 from __future__ import annotations
 
 from app.core.db import connect_app
 from app.core.exceptions import ValidationError
 from app.core.auditoria import Mov, Tab
 from app.repositories.auditoria_repo import insert_auditoria
-
-from app.services.mantenimiento.periodos_service import (
-    validar_periodo_data,
-    validar_periodo_unicidad,
-)
 
 from app.repositories.mantenimiento.periodos_repo import (
     fetch_estados,
@@ -18,11 +14,20 @@ from app.repositories.mantenimiento.periodos_repo import (
     soft_delete_periodo,
 )
 
+from app.services.mantenimiento.periodos_service import (
+    validar_periodo_data,
+    validar_periodo_unicidad,
+)
+from app.services.security.permission_service import (
+    require_maintenance_access,
+    require_maintenance_action,
+)
+
+
+RESOURCE_KEY = "periodos"
+
 
 def _get_conn():
-    """
-    Obtiene la conexión técnica de la aplicación.
-    """
     return connect_app()
 
 
@@ -48,9 +53,14 @@ def _registrar_auditoria(
 
 
 # =========================================================
-# API interna alineada con la UI actual
+# LOOKUPS
 # =========================================================
-def fetch_estados_periodos(db_user: str | None = None, db_pass: str | None = None):
+def fetch_estados_periodos(
+    db_user: str | None = None,
+    db_pass: str | None = None,
+):
+    require_maintenance_access(RESOURCE_KEY)
+
     conn = _get_conn()
     try:
         return fetch_estados(conn)
@@ -58,11 +68,16 @@ def fetch_estados_periodos(db_user: str | None = None, db_pass: str | None = Non
         conn.close()
 
 
+# =========================================================
+# GRID
+# =========================================================
 def list_periodos_rows(
     db_user: str | None = None,
     db_pass: str | None = None,
     codigo_usuario: int | None = None,
 ):
+    require_maintenance_access(RESOURCE_KEY)
+
     conn = _get_conn()
     try:
         return list_periodos_join_activos(conn)
@@ -70,7 +85,10 @@ def list_periodos_rows(
         conn.close()
 
 
-def _create_periodo_impl(
+# =========================================================
+# CREATE
+# =========================================================
+def create_periodo_endpoint(
     db_user: str | None,
     db_pass: str | None,
     anio: int,
@@ -79,11 +97,12 @@ def _create_periodo_impl(
     fecha_fin: str,
     estado_codigo: int,
     codigo_usuario: int | None = None,
-) -> str:
+):
+    require_maintenance_action(RESOURCE_KEY, "create")
+
     conn = _get_conn()
     try:
         data = validar_periodo_data(
-            periodo_codigo=None,
             anio=anio,
             numero_periodo=numero_periodo,
             fecha_inicio=fecha_inicio,
@@ -113,7 +132,7 @@ def _create_periodo_impl(
             conn,
             codigo_usuario,
             Mov.PERIODO_CREADO,
-            id_row_tabla=periodo_id if periodo_id else data["periodo_codigo"],
+            periodo_id,
         )
 
         return "Período creado correctamente."
@@ -121,6 +140,9 @@ def _create_periodo_impl(
         conn.close()
 
 
+# =========================================================
+# UPDATE
+# =========================================================
 def update_periodo_endpoint(
     db_user: str | None,
     db_pass: str | None,
@@ -131,7 +153,9 @@ def update_periodo_endpoint(
     fecha_fin: str,
     estado_codigo: int,
     codigo_usuario: int | None = None,
-) -> str:
+):
+    require_maintenance_action(RESOURCE_KEY, "update")
+
     if not periodo_id:
         raise ValidationError("Debe seleccionar un período para actualizar.")
 
@@ -140,7 +164,6 @@ def update_periodo_endpoint(
         periodo_id = int(periodo_id)
 
         data = validar_periodo_data(
-            periodo_codigo=None,
             anio=anio,
             numero_periodo=numero_periodo,
             fecha_inicio=fecha_inicio,
@@ -171,7 +194,7 @@ def update_periodo_endpoint(
             conn,
             codigo_usuario,
             Mov.PERIODO_ACTUALIZADO,
-            id_row_tabla=periodo_id,
+            periodo_id,
         )
 
         return "Período actualizado correctamente."
@@ -179,107 +202,33 @@ def update_periodo_endpoint(
         conn.close()
 
 
+# =========================================================
+# DELETE
+# =========================================================
 def delete_periodo_endpoint(
     db_user: str | None,
     db_pass: str | None,
     periodo_id: int,
     codigo_usuario: int | None = None,
-) -> str:
+):
+    require_maintenance_action(RESOURCE_KEY, "delete")
+
     if not periodo_id:
         raise ValidationError("Debe seleccionar un período para eliminar.")
 
     conn = _get_conn()
     try:
         periodo_id = int(periodo_id)
+
         soft_delete_periodo(conn, periodo_id=periodo_id)
 
         _registrar_auditoria(
             conn,
             codigo_usuario,
             Mov.PERIODO_ELIMINADO,
-            id_row_tabla=periodo_id,
+            periodo_id,
         )
 
         return "Período desactivado correctamente."
     finally:
         conn.close()
-
-
-# =========================================================
-# Alias de compatibilidad
-# =========================================================
-def get_lookups(db_user: str | None = None, db_pass: str | None = None):
-    return fetch_estados_periodos(db_user, db_pass)
-
-
-def listar_periodos(
-    db_user: str | None = None,
-    db_pass: str | None = None,
-    codigo_usuario: int | None = None,
-):
-    return list_periodos_rows(db_user, db_pass, codigo_usuario=codigo_usuario)
-
-
-def crear_periodo(
-    db_user: str | None,
-    db_pass: str | None,
-    periodo_codigo: str | None = None,
-    anio: int = 0,
-    numero_periodo: int = 0,
-    fecha_inicio: str = "",
-    fecha_fin: str = "",
-    estado_codigo: int = 0,
-    codigo_usuario: int | None = None,
-) -> bool:
-    _create_periodo_impl(
-        db_user=db_user,
-        db_pass=db_pass,
-        anio=anio,
-        numero_periodo=numero_periodo,
-        fecha_inicio=fecha_inicio,
-        fecha_fin=fecha_fin,
-        estado_codigo=estado_codigo,
-        codigo_usuario=codigo_usuario,
-    )
-    return True
-
-
-def actualizar_periodo(
-    db_user: str | None,
-    db_pass: str | None,
-    periodo_id: int,
-    periodo_codigo: str | None = None,
-    anio: int = 0,
-    numero_periodo: int = 0,
-    fecha_inicio: str = "",
-    fecha_fin: str = "",
-    estado_codigo: int = 0,
-    codigo_usuario: int | None = None,
-) -> bool:
-    update_periodo_endpoint(
-        db_user=db_user,
-        db_pass=db_pass,
-        periodo_id=periodo_id,
-        anio=anio,
-        numero_periodo=numero_periodo,
-        fecha_inicio=fecha_inicio,
-        fecha_fin=fecha_fin,
-        estado_codigo=estado_codigo,
-        codigo_usuario=codigo_usuario,
-    )
-    return True
-
-
-def eliminar_periodo(
-    db_user: str | None,
-    db_pass: str | None,
-    periodo_id: int,
-    codigo_usuario: int | None = None,
-) -> bool:
-    delete_periodo_endpoint(
-        db_user=db_user,
-        db_pass=db_pass,
-        periodo_id=periodo_id,
-        codigo_usuario=codigo_usuario,
-    )
-    return True

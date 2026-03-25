@@ -4,6 +4,7 @@ from __future__ import annotations
 from app.core.db import connect
 from app.core.auditoria import Mov, Tab, compose_named_row_id
 from app.repositories.auditoria_repo import insert_auditoria
+from app.services.security.permission_service import require_matriculas_action
 
 from app.repositories.matriculas.matriculas_repo import (
     fetch_estudiantes_activos,
@@ -70,6 +71,8 @@ def get_lookups(
     db_pass: str,
     codigo_usuario: int | None = None,
 ) -> dict:
+    require_matriculas_action("consultar")
+
     conn = connect(db_user, db_pass)
     try:
         return {
@@ -90,6 +93,8 @@ def get_docentes_por_curso(
     curso_cod: int,
     codigo_usuario: int | None = None,
 ) -> list:
+    require_matriculas_action("consultar")
+
     conn = connect(db_user, db_pass)
     try:
         return fetch_docentes_por_curso(conn, int(curso_cod))
@@ -102,6 +107,8 @@ def listar_matriculas(
     db_pass: str,
     codigo_usuario: int | None = None,
 ):
+    require_matriculas_action("consultar")
+
     conn = connect(db_user, db_pass)
     try:
         return list_matriculas(conn)
@@ -120,6 +127,8 @@ def matricular(
     fecha: str,
     periodo: int,
 ) -> bool:
+    require_matriculas_action("crear")
+
     conn = connect(db_user, db_pass)
     try:
         data = validar_matricula_data(
@@ -176,6 +185,8 @@ def cambiar_estado(
     periodo: int,
     nuevo_estado: str,
 ) -> bool:
+    require_matriculas_action("actualizar")
+
     conn = connect(db_user, db_pass)
     try:
         carnet_limpio = (carnet or "").strip()
@@ -222,6 +233,8 @@ def eliminar_matricula(
     curso_cod: int,
     periodo: int,
 ) -> bool:
+    require_matriculas_action("eliminar")
+
     conn = connect(db_user, db_pass)
     try:
         carnet_limpio = (carnet or "").strip()
@@ -259,6 +272,8 @@ def listar_matriculas_por_curso(
     curso_cod: int,
     codigo_usuario: int | None = None,
 ):
+    require_matriculas_action("consultar")
+
     conn = connect(db_user, db_pass)
     try:
         return list_matriculas_por_curso(conn, curso_cod=int(curso_cod))
@@ -277,6 +292,8 @@ def reporte_estudiantes_por_curso(
     Reporte: estudiantes matriculados por curso.
     Devuelve lista de tuplas: (Periodo, Carnet, Estudiante, Estado)
     """
+    require_matriculas_action("report")
+
     conn = connect(db_user, db_pass)
     try:
         curso_cod = int(curso_cod)
@@ -304,6 +321,8 @@ def get_estudiantes_elegibles(
     periodo: int,
     codigo_usuario: int | None = None,
 ) -> list:
+    require_matriculas_action("consultar")
+
     conn = connect(db_user, db_pass)
     try:
         return fetch_estudiantes_elegibles_para_curso(

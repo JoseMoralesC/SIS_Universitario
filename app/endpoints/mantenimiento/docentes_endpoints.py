@@ -19,6 +19,13 @@ from app.repositories.mantenimiento.docentes_repo import (
 
 from app.core.auditoria import Mov, Tab
 from app.repositories.auditoria_repo import insert_auditoria
+from app.services.security.permission_service import (
+    require_maintenance_access,
+    require_maintenance_action,
+)
+
+
+RESOURCE_KEY = "docentes"
 
 
 def _get_conn():
@@ -50,7 +57,13 @@ def _registrar_auditoria(
         pass
 
 
-def siguiente_docente_cod(db_user: str | None = None, db_pass: str | None = None) -> int:
+def siguiente_docente_cod(
+    db_user: str | None = None,
+    db_pass: str | None = None,
+    codigo_usuario: int | None = None,
+) -> int:
+    require_maintenance_access(RESOURCE_KEY)
+
     conn = _get_conn()
     try:
         return next_docente_cod(conn)
@@ -59,6 +72,8 @@ def siguiente_docente_cod(db_user: str | None = None, db_pass: str | None = None
 
 
 def get_lookups(db_user: str | None = None, db_pass: str | None = None):
+    require_maintenance_access(RESOURCE_KEY)
+
     conn = _get_conn()
     try:
         estados = fetch_estados(conn)
@@ -81,6 +96,8 @@ def listar_docentes(
     db_user y db_pass se conservan por compatibilidad temporal.
     codigo_usuario se acepta por consistencia y auditoría futura.
     """
+    require_maintenance_access(RESOURCE_KEY)
+
     conn = _get_conn()
     try:
         return list_docentes_join_activos(conn)
@@ -99,6 +116,8 @@ def crear_docente(
     profesion_cod: int,
     codigo_usuario: int | None = None,
 ) -> bool:
+    require_maintenance_action(RESOURCE_KEY, "create")
+
     conn = _get_conn()
     try:
         data = validar_docente_data(
@@ -147,6 +166,8 @@ def actualizar_docente(
     profesion_cod: int,
     codigo_usuario: int | None = None,
 ) -> bool:
+    require_maintenance_action(RESOURCE_KEY, "update")
+
     if not docente_cod:
         raise ValidationError("Debe seleccionar un docente para actualizar.")
 
@@ -198,6 +219,8 @@ def eliminar_docente(
     - Cambia Estado_Codigo al estado "Inactivo"
     - No hace DELETE físico
     """
+    require_maintenance_action(RESOURCE_KEY, "delete")
+
     if not docente_cod:
         raise ValidationError("Debe seleccionar un docente para eliminar.")
 

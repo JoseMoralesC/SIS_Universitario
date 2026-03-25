@@ -1,12 +1,11 @@
-# app/endpoints/cursos_endpoints.py
+# app/endpoints/mantenimiento/cursos_endpoints.py
 from __future__ import annotations
 
 from app.core.db import connect_app
-from app.services.mantenimiento.cursos_service import (
-    validar_curso_data,
-    validar_curso_unicidad,
-)
 from app.core.exceptions import ValidationError
+from app.core.auditoria import Mov, Tab
+from app.repositories.auditoria_repo import insert_auditoria
+
 from app.repositories.mantenimiento.cursos_repo import (
     fetch_estados,
     fetch_programas,
@@ -16,9 +15,17 @@ from app.repositories.mantenimiento.cursos_repo import (
     update_curso,
     soft_delete_curso,
 )
+from app.services.mantenimiento.cursos_service import (
+    validar_curso_data,
+    validar_curso_unicidad,
+)
+from app.services.security.permission_service import (
+    require_maintenance_access,
+    require_maintenance_action,
+)
 
-from app.core.auditoria import Mov, Tab
-from app.repositories.auditoria_repo import insert_auditoria
+
+RESOURCE_KEY = "cursos"
 
 
 def _get_conn():
@@ -51,6 +58,13 @@ def _registrar_auditoria(
 
 
 def get_lookups(db_user: str | None = None, db_pass: str | None = None):
+    """
+    Devuelve:
+    - estados de materia
+    - programas activos
+    """
+    require_maintenance_access(RESOURCE_KEY)
+
     conn = _get_conn()
     try:
         estados = fetch_estados(conn)
@@ -66,14 +80,12 @@ def listar_cursos(
     codigo_usuario: int | None = None,
 ):
     """
-    Lista cursos visibles en el grid:
-    - NO incluye estado Inactivo
-    - Sí incluye Activo y Suspendido (y cualquier otro excepto Inactivo)
-
+    Lista cursos visibles en el grid.
     db_user y db_pass se conservan por compatibilidad temporal.
-    codigo_usuario se acepta por consistencia
-    (y futuras auditorías de listado).
+    codigo_usuario se acepta por consistencia.
     """
+    require_maintenance_access(RESOURCE_KEY)
+
     conn = _get_conn()
     try:
         return list_cursos_join_activos(conn)
@@ -81,7 +93,18 @@ def listar_cursos(
         conn.close()
 
 
-def siguiente_materia_cod(db_user: str | None = None, db_pass: str | None = None) -> int:
+def siguiente_materia_cod(
+    db_user: str | None = None,
+    db_pass: str | None = None,
+    codigo_usuario: int | None = None,
+) -> int:
+    """
+    Siguiente ID para Materias.
+    db_user y db_pass se conservan por compatibilidad temporal.
+    codigo_usuario se acepta por uniformidad.
+    """
+    require_maintenance_access(RESOURCE_KEY)
+
     conn = _get_conn()
     try:
         return next_materia_cod(conn)
@@ -99,6 +122,8 @@ def crear_curso(
     estado_codigo: int,
     codigo_usuario: int | None = None,
 ) -> bool:
+    require_maintenance_action(RESOURCE_KEY, "create")
+
     conn = _get_conn()
     try:
         data = validar_curso_data(
@@ -120,7 +145,10 @@ def crear_curso(
         insert_curso(
             conn,
             materia_cod=materia_cod,
-            **data,
+            descripcion=data["descripcion"],
+            curso_cod=data["curso_cod"],
+            precio=data["precio"],
+            estado_codigo=data["estado_codigo"],
         )
 
         _registrar_auditoria(
@@ -145,6 +173,8 @@ def actualizar_curso(
     estado_codigo: int,
     codigo_usuario: int | None = None,
 ) -> bool:
+    require_maintenance_action(RESOURCE_KEY, "update")
+
     if not materia_cod:
         raise ValidationError("Debe seleccionar un curso para actualizar.")
 
@@ -169,7 +199,10 @@ def actualizar_curso(
         update_curso(
             conn,
             materia_cod=materia_cod,
-            **data,
+            descripcion=data["descripcion"],
+            curso_cod=data["curso_cod"],
+            precio=data["precio"],
+            estado_codigo=data["estado_codigo"],
         )
 
         _registrar_auditoria(
@@ -195,6 +228,8 @@ def eliminar_curso(
     - Cambia Estado_Codigo al estado "Inactivo"
     - No hace DELETE físico
     """
+    require_maintenance_action(RESOURCE_KEY, "delete")
+
     if not materia_cod:
         raise ValidationError("Debe seleccionar un curso para eliminar.")
 

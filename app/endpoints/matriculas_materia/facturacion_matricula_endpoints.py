@@ -7,6 +7,7 @@ from app.core.auditoria import (
     compose_named_row_id,
 )
 from app.repositories.auditoria_repo import insert_auditoria
+from app.services.security.permission_service import require_matricula_materias_action
 from app.services.matriculas_materia.facturacion_matricula_service import (
     generar_referencia_preview,
     validar_facturacion_request,
@@ -65,7 +66,13 @@ def _registrar_auditoria(
 # =========================================================
 # Catálogos
 # =========================================================
-def get_formas_pago(db_user: str, db_pass: str) -> list[tuple[int, str]]:
+def get_formas_pago(
+    db_user: str,
+    db_pass: str,
+    codigo_usuario: int | None = None,
+) -> list[tuple[int, str]]:
+    require_matricula_materias_action("consultar", resource_key="facturacion_matricula")
+
     conn = connect(db_user, db_pass)
     try:
         return fetch_formas_pago(conn)
@@ -81,7 +88,10 @@ def get_referencia_pago_preview(
     db_pass: str,
     *,
     forma_pago_cod: int,
+    codigo_usuario: int | None = None,
 ) -> str:
+    require_matricula_materias_action("consultar", resource_key="facturacion_matricula")
+
     conn = connect(db_user, db_pass)
     try:
         return generar_referencia_preview(
@@ -104,10 +114,13 @@ def get_resumen_facturacion(
     periodo_id: int,
     anio: int,
     forma_pago_cod: int,
+    codigo_usuario: int | None = None,
 ) -> dict:
     """
     Retorna el resumen de materias pendientes, beca y totales.
     """
+    require_matricula_materias_action("consultar", resource_key="facturacion_matricula")
+
     data = validar_facturacion_request(
         carnet=carnet,
         curso_cod=curso_cod,
@@ -149,6 +162,8 @@ def save_facturacion_matricula(
     La referencia manual ya no gobierna el guardado;
     el repository genera la definitiva automáticamente.
     """
+    require_matricula_materias_action("crear", resource_key="facturacion_matricula")
+
     data = validar_facturacion_request(
         carnet=carnet,
         curso_cod=curso_cod,

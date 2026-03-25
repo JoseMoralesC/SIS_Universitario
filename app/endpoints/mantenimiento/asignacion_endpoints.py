@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from app.core.db import connect_app
 from app.core.exceptions import ValidationError
-from app.core.auditoria import Mov, Tab, compose_named_row_id
+from app.core.auditoria import Mov, Tab
 from app.repositories.auditoria_repo import insert_auditoria
 
 from app.repositories.mantenimiento.asignacion_repo import (
@@ -19,6 +19,13 @@ from app.services.mantenimiento.asignacion_service import (
     validar_asignacion_creacion,
     validar_asignacion_actualizacion,
 )
+from app.services.security.permission_service import (
+    require_maintenance_access,
+    require_maintenance_action,
+)
+
+
+RESOURCE_KEY = "asignacion"
 
 
 def _get_conn():
@@ -28,14 +35,11 @@ def _get_conn():
     return connect_app()
 
 
-def _build_row_id(curso_cod: int, docente_cod: int) -> str:
+def _compose_named_row_id(curso_cod: int, docente_cod: int) -> str:
     """
-    Identificador compuesto para dbo.Curso_Docente.
+    Representación compacta y clara para PK compuesta.
     """
-    return compose_named_row_id(
-        Curso_Cod=int(curso_cod),
-        Docente_Cod=int(docente_cod),
-    )
+    return f"curso_cod={int(curso_cod)};docente_cod={int(docente_cod)}"
 
 
 def _registrar_auditoria(
@@ -56,11 +60,21 @@ def _registrar_auditoria(
             id_row_tabla=id_row_tabla,
         )
     except Exception:
-        # No romper flujo principal por fallo aislado de auditoría
+        # No romper el flujo principal por un fallo aislado de auditoría
         pass
 
 
-def get_lookups(db_user: str | None = None, db_pass: str | None = None):
+def get_lookups(
+    db_user: str | None = None,
+    db_pass: str | None = None,
+):
+    """
+    Devuelve:
+    - programas activos
+    - docentes activos
+    """
+    require_maintenance_access(RESOURCE_KEY)
+
     conn = _get_conn()
     try:
         programas = fetch_programas_activos(conn)
@@ -75,6 +89,13 @@ def listar_asignaciones(
     db_pass: str | None = None,
     codigo_usuario: int | None = None,
 ):
+    """
+    Lista asignaciones visibles en el grid.
+    db_user y db_pass se conservan por compatibilidad temporal.
+    codigo_usuario se acepta por consistencia.
+    """
+    require_maintenance_access(RESOURCE_KEY)
+
     conn = _get_conn()
     try:
         return list_asignaciones(conn)
@@ -89,6 +110,8 @@ def crear_asignacion(
     docente_cod: int,
     codigo_usuario: int | None = None,
 ) -> bool:
+    require_maintenance_action(RESOURCE_KEY, "create")
+
     conn = _get_conn()
     try:
         data = validar_asignacion_data(
@@ -96,15 +119,23 @@ def crear_asignacion(
             docente_cod=docente_cod,
         )
 
-        validar_asignacion_creacion(conn, **data)
+        validar_asignacion_creacion(
+            conn,
+            curso_cod=data["curso_cod"],
+            docente_cod=data["docente_cod"],
+        )
 
-        insert_asignacion(conn, **data)
+        insert_asignacion(
+            conn,
+            curso_cod=data["curso_cod"],
+            docente_cod=data["docente_cod"],
+        )
 
         _registrar_auditoria(
             conn,
             codigo_usuario,
-            Mov.CURSO_DOCENTE_CREADO,
-            id_row_tabla=_build_row_id(
+            Mov.ASIGNACION_CREADA,
+            id_row_tabla=_compose_named_row_id(
                 data["curso_cod"],
                 data["docente_cod"],
             ),
@@ -124,39 +155,46 @@ def actualizar_asignacion(
     docente_cod_nuevo: int,
     codigo_usuario: int | None = None,
 ) -> bool:
+    require_maintenance_action(RESOURCE_KEY, "update")
+
     if not curso_cod_original or not docente_cod_original:
         raise ValidationError("Debe seleccionar una asignación para actualizar.")
 
     conn = _get_conn()
     try:
-        data_nueva = validar_asignacion_data(
+        original = validar_asignacion_data(
+            curso_cod=curso_cod_original,
+            docente_cod=docente_cod_original,
+        )
+        nuevo = validar_asignacion_data(
             curso_cod=curso_cod_nuevo,
             docente_cod=docente_cod_nuevo,
         )
 
         validar_asignacion_actualizacion(
             conn,
-            curso_cod_original=int(curso_cod_original),
-            docente_cod_original=int(docente_cod_original),
-            curso_cod_nuevo=data_nueva["curso_cod"],
-            docente_cod_nuevo=data_nueva["docente_cod"],
+            curso_cod_original=original["curso_cod"],
+            docente_cod_original=original["docente_cod"],
+            curso_cod_nuevo=nuevo["curso_cod"],
+            docente_cod_nuevo=nuevo["docente_cod"],
         )
 
         update_asignacion(
             conn,
-            curso_cod_original=int(curso_cod_original),
-            docente_cod_original=int(docente_cod_original),
-            curso_cod_nuevo=data_nueva["curso_cod"],
-            docente_cod_nuevo=data_nueva["docente_cod"],
+            curso_cod_original=original["curso_cod"],
+            docente_cod_original=original["docente_cod"],
+            curso_cod_nuevo=nuevo["curso_cod"],
+            docente_cod_nuevo=nuevo["docente_cod"],
         )
 
         _registrar_auditoria(
             conn,
             codigo_usuario,
-            Mov.CURSO_DOCENTE_ACTUALIZADO,
-            id_row_tabla=_build_row_id(
-                data_nueva["curso_cod"],
-                data_nueva["docente_cod"],
+            Mov.ASIGNACION_ACTUALIZADA,
+            id_row_tabla=(
+                f"{_compose_named_row_id(original['curso_cod'], original['docente_cod'])}"
+                f" -> "
+                f"{_compose_named_row_id(nuevo['curso_cod'], nuevo['docente_cod'])}"
             ),
         )
 
@@ -172,25 +210,29 @@ def eliminar_asignacion(
     docente_cod: int,
     codigo_usuario: int | None = None,
 ) -> bool:
-    if not curso_cod or not docente_cod:
-        raise ValidationError("Debe seleccionar una asignación para eliminar.")
+    require_maintenance_action(RESOURCE_KEY, "delete")
+
+    data = validar_asignacion_data(
+        curso_cod=curso_cod,
+        docente_cod=docente_cod,
+    )
 
     conn = _get_conn()
     try:
-        curso_cod = int(curso_cod)
-        docente_cod = int(docente_cod)
-
         delete_asignacion(
             conn,
-            curso_cod=curso_cod,
-            docente_cod=docente_cod,
+            curso_cod=data["curso_cod"],
+            docente_cod=data["docente_cod"],
         )
 
         _registrar_auditoria(
             conn,
             codigo_usuario,
-            Mov.CURSO_DOCENTE_ELIMINADO,
-            id_row_tabla=_build_row_id(curso_cod, docente_cod),
+            Mov.ASIGNACION_ELIMINADA,
+            id_row_tabla=_compose_named_row_id(
+                data["curso_cod"],
+                data["docente_cod"],
+            ),
         )
 
         return True

@@ -35,7 +35,7 @@ class PermissionService:
     - Soportar ADMIN como bypass global.
     - Tolerar variaciones razonables en nombres de permisos
       (singular/plural, prefijos de módulo, alias históricos).
-    - Exponer helpers listos para módulos y tabs de mantenimientos.
+    - Exponer helpers listos para módulos, submódulos y tabs.
     """
 
     MODULE_ALIASES: dict[str, tuple[str, ...]] = {
@@ -67,11 +67,42 @@ class PermissionService:
         ),
     }
 
+    MODULE_RESOURCE_ALIASES: dict[str, dict[str, tuple[str, ...]]] = {
+        "matriculas": {
+            "matriculas": ("MATRICULAS", "MATRICULA"),
+            "reportes": ("REPORTES", "REPORTE"),
+        },
+        "asistencias": {
+            "asistencias": ("ASISTENCIAS", "ASISTENCIA"),
+            "listas": ("LISTAS", "LISTA", "LISTAS_ASISTENCIA", "LISTA_ASISTENCIA"),
+        },
+        "matricula_materias": {
+            "matricula_materia": (
+                "MATRICULA_MATERIA",
+                "MATRICULA_MATERIAS",
+                "MATRICULAS_MATERIAS",
+            ),
+            "docente_materia": ("DOCENTE_MATERIA", "DOCENTES_MATERIA"),
+            "materia_horario": ("MATERIA_HORARIO", "MATERIAS_HORARIO"),
+            "facturacion_matricula": (
+                "FACTURACION_MATRICULA",
+                "FACTURA_MATRICULA",
+                "FACTURACION",
+            ),
+            "consulta_matricula_estudiante": (
+                "CONSULTA_MATRICULA_ESTUDIANTE",
+                "CONSULTA_MATRICULA",
+                "CONSULTA_ESTUDIANTE",
+            ),
+        },
+    }
+
     ACTION_ALIASES: dict[str, tuple[str, ...]] = {
         "access": ("ACCESO", "VER", "CONSULTAR", "LISTAR"),
-        "create": ("CREAR", "NUEVO", "GUARDAR", "REGISTRAR", "INSERTAR"),
-        "update": ("ACTUALIZAR", "EDITAR", "MODIFICAR"),
-        "delete": ("ELIMINAR", "BORRAR"),
+        "create": ("CREAR", "NUEVO", "GUARDAR", "REGISTRAR", "INSERTAR", "FACTURAR"),
+        "update": ("ACTUALIZAR", "EDITAR", "MODIFICAR", "CAMBIAR_ESTADO"),
+        "delete": ("ELIMINAR", "BORRAR", "DESACTIVAR"),
+        "report": ("REPORTES", "REPORTE", "CONSULTAR", "VER", "LISTAR"),
     }
 
     @staticmethod
@@ -87,7 +118,11 @@ class PermissionService:
         return normalized.lower()
 
     def _permission_set(self) -> set[str]:
-        return {self._normalize_token(code) for code in get_permisos() if self._normalize_token(code)}
+        return {
+            self._normalize_token(code)
+            for code in get_permisos()
+            if self._normalize_token(code)
+        }
 
     def _module_aliases(self, module_key: str) -> tuple[str, ...]:
         key = self._normalize_key(module_key)
@@ -101,6 +136,18 @@ class PermissionService:
     def _resource_aliases(self, resource_key: str) -> tuple[str, ...]:
         key = self._normalize_key(resource_key)
         aliases = self.MAINTENANCE_RESOURCE_ALIASES.get(key, ())
+        if aliases:
+            return aliases
+
+        token = self._normalize_token(resource_key)
+        return (token,) if token else ()
+
+    def _module_resource_aliases(self, module_key: str, resource_key: str) -> tuple[str, ...]:
+        module_norm = self._normalize_key(module_key)
+        resource_norm = self._normalize_key(resource_key)
+
+        module_resources = self.MODULE_RESOURCE_ALIASES.get(module_norm, {})
+        aliases = module_resources.get(resource_norm, ())
         if aliases:
             return aliases
 
@@ -146,6 +193,58 @@ class PermissionService:
 
         return self._unique_ordered(candidates)
 
+    def _build_module_action_candidates(
+        self,
+        module_key: str,
+        action_key: str,
+        *,
+        resource_key: str | None = None,
+    ) -> tuple[str, ...]:
+        action_norm = self._normalize_key(action_key)
+        if not action_norm:
+            return ()
+
+        module_aliases = self._module_aliases(module_key)
+        action_aliases = self._action_aliases(action_norm)
+
+        candidates: list[str] = []
+
+        # Siempre tolerar acceso global del módulo
+        for module in module_aliases:
+            candidates.extend(
+                [
+                    f"{module}.ACCESO",
+                    f"{module}.VER",
+                    f"{module}.CONSULTAR",
+                    f"{module}.LISTAR",
+                ]
+            )
+
+        # Si no se envía recurso específico, usar permiso global del módulo
+        if not resource_key:
+            for module in module_aliases:
+                for action in action_aliases:
+                    candidates.append(f"{module}.{action}")
+            return self._unique_ordered(candidates)
+
+        resource_aliases = self._module_resource_aliases(module_key, resource_key)
+
+        for resource in resource_aliases:
+            for action in action_aliases:
+                # Permiso directo del recurso
+                candidates.append(f"{resource}.{action}")
+
+                # Permiso namespaced bajo el módulo
+                for module in module_aliases:
+                    candidates.append(f"{module}.{resource}.{action}")
+
+        # Fallback transversal por operación del módulo completo
+        for module in module_aliases:
+            for action in action_aliases:
+                candidates.append(f"{module}.{action}")
+
+        return self._unique_ordered(candidates)
+
     def _build_maintenance_candidates(self, resource_key: str, action_key: str) -> tuple[str, ...]:
         action_key = self._normalize_key(action_key)
         if not action_key:
@@ -176,7 +275,12 @@ class PermissionService:
 
         return self._unique_ordered(candidates)
 
-    def _check_candidates(self, candidates: Iterable[str], *, admin_bypass: bool = True) -> PermissionCheckResult:
+    def _check_candidates(
+        self,
+        candidates: Iterable[str],
+        *,
+        admin_bypass: bool = True,
+    ) -> PermissionCheckResult:
         normalized_candidates = self._unique_ordered(candidates)
 
         if admin_bypass and is_admin():
@@ -193,7 +297,10 @@ class PermissionService:
     # API genérica
     # =========================================================
     def has_permission_code(self, codigo_permiso: str, *, admin_bypass: bool = True) -> bool:
-        result = self._check_candidates((self._normalize_token(codigo_permiso),), admin_bypass=admin_bypass)
+        result = self._check_candidates(
+            (self._normalize_token(codigo_permiso),),
+            admin_bypass=admin_bypass,
+        )
         return result.allowed
 
     def check_module_access(self, module_key: str, *, admin_bypass: bool = True) -> PermissionCheckResult:
@@ -202,6 +309,94 @@ class PermissionService:
 
     def can_access_module(self, module_key: str, *, admin_bypass: bool = True) -> bool:
         return self.check_module_access(module_key, admin_bypass=admin_bypass).allowed
+
+    def check_module_permission(
+        self,
+        module_key: str,
+        action_key: str,
+        *,
+        resource_key: str | None = None,
+        admin_bypass: bool = True,
+    ) -> PermissionCheckResult:
+        candidates = self._build_module_action_candidates(
+            module_key,
+            action_key,
+            resource_key=resource_key,
+        )
+        return self._check_candidates(candidates, admin_bypass=admin_bypass)
+
+    def can_module_action(
+        self,
+        module_key: str,
+        action_key: str,
+        *,
+        resource_key: str | None = None,
+        admin_bypass: bool = True,
+    ) -> bool:
+        return self.check_module_permission(
+            module_key,
+            action_key,
+            resource_key=resource_key,
+            admin_bypass=admin_bypass,
+        ).allowed
+
+    def get_module_permissions_state(
+        self,
+        module_key: str,
+        *,
+        resource_key: str | None = None,
+        admin_bypass: bool = True,
+    ) -> dict:
+        access_result = self.check_module_access(module_key, admin_bypass=admin_bypass)
+        create_result = self.check_module_permission(
+            module_key,
+            "create",
+            resource_key=resource_key,
+            admin_bypass=admin_bypass,
+        )
+        update_result = self.check_module_permission(
+            module_key,
+            "update",
+            resource_key=resource_key,
+            admin_bypass=admin_bypass,
+        )
+        delete_result = self.check_module_permission(
+            module_key,
+            "delete",
+            resource_key=resource_key,
+            admin_bypass=admin_bypass,
+        )
+        report_result = self.check_module_permission(
+            module_key,
+            "report",
+            resource_key=resource_key,
+            admin_bypass=admin_bypass,
+        )
+
+        return {
+            "module": self._normalize_key(module_key),
+            "resource": self._normalize_key(resource_key or ""),
+            "is_admin": is_admin(),
+            "access": access_result.allowed,
+            "create": create_result.allowed,
+            "update": update_result.allowed,
+            "delete": delete_result.allowed,
+            "report": report_result.allowed,
+            "matched": {
+                "access": access_result.matched_code,
+                "create": create_result.matched_code,
+                "update": update_result.matched_code,
+                "delete": delete_result.matched_code,
+                "report": report_result.matched_code,
+            },
+            "candidates": {
+                "access": list(access_result.candidates),
+                "create": list(create_result.candidates),
+                "update": list(update_result.candidates),
+                "delete": list(delete_result.candidates),
+                "report": list(report_result.candidates),
+            },
+        }
 
     def check_maintenance_permission(
         self,
@@ -262,7 +457,10 @@ class PermissionService:
         message: str | None = None,
         admin_bypass: bool = True,
     ) -> None:
-        result = self._check_candidates((self._normalize_token(codigo_permiso),), admin_bypass=admin_bypass)
+        result = self._check_candidates(
+            (self._normalize_token(codigo_permiso),),
+            admin_bypass=admin_bypass,
+        )
         if result.allowed:
             return
 
@@ -285,6 +483,44 @@ class PermissionService:
         raise PermissionDeniedError(
             message or f"No tienes permiso para acceder al módulo {module_name}."
         )
+
+    def require_module_action(
+        self,
+        module_key: str,
+        action_key: str,
+        *,
+        resource_key: str | None = None,
+        message: str | None = None,
+        admin_bypass: bool = True,
+    ) -> None:
+        result = self.check_module_permission(
+            module_key,
+            action_key,
+            resource_key=resource_key,
+            admin_bypass=admin_bypass,
+        )
+        if result.allowed:
+            return
+
+        module_name = self._normalize_token(module_key) or "MODULO"
+        resource_name = self._normalize_token(resource_key or "")
+        action_name = self._normalize_token(action_key) or "ACCION"
+
+        action_labels = {
+            "ACCESS": "acceder",
+            "CREATE": "crear",
+            "UPDATE": "actualizar",
+            "DELETE": "eliminar",
+            "REPORT": "consultar reportes",
+        }
+        action_label = action_labels.get(action_name, action_name.lower())
+
+        if resource_name:
+            default_message = f"No tienes permiso para {action_label} en {resource_name} del módulo {module_name}."
+        else:
+            default_message = f"No tienes permiso para {action_label} en el módulo {module_name}."
+
+        raise PermissionDeniedError(message or default_message)
 
     def require_maintenance_access(
         self,
@@ -329,6 +565,116 @@ class PermissionService:
             message or f"No tienes permiso para {action_label} en {resource_name}."
         )
 
+    # =========================================================
+    # Wrappers específicos por módulo
+    # =========================================================
+    def can_access_matriculas(self, *, admin_bypass: bool = True) -> bool:
+        return self.can_access_module("matriculas", admin_bypass=admin_bypass)
+
+    def can_access_asistencias(self, *, admin_bypass: bool = True) -> bool:
+        return self.can_access_module("asistencias", admin_bypass=admin_bypass)
+
+    def can_access_matricula_materias(self, *, admin_bypass: bool = True) -> bool:
+        return self.can_access_module("matricula_materias", admin_bypass=admin_bypass)
+
+    def require_matriculas_access(self, *, message: str | None = None, admin_bypass: bool = True) -> None:
+        self.require_module_access("matriculas", message=message, admin_bypass=admin_bypass)
+
+    def require_asistencias_access(self, *, message: str | None = None, admin_bypass: bool = True) -> None:
+        self.require_module_access("asistencias", message=message, admin_bypass=admin_bypass)
+
+    def require_matricula_materias_access(
+        self,
+        *,
+        message: str | None = None,
+        admin_bypass: bool = True,
+    ) -> None:
+        self.require_module_access("matricula_materias", message=message, admin_bypass=admin_bypass)
+
+    def require_matriculas_action(
+        self,
+        action_key: str,
+        *,
+        resource_key: str | None = None,
+        message: str | None = None,
+        admin_bypass: bool = True,
+    ) -> None:
+        self.require_module_action(
+            "matriculas",
+            action_key,
+            resource_key=resource_key,
+            message=message,
+            admin_bypass=admin_bypass,
+        )
+
+    def require_asistencias_action(
+        self,
+        action_key: str,
+        *,
+        resource_key: str | None = None,
+        message: str | None = None,
+        admin_bypass: bool = True,
+    ) -> None:
+        self.require_module_action(
+            "asistencias",
+            action_key,
+            resource_key=resource_key,
+            message=message,
+            admin_bypass=admin_bypass,
+        )
+
+    def require_matricula_materias_action(
+        self,
+        action_key: str,
+        *,
+        resource_key: str | None = None,
+        message: str | None = None,
+        admin_bypass: bool = True,
+    ) -> None:
+        self.require_module_action(
+            "matricula_materias",
+            action_key,
+            resource_key=resource_key,
+            message=message,
+            admin_bypass=admin_bypass,
+        )
+
+    def get_matriculas_permissions_state(
+        self,
+        *,
+        resource_key: str | None = None,
+        admin_bypass: bool = True,
+    ) -> dict:
+        return self.get_module_permissions_state(
+            "matriculas",
+            resource_key=resource_key,
+            admin_bypass=admin_bypass,
+        )
+
+    def get_asistencias_permissions_state(
+        self,
+        *,
+        resource_key: str | None = None,
+        admin_bypass: bool = True,
+    ) -> dict:
+        return self.get_module_permissions_state(
+            "asistencias",
+            resource_key=resource_key,
+            admin_bypass=admin_bypass,
+        )
+
+    def get_matricula_materias_permissions_state(
+        self,
+        *,
+        resource_key: str | None = None,
+        admin_bypass: bool = True,
+    ) -> dict:
+        return self.get_module_permissions_state(
+            "matricula_materias",
+            resource_key=resource_key,
+            admin_bypass=admin_bypass,
+        )
+
 
 permission_service = PermissionService()
 
@@ -361,12 +707,93 @@ def get_maintenance_permissions_state(resource_key: str, *, admin_bypass: bool =
     return permission_service.get_maintenance_permissions_state(resource_key, admin_bypass=admin_bypass)
 
 
-def require_module_access(module_key: str, *, message: str | None = None, admin_bypass: bool = True) -> None:
-    permission_service.require_module_access(module_key, message=message, admin_bypass=admin_bypass)
+def get_module_permissions_state(
+    module_key: str,
+    *,
+    resource_key: str | None = None,
+    admin_bypass: bool = True,
+) -> dict:
+    return permission_service.get_module_permissions_state(
+        module_key,
+        resource_key=resource_key,
+        admin_bypass=admin_bypass,
+    )
 
 
-def require_maintenance_access(resource_key: str, *, message: str | None = None, admin_bypass: bool = True) -> None:
-    permission_service.require_maintenance_access(resource_key, message=message, admin_bypass=admin_bypass)
+def get_matriculas_permissions_state(
+    *,
+    resource_key: str | None = None,
+    admin_bypass: bool = True,
+) -> dict:
+    return permission_service.get_matriculas_permissions_state(
+        resource_key=resource_key,
+        admin_bypass=admin_bypass,
+    )
+
+
+def get_asistencias_permissions_state(
+    *,
+    resource_key: str | None = None,
+    admin_bypass: bool = True,
+) -> dict:
+    return permission_service.get_asistencias_permissions_state(
+        resource_key=resource_key,
+        admin_bypass=admin_bypass,
+    )
+
+
+def get_matricula_materias_permissions_state(
+    *,
+    resource_key: str | None = None,
+    admin_bypass: bool = True,
+) -> dict:
+    return permission_service.get_matricula_materias_permissions_state(
+        resource_key=resource_key,
+        admin_bypass=admin_bypass,
+    )
+
+
+def require_module_access(
+    module_key: str,
+    *,
+    message: str | None = None,
+    admin_bypass: bool = True,
+) -> None:
+    permission_service.require_module_access(
+        module_key,
+        message=message,
+        admin_bypass=admin_bypass,
+    )
+
+
+def require_module_action(
+    module_key: str,
+    action_key: str,
+    *,
+    resource_key: str | None = None,
+    message: str | None = None,
+    admin_bypass: bool = True,
+) -> None:
+    permission_service.require_module_action(
+        module_key,
+        action_key,
+        resource_key=resource_key,
+        message=message,
+        admin_bypass=admin_bypass,
+    )
+
+
+def require_maintenance_access(
+    resource_key: str,
+    *,
+    message: str | None = None,
+    admin_bypass: bool = True,
+) -> None:
+    permission_service.require_maintenance_access(
+        resource_key,
+        message=message,
+        admin_bypass=admin_bypass,
+    )
 
 
 def require_maintenance_action(
@@ -379,6 +806,76 @@ def require_maintenance_action(
     permission_service.require_maintenance_action(
         resource_key,
         action_key,
+        message=message,
+        admin_bypass=admin_bypass,
+    )
+
+
+def require_matriculas_access(*, message: str | None = None, admin_bypass: bool = True) -> None:
+    permission_service.require_matriculas_access(
+        message=message,
+        admin_bypass=admin_bypass,
+    )
+
+
+def require_asistencias_access(*, message: str | None = None, admin_bypass: bool = True) -> None:
+    permission_service.require_asistencias_access(
+        message=message,
+        admin_bypass=admin_bypass,
+    )
+
+
+def require_matricula_materias_access(
+    *,
+    message: str | None = None,
+    admin_bypass: bool = True,
+) -> None:
+    permission_service.require_matricula_materias_access(
+        message=message,
+        admin_bypass=admin_bypass,
+    )
+
+
+def require_matriculas_action(
+    action_key: str,
+    *,
+    resource_key: str | None = None,
+    message: str | None = None,
+    admin_bypass: bool = True,
+) -> None:
+    permission_service.require_matriculas_action(
+        action_key,
+        resource_key=resource_key,
+        message=message,
+        admin_bypass=admin_bypass,
+    )
+
+
+def require_asistencias_action(
+    action_key: str,
+    *,
+    resource_key: str | None = None,
+    message: str | None = None,
+    admin_bypass: bool = True,
+) -> None:
+    permission_service.require_asistencias_action(
+        action_key,
+        resource_key=resource_key,
+        message=message,
+        admin_bypass=admin_bypass,
+    )
+
+
+def require_matricula_materias_action(
+    action_key: str,
+    *,
+    resource_key: str | None = None,
+    message: str | None = None,
+    admin_bypass: bool = True,
+) -> None:
+    permission_service.require_matricula_materias_action(
+        action_key,
+        resource_key=resource_key,
         message=message,
         admin_bypass=admin_bypass,
     )

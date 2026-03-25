@@ -13,10 +13,9 @@ from app.core.session import (
     get_nombre_usuario,
     get_rol_codigo,
     get_rol_nombre,
-    has_permission,
-    is_admin,
     clear_session,
 )
+from app.services.security.permission_service import can_access_module
 from app.ui.theme import apply_theme
 from app.ui.mantenimientos.base_tab import MaintenanceTab
 from app.ui.mantenimientos.docentes_tab import DocentesTab
@@ -85,24 +84,16 @@ class MainMenuWindow(tk.Toplevel):
     # Permisos / acceso
     # =====================================================
     def _can_access_mantenimientos(self) -> bool:
-        if is_admin():
-            return True
-        return has_permission("MANTENIMIENTOS.ACCESO")
+        return can_access_module("mantenimientos")
 
     def _can_access_matriculas(self) -> bool:
-        if is_admin():
-            return True
-        return has_permission("MATRICULAS.ACCESO")
+        return can_access_module("matriculas")
 
     def _can_access_matricula_materias(self) -> bool:
-        if is_admin():
-            return True
-        return has_permission("MATRICULA_MATERIAS.ACCESO")
+        return can_access_module("matricula_materias")
 
     def _can_access_asistencias(self) -> bool:
-        if is_admin():
-            return True
-        return has_permission("ASISTENCIAS.ACCESO")
+        return can_access_module("asistencias")
 
     def _has_access(self, key: str) -> bool:
         access_map = {

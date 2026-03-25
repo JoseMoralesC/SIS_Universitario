@@ -1,3 +1,4 @@
+# app/endpoints/mantenimiento/becados_endpoints.py
 from __future__ import annotations
 
 from app.core.db import connect_app
@@ -6,16 +7,14 @@ from app.core.auditoria import Mov, Tab
 from app.repositories.auditoria_repo import insert_auditoria
 
 from app.services.mantenimiento.becados_service import (
-    validar_becado_create_data,
-    validar_becado_update_data,
-    validar_becado_refs,
-    validar_becado_unicidad_activa,
-    validar_becado_existente,
+    validar_becado_data,
+    validar_becado_unicidad,
 )
 
+
 from app.repositories.mantenimiento.becados_repo import (
-    fetch_estudiantes_disponibles_lookup,
-    fetch_becas,
+    fetch_estudiantes_disponibles_lookup,  # <-- FIX
+    fetch_becas,                           # <-- FIX
     list_becados_join_activos,
     next_id_becado,
     insert_becado,
@@ -23,11 +22,16 @@ from app.repositories.mantenimiento.becados_repo import (
     soft_delete_becado,
 )
 
+from app.services.security.permission_service import (
+    require_maintenance_access,
+    require_maintenance_action,
+)
+
+
+RESOURCE_KEY = "becados"
+
 
 def _get_conn():
-    """
-    Obtiene la conexión técnica de la aplicación.
-    """
     return connect_app()
 
 
@@ -52,11 +56,21 @@ def _registrar_auditoria(
         pass
 
 
-def get_lookups(db_user: str | None = None, db_pass: str | None = None):
+# =========================================================
+# LOOKUPS
+# =========================================================
+def get_lookups(
+    db_user: str | None = None,
+    db_pass: str | None = None,
+):
+    require_maintenance_access(RESOURCE_KEY)
+
     conn = _get_conn()
     try:
+    
         estudiantes = fetch_estudiantes_disponibles_lookup(conn)
         becas = fetch_becas(conn)
+
         return {
             "estudiantes": estudiantes,
             "becas": becas,
@@ -65,11 +79,16 @@ def get_lookups(db_user: str | None = None, db_pass: str | None = None):
         conn.close()
 
 
+# =========================================================
+# GRID
+# =========================================================
 def listar_becados(
     db_user: str | None = None,
     db_pass: str | None = None,
     codigo_usuario: int | None = None,
 ):
+    require_maintenance_access(RESOURCE_KEY)
+
     conn = _get_conn()
     try:
         return list_becados_join_activos(conn)
@@ -77,11 +96,16 @@ def listar_becados(
         conn.close()
 
 
+# =========================================================
+# NEXT ID
+# =========================================================
 def siguiente_id_becado(
     db_user: str | None = None,
     db_pass: str | None = None,
     codigo_usuario: int | None = None,
 ) -> int:
+    require_maintenance_access(RESOURCE_KEY)
+
     conn = _get_conn()
     try:
         return next_id_becado(conn)
@@ -89,6 +113,9 @@ def siguiente_id_becado(
         conn.close()
 
 
+# =========================================================
+# CREATE
+# =========================================================
 def crear_becado(
     db_user: str | None,
     db_pass: str | None,
@@ -97,24 +124,20 @@ def crear_becado(
     fecha_aplicacion: str,
     codigo_usuario: int | None = None,
 ) -> bool:
+    require_maintenance_action(RESOURCE_KEY, "create")
+
     conn = _get_conn()
     try:
-        data = validar_becado_create_data(
+        data = validar_becado_data(
             carnet=carnet,
             id_beca=id_beca,
             fecha_aplicacion=fecha_aplicacion,
         )
 
-        validar_becado_refs(
+        validar_becado_unicidad(
             conn,
+            id_becado=None,
             carnet=data["carnet"],
-            id_beca=data["id_beca"],
-        )
-
-        validar_becado_unicidad_activa(
-            conn,
-            carnet=data["carnet"],
-            exclude_id=None,
         )
 
         id_becado = insert_becado(
@@ -136,6 +159,9 @@ def crear_becado(
         conn.close()
 
 
+# =========================================================
+# UPDATE
+# =========================================================
 def actualizar_becado(
     db_user: str | None,
     db_pass: str | None,
@@ -145,32 +171,26 @@ def actualizar_becado(
     fecha_aplicacion: str,
     codigo_usuario: int | None = None,
 ) -> bool:
+    require_maintenance_action(RESOURCE_KEY, "update")
+
     if not id_becado:
-        raise ValidationError("Debe seleccionar un becado para actualizar.")
+        raise ValidationError("Debe seleccionar una asignación de beca para actualizar.")
 
     conn = _get_conn()
     try:
         id_becado = int(id_becado)
 
-        validar_becado_existente(conn, id_becado=id_becado)
-
-        data = validar_becado_update_data(
+        data = validar_becado_data(
             id_becado=id_becado,
             carnet=carnet,
             id_beca=id_beca,
             fecha_aplicacion=fecha_aplicacion,
         )
 
-        validar_becado_refs(
+        validar_becado_unicidad(
             conn,
+            id_becado=id_becado,
             carnet=data["carnet"],
-            id_beca=data["id_beca"],
-        )
-
-        validar_becado_unicidad_activa(
-            conn,
-            carnet=data["carnet"],
-            exclude_id=id_becado,
         )
 
         update_becado(
@@ -193,20 +213,23 @@ def actualizar_becado(
         conn.close()
 
 
+# =========================================================
+# DELETE
+# =========================================================
 def eliminar_becado(
     db_user: str | None,
     db_pass: str | None,
     id_becado: int,
     codigo_usuario: int | None = None,
 ) -> bool:
+    require_maintenance_action(RESOURCE_KEY, "delete")
+
     if not id_becado:
-        raise ValidationError("Debe seleccionar un becado para eliminar.")
+        raise ValidationError("Debe seleccionar una asignación de beca para eliminar.")
 
     conn = _get_conn()
     try:
         id_becado = int(id_becado)
-
-        validar_becado_existente(conn, id_becado=id_becado)
 
         soft_delete_becado(conn, id_becado=id_becado)
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import List, Dict, Any
 
+from app.services.security.permission_service import require_matricula_materias_action
 from app.services.matriculas_materia.consulta_matricula_estudiante_service import (
     listar_periodos_con_matricula,
     listar_cursos_por_periodo,
@@ -72,6 +73,8 @@ def obtener_periodos_con_matricula(
     db_user: str,
     db_pass: str,
 ) -> List[Dict[str, Any]]:
+    require_matricula_materias_action("consultar", resource_key="consulta_matricula_estudiante")
+
     rows = listar_periodos_con_matricula(db_user, db_pass)
     return [_periodo_to_dict(r) for r in rows]
 
@@ -83,6 +86,8 @@ def obtener_cursos_por_periodo(
     periodo_id: int,
     anio: int,
 ) -> List[Dict[str, Any]]:
+    require_matricula_materias_action("consultar", resource_key="consulta_matricula_estudiante")
+
     rows = listar_cursos_por_periodo(
         db_user,
         db_pass,
@@ -100,6 +105,8 @@ def obtener_estudiantes_por_periodo_curso(
     anio: int,
     curso_cod: int,
 ) -> List[Dict[str, Any]]:
+    require_matricula_materias_action("consultar", resource_key="consulta_matricula_estudiante")
+
     rows = listar_estudiantes_por_periodo_curso(
         db_user,
         db_pass,
@@ -122,6 +129,8 @@ def consultar_matricula_estudiante(
     anio: int,
     curso_cod: int,
 ) -> List[Dict[str, Any]]:
+    require_matricula_materias_action("consultar", resource_key="consulta_matricula_estudiante")
+
     rows = listar_matricula_detalle_estudiante(
         db_user,
         db_pass,

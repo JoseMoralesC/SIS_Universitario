@@ -1,4 +1,3 @@
-# app/endpoints/matriculas_materia/docente_materia_endpoints.py
 from __future__ import annotations
 
 from app.core.db import connect
@@ -8,6 +7,7 @@ from app.core.auditoria import (
     compose_named_row_id,
 )
 from app.repositories.auditoria_repo import insert_auditoria
+from app.services.security.permission_service import require_matricula_materias_action
 from app.services.matriculas_materia.docente_materia_service import DocenteMateriaService
 
 
@@ -80,6 +80,8 @@ def fetch_estados_docente_materia(
     db_user: str,
     db_pass: str,
 ) -> list[tuple[int, str]]:
+    require_matricula_materias_action("consultar", resource_key="docente_materia")
+
     conn = _open_conn(db_user, db_pass)
     try:
         service = DocenteMateriaService(conn)
@@ -92,6 +94,8 @@ def fetch_cursos_activos_docente_materia(
     db_user: str,
     db_pass: str,
 ) -> list[tuple[int, str]]:
+    require_matricula_materias_action("consultar", resource_key="docente_materia")
+
     conn = _open_conn(db_user, db_pass)
     try:
         service = DocenteMateriaService(conn)
@@ -105,6 +109,8 @@ def fetch_docentes_por_curso_docente_materia(
     db_pass: str,
     curso_cod: int,
 ) -> list[tuple[int, str]]:
+    require_matricula_materias_action("consultar", resource_key="docente_materia")
+
     conn = _open_conn(db_user, db_pass)
     try:
         service = DocenteMateriaService(conn)
@@ -119,6 +125,8 @@ def fetch_materias_por_curso_docente_materia(
     db_pass: str,
     curso_cod: int,
 ) -> list[tuple[int, str]]:
+    require_matricula_materias_action("consultar", resource_key="docente_materia")
+
     conn = _open_conn(db_user, db_pass)
     try:
         service = DocenteMateriaService(conn)
@@ -134,6 +142,8 @@ def fetch_materias_disponibles_para_docente(
     docente_cod: int,
     curso_cod: int,
 ) -> list[tuple[int, str]]:
+    require_matricula_materias_action("consultar", resource_key="docente_materia")
+
     conn = _open_conn(db_user, db_pass)
     try:
         service = DocenteMateriaService(conn)
@@ -154,6 +164,8 @@ def fetch_docentes_disponibles_para_materia(
     db_pass: str,
     materia_cod: int,
 ) -> list[tuple[int, str]]:
+    require_matricula_materias_action("consultar", resource_key="docente_materia")
+
     conn = _open_conn(db_user, db_pass)
     try:
         service = DocenteMateriaService(conn)
@@ -172,6 +184,8 @@ def list_docente_materia_rows(
     db_user: str,
     db_pass: str,
 ) -> list[tuple]:
+    require_matricula_materias_action("consultar", resource_key="docente_materia")
+
     conn = _open_conn(db_user, db_pass)
     try:
         service = DocenteMateriaService(conn)
@@ -184,6 +198,8 @@ def list_docente_materia_rows_activos(
     db_user: str,
     db_pass: str,
 ) -> list[tuple]:
+    require_matricula_materias_action("consultar", resource_key="docente_materia")
+
     conn = _open_conn(db_user, db_pass)
     try:
         service = DocenteMateriaService(conn)
@@ -197,6 +213,8 @@ def list_docente_materia_rows_por_curso(
     db_pass: str,
     curso_cod: int,
 ) -> list[tuple]:
+    require_matricula_materias_action("consultar", resource_key="docente_materia")
+
     conn = _open_conn(db_user, db_pass)
     try:
         service = DocenteMateriaService(conn)
@@ -212,6 +230,8 @@ def list_materias_de_docente_rows(
     docente_cod: int,
     solo_activas: bool = True,
 ) -> list[tuple]:
+    require_matricula_materias_action("consultar", resource_key="docente_materia")
+
     conn = _open_conn(db_user, db_pass)
     try:
         service = DocenteMateriaService(conn)
@@ -232,6 +252,8 @@ def list_docentes_de_materia_rows(
     materia_cod: int,
     solo_activas: bool = True,
 ) -> list[tuple]:
+    require_matricula_materias_action("consultar", resource_key="docente_materia")
+
     conn = _open_conn(db_user, db_pass)
     try:
         service = DocenteMateriaService(conn)
@@ -258,6 +280,8 @@ def assign_docente_materia(
     estado_codigo: int = 1,
     codigo_usuario: int | None = None,
 ) -> str:
+    require_matricula_materias_action("crear", resource_key="docente_materia")
+
     conn = _open_conn(db_user, db_pass)
 
     try:
@@ -300,6 +324,8 @@ def update_estado_docente_materia(
     nuevo_estado_codigo: int,
     codigo_usuario: int | None = None,
 ) -> str:
+    require_matricula_materias_action("actualizar", resource_key="docente_materia")
+
     conn = _open_conn(db_user, db_pass)
 
     try:
@@ -341,6 +367,8 @@ def delete_docente_materia(
     materia_cod: int,
     codigo_usuario: int | None = None,
 ) -> str:
+    require_matricula_materias_action("eliminar", resource_key="docente_materia")
+
     conn = _open_conn(db_user, db_pass)
 
     try:

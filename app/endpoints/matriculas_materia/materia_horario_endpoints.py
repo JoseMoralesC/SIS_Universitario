@@ -8,6 +8,7 @@ from app.core.auditoria import (
     compose_named_row_id,
 )
 from app.repositories.auditoria_repo import insert_auditoria
+from app.services.security.permission_service import require_matricula_materias_action
 from app.services.matriculas_materia.materia_horario_service import MateriaHorarioService
 
 
@@ -82,6 +83,8 @@ def fetch_cursos_activos_materia_horario(
     db_user: str,
     db_pass: str,
 ) -> list[tuple[int, str]]:
+    require_matricula_materias_action("consultar", resource_key="materia_horario")
+
     conn = _open_conn(db_user, db_pass)
     try:
         service = MateriaHorarioService(conn)
@@ -94,6 +97,8 @@ def fetch_dias_semana_materia_horario(
     db_user: str,
     db_pass: str,
 ) -> list[tuple[str, str]]:
+    require_matricula_materias_action("consultar", resource_key="materia_horario")
+
     conn = _open_conn(db_user, db_pass)
     try:
         service = MateriaHorarioService(conn)
@@ -106,6 +111,8 @@ def fetch_jornadas_materia_horario(
     db_user: str,
     db_pass: str,
 ) -> list[tuple[int, str]]:
+    require_matricula_materias_action("consultar", resource_key="materia_horario")
+
     conn = _open_conn(db_user, db_pass)
     try:
         service = MateriaHorarioService(conn)
@@ -118,6 +125,8 @@ def fetch_materias_activas_materia_horario(
     db_user: str,
     db_pass: str,
 ) -> list[tuple[int, str]]:
+    require_matricula_materias_action("consultar", resource_key="materia_horario")
+
     conn = _open_conn(db_user, db_pass)
     try:
         service = MateriaHorarioService(conn)
@@ -131,6 +140,8 @@ def fetch_materias_por_curso_con_docente_materia_horario(
     db_pass: str,
     curso_cod: int,
 ) -> list[tuple[int, str]]:
+    require_matricula_materias_action("consultar", resource_key="materia_horario")
+
     conn = _open_conn(db_user, db_pass)
     try:
         service = MateriaHorarioService(conn)
@@ -147,6 +158,8 @@ def list_materia_horario_rows(
     db_user: str,
     db_pass: str,
 ) -> list[tuple]:
+    require_matricula_materias_action("consultar", resource_key="materia_horario")
+
     conn = _open_conn(db_user, db_pass)
     try:
         service = MateriaHorarioService(conn)
@@ -168,6 +181,8 @@ def assign_materia_horario(
     estado_codigo: int = 1,
     codigo_usuario: int | None = None,
 ) -> str:
+    require_matricula_materias_action("crear", resource_key="materia_horario")
+
     conn = _open_conn(db_user, db_pass)
 
     try:
@@ -212,6 +227,8 @@ def update_estado_materia_horario_endpoint(
     nuevo_estado: int,
     codigo_usuario: int | None = None,
 ) -> str:
+    require_matricula_materias_action("actualizar", resource_key="materia_horario")
+
     conn = _open_conn(db_user, db_pass)
 
     try:
@@ -247,6 +264,8 @@ def delete_materia_horario_endpoint(
     horario_id: int,
     codigo_usuario: int | None = None,
 ) -> str:
+    require_matricula_materias_action("eliminar", resource_key="materia_horario")
+
     conn = _open_conn(db_user, db_pass)
 
     try:

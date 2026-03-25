@@ -20,6 +20,14 @@ from app.repositories.mantenimiento.becas_repo import (
     soft_delete_beca,
 )
 
+from app.services.security.permission_service import (
+    require_maintenance_access,
+    require_maintenance_action,
+)
+
+
+RESOURCE_KEY = "becas"
+
 
 def _get_conn():
     """
@@ -46,10 +54,19 @@ def _registrar_auditoria(
             id_row_tabla=id_row_tabla,
         )
     except Exception:
+        # No romper el flujo principal por un fallo aislado de auditoría
         pass
 
 
-def get_lookups(db_user: str | None = None, db_pass: str | None = None):
+def get_lookups(
+    db_user: str | None = None,
+    db_pass: str | None = None,
+):
+    """
+    Devuelve estados de beca.
+    """
+    require_maintenance_access(RESOURCE_KEY)
+
     conn = _get_conn()
     try:
         return fetch_estados(conn)
@@ -62,6 +79,13 @@ def listar_becas(
     db_pass: str | None = None,
     codigo_usuario: int | None = None,
 ):
+    """
+    Lista becas visibles en el grid.
+    db_user y db_pass se conservan por compatibilidad temporal.
+    codigo_usuario se acepta por consistencia.
+    """
+    require_maintenance_access(RESOURCE_KEY)
+
     conn = _get_conn()
     try:
         return list_becas_join_activos(conn)
@@ -74,6 +98,13 @@ def siguiente_id_beca(
     db_pass: str | None = None,
     codigo_usuario: int | None = None,
 ) -> int:
+    """
+    Siguiente ID para becas.
+    db_user y db_pass se conservan por compatibilidad temporal.
+    codigo_usuario se acepta por uniformidad.
+    """
+    require_maintenance_access(RESOURCE_KEY)
+
     conn = _get_conn()
     try:
         return next_id_beca(conn)
@@ -89,6 +120,8 @@ def crear_beca(
     estado_codigo: int = 1,
     codigo_usuario: int | None = None,
 ) -> bool:
+    require_maintenance_action(RESOURCE_KEY, "create")
+
     conn = _get_conn()
     try:
         data = validar_beca_data(
@@ -110,7 +143,13 @@ def crear_beca(
             estado_codigo=data["estado_codigo"],
         )
 
-        _registrar_auditoria(conn, codigo_usuario, Mov.BECA_CREADA, id_row_tabla=id_beca)
+        _registrar_auditoria(
+            conn,
+            codigo_usuario,
+            Mov.BECA_CREADA,
+            id_row_tabla=id_beca,
+        )
+
         return True
     finally:
         conn.close()
@@ -125,6 +164,8 @@ def actualizar_beca(
     estado_codigo: int = 1,
     codigo_usuario: int | None = None,
 ) -> bool:
+    require_maintenance_action(RESOURCE_KEY, "update")
+
     if not id_beca:
         raise ValidationError("Debe seleccionar una beca para actualizar.")
 
@@ -153,7 +194,13 @@ def actualizar_beca(
             estado_codigo=data["estado_codigo"],
         )
 
-        _registrar_auditoria(conn, codigo_usuario, Mov.BECA_ACTUALIZADA, id_row_tabla=id_beca)
+        _registrar_auditoria(
+            conn,
+            codigo_usuario,
+            Mov.BECA_ACTUALIZADA,
+            id_row_tabla=id_beca,
+        )
+
         return True
     finally:
         conn.close()
@@ -165,15 +212,25 @@ def eliminar_beca(
     id_beca: int,
     codigo_usuario: int | None = None,
 ) -> bool:
+    require_maintenance_action(RESOURCE_KEY, "delete")
+
     if not id_beca:
         raise ValidationError("Debe seleccionar una beca para eliminar.")
 
     conn = _get_conn()
     try:
         id_beca = int(id_beca)
+
         validar_beca_puede_eliminarse(conn, id_beca=id_beca)
         soft_delete_beca(conn, id_beca)
-        _registrar_auditoria(conn, codigo_usuario, Mov.BECA_ELIMINADA, id_row_tabla=id_beca)
+
+        _registrar_auditoria(
+            conn,
+            codigo_usuario,
+            Mov.BECA_ELIMINADA,
+            id_row_tabla=id_beca,
+        )
+
         return True
     finally:
         conn.close()

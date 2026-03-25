@@ -8,6 +8,7 @@ from app.core.auditoria import (
     compose_named_row_id,
 )
 from app.repositories.auditoria_repo import insert_auditoria
+from app.services.security.permission_service import require_matricula_materias_action
 from app.services.matriculas_materia.matricula_materia_service import (
     MatriculaMateriaService,
 )
@@ -83,6 +84,8 @@ def fetch_estudiantes_activos_matricula_materia(
     db_user: str,
     db_pass: str,
 ) -> list[tuple[str, str]]:
+    require_matricula_materias_action("consultar", resource_key="matricula_materia")
+
     conn = _open_conn(db_user, db_pass)
     try:
         service = MatriculaMateriaService(conn)
@@ -105,6 +108,8 @@ def fetch_periodos_activos_matricula_materia(
 
     El tab ya está preparado para interpretar cualquiera de esas variantes.
     """
+    require_matricula_materias_action("consultar", resource_key="matricula_materia")
+
     conn = _open_conn(db_user, db_pass)
     try:
         service = MatriculaMateriaService(conn)
@@ -117,6 +122,8 @@ def fetch_estados_matricula_materia(
     db_user: str,
     db_pass: str,
 ) -> list[tuple[int, str]]:
+    require_matricula_materias_action("consultar", resource_key="matricula_materia")
+
     conn = _open_conn(db_user, db_pass)
     try:
         service = MatriculaMateriaService(conn)
@@ -131,6 +138,8 @@ def fetch_matricula_curso_estudiante(
     carnet: str,
     periodo: int,
 ) -> tuple | None:
+    require_matricula_materias_action("consultar", resource_key="matricula_materia")
+
     conn = _open_conn(db_user, db_pass)
     try:
         service = MatriculaMateriaService(conn)
@@ -148,6 +157,8 @@ def fetch_materias_disponibles_estudiante(
     carnet: str,
     periodo: int,
 ) -> list[tuple]:
+    require_matricula_materias_action("consultar", resource_key="matricula_materia")
+
     conn = _open_conn(db_user, db_pass)
     try:
         service = MatriculaMateriaService(conn)
@@ -164,6 +175,8 @@ def fetch_docentes_disponibles_para_materia(
     db_pass: str,
     materia_cod: int,
 ) -> list[tuple[int, str]]:
+    require_matricula_materias_action("consultar", resource_key="matricula_materia")
+
     conn = _open_conn(db_user, db_pass)
     try:
         service = MatriculaMateriaService(conn)
@@ -180,6 +193,8 @@ def fetch_beca_estudiante(
     db_pass: str,
     carnet: str,
 ) -> tuple | None:
+    require_matricula_materias_action("consultar", resource_key="matricula_materia")
+
     conn = _open_conn(db_user, db_pass)
     try:
         service = MatriculaMateriaService(conn)
@@ -193,6 +208,8 @@ def fetch_restricciones_beca(
     db_pass: str,
     carnet: str,
 ) -> dict:
+    require_matricula_materias_action("consultar", resource_key="matricula_materia")
+
     conn = _open_conn(db_user, db_pass)
     try:
         service = MatriculaMateriaService(conn)
@@ -208,6 +225,8 @@ def list_matricula_materia_rows(
     db_user: str,
     db_pass: str,
 ) -> list[tuple]:
+    require_matricula_materias_action("consultar", resource_key="matricula_materia")
+
     conn = _open_conn(db_user, db_pass)
     try:
         service = MatriculaMateriaService(conn)
@@ -222,6 +241,8 @@ def list_matricula_materia_rows_por_estudiante_periodo(
     carnet: str,
     periodo: int,
 ) -> list[tuple]:
+    require_matricula_materias_action("consultar", resource_key="matricula_materia")
+
     conn = _open_conn(db_user, db_pass)
     try:
         service = MatriculaMateriaService(conn)
@@ -252,6 +273,8 @@ def assign_matricula_materia(
     Crear matrícula por materia.
     Compatibilidad temporal: 'periodo' sigue llegando como AÑO lógico.
     """
+    require_matricula_materias_action("crear", resource_key="matricula_materia")
+
     conn = _open_conn(db_user, db_pass)
 
     try:
@@ -304,6 +327,8 @@ def update_estado_matricula_materia_endpoint(
     """
     Actualizar estado de matrícula por materia.
     """
+    require_matricula_materias_action("actualizar", resource_key="matricula_materia")
+
     conn = _open_conn(db_user, db_pass)
 
     try:
@@ -351,6 +376,8 @@ def delete_matricula_materia_endpoint(
     """
     Borrado lógico de matrícula por materia.
     """
+    require_matricula_materias_action("eliminar", resource_key="matricula_materia")
+
     conn = _open_conn(db_user, db_pass)
 
     try:
@@ -398,6 +425,8 @@ def validar_rango_actual_beca(
 
     Compatibilidad temporal: 'periodo' sigue llegando como AÑO lógico.
     """
+    require_matricula_materias_action("consultar", resource_key="matricula_materia")
+
     conn = _open_conn(db_user, db_pass)
 
     try:

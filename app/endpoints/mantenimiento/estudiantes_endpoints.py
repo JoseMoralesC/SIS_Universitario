@@ -1,12 +1,11 @@
-# app/endpoints/estudiantes_endpoints.py
+# app/endpoints/mantenimiento/estudiantes_endpoints.py
 from __future__ import annotations
 
 from app.core.db import connect_app
-from app.services.mantenimiento.estudiantes_service import (
-    validar_estudiante_data,
-    validar_estudiante_unicidad,
-)
 from app.core.exceptions import ValidationError
+from app.core.auditoria import Mov, Tab
+from app.repositories.auditoria_repo import insert_auditoria
+
 from app.repositories.mantenimiento.estudiantes_repo import (
     fetch_estados,
     list_estudiantes_join_activos,
@@ -15,9 +14,17 @@ from app.repositories.mantenimiento.estudiantes_repo import (
     update_estudiante,
     soft_delete_estudiante,
 )
+from app.services.mantenimiento.estudiantes_service import (
+    validar_estudiante_data,
+    validar_estudiante_unicidad,
+)
+from app.services.security.permission_service import (
+    require_maintenance_access,
+    require_maintenance_action,
+)
 
-from app.core.auditoria import Mov, Tab
-from app.repositories.auditoria_repo import insert_auditoria
+
+RESOURCE_KEY = "estudiantes"
 
 
 def _get_conn():
@@ -49,7 +56,15 @@ def _registrar_auditoria(
         pass
 
 
-def get_lookups(db_user: str | None = None, db_pass: str | None = None):
+def get_lookups(
+    db_user: str | None = None,
+    db_pass: str | None = None,
+):
+    """
+    Devuelve estados de estudiante.
+    """
+    require_maintenance_access(RESOURCE_KEY)
+
     conn = _get_conn()
     try:
         return fetch_estados(conn)
@@ -63,12 +78,12 @@ def listar_estudiantes(
     codigo_usuario: int | None = None,
 ):
     """
-    Lista estudiantes visibles en el grid
-    (según repo: normalmente excluye Inactivo).
-
+    Lista estudiantes visibles en el grid.
     db_user y db_pass se conservan por compatibilidad temporal.
     codigo_usuario se acepta por consistencia.
     """
+    require_maintenance_access(RESOURCE_KEY)
+
     conn = _get_conn()
     try:
         return list_estudiantes_join_activos(conn)
@@ -76,7 +91,18 @@ def listar_estudiantes(
         conn.close()
 
 
-def siguiente_carnet(db_user: str | None = None, db_pass: str | None = None) -> str:
+def siguiente_carnet(
+    db_user: str | None = None,
+    db_pass: str | None = None,
+    codigo_usuario: int | None = None,
+) -> str:
+    """
+    Siguiente carnet para estudiantes.
+    db_user y db_pass se conservan por compatibilidad temporal.
+    codigo_usuario se acepta por uniformidad.
+    """
+    require_maintenance_access(RESOURCE_KEY)
+
     conn = _get_conn()
     try:
         return next_carnet(conn)
@@ -90,15 +116,16 @@ def crear_estudiante(
     carnet: str,
     identificacion: str,
     nombre_completo: str,
-    direccion: str | None,
-    telefono: str | None,
+    direccion: str,
+    telefono: str,
     estado_codigo: int,
     codigo_usuario: int | None = None,
 ) -> bool:
+    require_maintenance_action(RESOURCE_KEY, "create")
+
     conn = _get_conn()
     try:
         data = validar_estudiante_data(
-            carnet=carnet,
             identificacion=identificacion,
             nombre_completo=nombre_completo,
             direccion=direccion,
@@ -106,21 +133,31 @@ def crear_estudiante(
             estado_codigo=estado_codigo,
         )
 
-        carnet_limpio = str(data["carnet"]).strip()
+        carnet = str(carnet).strip()
+        if not carnet:
+            raise ValidationError("Debe indicar un carnet válido.")
 
         validar_estudiante_unicidad(
             conn,
-            carnet=carnet_limpio,
+            carnet=None,
             identificacion=data["identificacion"],
         )
 
-        insert_estudiante(conn, **data)
+        insert_estudiante(
+            conn,
+            carnet=carnet,
+            identificacion=data["identificacion"],
+            nombre_completo=data["nombre_completo"],
+            direccion=data["direccion"],
+            telefono=data["telefono"],
+            estado_codigo=data["estado_codigo"],
+        )
 
         _registrar_auditoria(
             conn,
             codigo_usuario,
             Mov.ESTUDIANTE_CREADO,
-            id_row_tabla=carnet_limpio,
+            id_row_tabla=carnet,
         )
 
         return True
@@ -134,19 +171,20 @@ def actualizar_estudiante(
     carnet: str,
     identificacion: str,
     nombre_completo: str,
-    direccion: str | None,
-    telefono: str | None,
+    direccion: str,
+    telefono: str,
     estado_codigo: int,
     codigo_usuario: int | None = None,
 ) -> bool:
-    carnet = (carnet or "").strip()
+    require_maintenance_action(RESOURCE_KEY, "update")
+
+    carnet = str(carnet).strip()
     if not carnet:
         raise ValidationError("Debe seleccionar un estudiante para actualizar.")
 
     conn = _get_conn()
     try:
         data = validar_estudiante_data(
-            carnet=carnet,
             identificacion=identificacion,
             nombre_completo=nombre_completo,
             direccion=direccion,
@@ -154,24 +192,27 @@ def actualizar_estudiante(
             estado_codigo=estado_codigo,
         )
 
-        carnet_limpio = str(data["carnet"]).strip()
-
-        # OJO: la unicidad debe excluir el mismo carnet.
-        # Tu service actual usa (carnet, identificacion).
-        # Mantenemos tu intención actual.
         validar_estudiante_unicidad(
             conn,
-            carnet=carnet_limpio,
+            carnet=carnet,
             identificacion=data["identificacion"],
         )
 
-        update_estudiante(conn, **data)
+        update_estudiante(
+            conn,
+            carnet=carnet,
+            identificacion=data["identificacion"],
+            nombre_completo=data["nombre_completo"],
+            direccion=data["direccion"],
+            telefono=data["telefono"],
+            estado_codigo=data["estado_codigo"],
+        )
 
         _registrar_auditoria(
             conn,
             codigo_usuario,
             Mov.ESTUDIANTE_ACTUALIZADO,
-            id_row_tabla=carnet_limpio,
+            id_row_tabla=carnet,
         )
 
         return True
@@ -185,7 +226,14 @@ def eliminar_estudiante(
     carnet: str,
     codigo_usuario: int | None = None,
 ) -> bool:
-    carnet = (carnet or "").strip()
+    """
+    Borrado lógico:
+    - Cambia Estado_Codigo al estado "Inactivo"
+    - No hace DELETE físico
+    """
+    require_maintenance_action(RESOURCE_KEY, "delete")
+
+    carnet = str(carnet).strip()
     if not carnet:
         raise ValidationError("Debe seleccionar un estudiante para eliminar.")
 

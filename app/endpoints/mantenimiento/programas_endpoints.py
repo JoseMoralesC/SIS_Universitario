@@ -20,6 +20,13 @@ from app.repositories.mantenimiento.programas_repo import (
 
 from app.core.auditoria import Mov, Tab
 from app.repositories.auditoria_repo import insert_auditoria
+from app.services.security.permission_service import (
+    require_maintenance_access,
+    require_maintenance_action,
+)
+
+
+RESOURCE_KEY = "programas"
 
 
 def _get_conn():
@@ -52,6 +59,8 @@ def _registrar_auditoria(
 
 
 def get_lookups(db_user: str | None = None, db_pass: str | None = None):
+    require_maintenance_access(RESOURCE_KEY)
+
     conn = _get_conn()
     try:
         estados = fetch_estados(conn)
@@ -75,6 +84,8 @@ def listar_programas(
     codigo_usuario se acepta por consistencia
     (y futuras auditorías de listado).
     """
+    require_maintenance_access(RESOURCE_KEY)
+
     conn = _get_conn()
     try:
         return list_programas_join_activos(conn)
@@ -92,6 +103,8 @@ def siguiente_curso_cod(
     db_user y db_pass se conservan por compatibilidad temporal.
     codigo_usuario se acepta por consistencia.
     """
+    require_maintenance_access(RESOURCE_KEY)
+
     conn = _get_conn()
     try:
         return next_curso_cod(conn)
@@ -112,6 +125,8 @@ def obtener_jornadas_programa(
     db_user y db_pass se conservan por compatibilidad temporal.
     codigo_usuario se acepta por consistencia.
     """
+    require_maintenance_access(RESOURCE_KEY)
+
     if not curso_cod:
         return []
 
@@ -133,6 +148,8 @@ def crear_programa(
     estado_codigo: int,
     codigo_usuario: int | None = None,
 ) -> bool:
+    require_maintenance_action(RESOURCE_KEY, "create")
+
     conn = _get_conn()
     try:
         data = validar_programa_data(
@@ -191,6 +208,8 @@ def actualizar_programa(
     estado_codigo: int,
     codigo_usuario: int | None = None,
 ) -> bool:
+    require_maintenance_action(RESOURCE_KEY, "update")
+
     if not curso_cod:
         raise ValidationError("Debe seleccionar un programa para actualizar.")
 
@@ -252,6 +271,8 @@ def eliminar_programa(
     - Cambia Estado_Codigo al estado "Inactivo"
     - No hace DELETE físico
     """
+    require_maintenance_action(RESOURCE_KEY, "delete")
+
     if not curso_cod:
         raise ValidationError("Debe seleccionar un programa para eliminar.")
 
