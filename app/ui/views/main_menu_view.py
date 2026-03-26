@@ -53,6 +53,10 @@ class MainMenuView(ttk.Frame):
         self._asistencias_loaded = False
         self._asistencias_view = None
 
+        # Registro de usuarios (lazy-load)
+        self._registro_loaded = False
+        self._registro_view = None
+
         self.menu_buttons: dict[str, tk.Button] = {}
         self._menu_definitions: dict[str, dict] = {}
 
@@ -73,10 +77,17 @@ class MainMenuView(ttk.Frame):
     def _can_access_asistencias(self) -> bool:
         return can_access_module("asistencias")
 
+    def _can_access_registro(self) -> bool:
+        """
+        Registro de usuarios del sistema:
+        acceso exclusivo para ADMINISTRADOR.
+        """
+        return self.codigo_rol == "ADMIN"
+
     def _has_access(self, key: str) -> bool:
         access_map = {
             "mantenimiento": self._can_access_mantenimientos(),
-            "registro": self._can_access_mantenimientos(),
+            "registro": self._can_access_registro(),
             "asignacion_docentes": self._can_access_mantenimientos(),
             "matriculas": self._can_access_matriculas(),
             "matricula_materias": self._can_access_matricula_materias(),
@@ -87,7 +98,7 @@ class MainMenuView(ttk.Frame):
     def _deny_access(self, key: str) -> None:
         mensajes = {
             "mantenimiento": "Tu rol actual no tiene acceso al módulo de Mantenimientos.",
-            "registro": "Tu rol actual no tiene acceso al módulo de Registro.",
+            "registro": "Tu rol actual no tiene acceso al módulo de Registro de Usuarios.",
             "asignacion_docentes": "Tu rol actual no tiene acceso a Asignación de Docentes.",
             "matriculas": "Tu rol actual no tiene acceso al módulo de Matrículas.",
             "matricula_materias": "Tu rol actual no tiene acceso al módulo de Matrícula por Materias.",
@@ -156,7 +167,7 @@ class MainMenuView(ttk.Frame):
             }
 
         add_menu_btn("Mantenimiento", "mantenimiento", 2, self._can_access_mantenimientos())
-        add_menu_btn("Registro", "registro", 3, self._can_access_mantenimientos())
+        add_menu_btn("Registro", "registro", 3, self._can_access_registro())
         add_menu_btn("Matrículas", "matriculas", 4, self._can_access_matriculas())
         add_menu_btn(
             "Matrícula por Materias",
@@ -213,6 +224,22 @@ class MainMenuView(ttk.Frame):
             codigo_usuario=self.codigo_usuario,
         )
         self.view_mantenimientos.grid(row=0, column=0, sticky="nsew")
+
+        # =====================================================
+        # View: Registro (lazy-load)
+        # =====================================================
+        self.view_registro = ttk.Frame(self.content)
+        self.view_registro.grid(row=0, column=0, sticky="nsew")
+        self.view_registro.rowconfigure(0, weight=1)
+        self.view_registro.columnconfigure(0, weight=1)
+
+        self._registro_placeholder_label = ttk.Label(
+            self.view_registro,
+            text="Módulo Registro en construcción.\n(Alta de usuarios del sistema)",
+            anchor="center",
+            font=("Segoe UI", 14),
+        )
+        self._registro_placeholder_label.grid(row=0, column=0, sticky="nsew")
 
         # =====================================================
         # View: Matrículas (lazy-load)
@@ -297,10 +324,48 @@ class MainMenuView(ttk.Frame):
 
     def _hide_all_views(self):
         self.view_mantenimientos.grid_remove()
+        self.view_registro.grid_remove()
         self.view_matriculas.grid_remove()
         self.view_matricula_materias.grid_remove()
         self.view_asistencias.grid_remove()
         self.view_placeholder.grid_remove()
+
+    def _ensure_registro_loaded(self):
+        """
+        Carga (una sola vez) la vista real de Registro de Usuarios.
+        Si falla el import o la construcción, muestra el error real.
+        """
+        if self._registro_loaded:
+            return
+
+        try:
+            from app.ui.security.registro_usuario_view import RegistroUsuarioView  # type: ignore
+
+            try:
+                if self._registro_placeholder_label is not None:
+                    self._registro_placeholder_label.destroy()
+                    self._registro_placeholder_label = None
+            except Exception:
+                pass
+
+            self._registro_view = RegistroUsuarioView(
+                self.view_registro,
+                usuario=self.usuario,
+                db_user=self.db_user,
+                db_pass=self.db_pass,
+                codigo_usuario=self.codigo_usuario,
+            )
+            self._registro_view.grid(row=0, column=0, sticky="nsew")
+
+            self._registro_loaded = True
+
+        except Exception as e:
+            self._registro_loaded = False
+            self._registro_view = None
+            messagebox.showerror(
+                "Error cargando Registro",
+                f"No se pudo cargar el módulo.\n\nDetalle:\n{e}"
+            )
 
     def _ensure_matriculas_loaded(self):
         """
@@ -427,10 +492,8 @@ class MainMenuView(ttk.Frame):
             self.view_mantenimientos.select_home()
 
         elif key == "registro":
-            self.view_placeholder.grid()
-            self.placeholder_label.configure(
-                text="Módulo 'Registro' en construcción.\nPróximo paso de desarrollo."
-            )
+            self.view_registro.grid()
+            self._ensure_registro_loaded()
 
         elif key == "asignacion_docentes":
             self.view_mantenimientos.grid()

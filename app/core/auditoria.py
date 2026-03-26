@@ -12,7 +12,6 @@ from __future__ import annotations
 class Mov:
     """
     Códigos de movimiento para dbo.Movimiento_Auditoria.
-
     """
 
     # =========================================================
@@ -126,6 +125,13 @@ class Mov:
     FACTURA_MATRICULA_CREADA = 140
     FACTURA_MATRICULA_ACTUALIZADA = 141
     FACTURA_MATRICULA_ANULADA = 142
+
+    # =========================================================
+    # USUARIOS / SEGURIDAD
+    # =========================================================
+    USUARIO_CREADO = 150
+    USUARIO_ACTUALIZADO = 151
+    USUARIO_ELIMINADO = 152
 
 
 class Tab:

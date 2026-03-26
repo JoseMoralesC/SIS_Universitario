@@ -39,6 +39,7 @@ class PermissionService:
     """
 
     MODULE_ALIASES: dict[str, tuple[str, ...]] = {
+        "seguridad": ("SEGURIDAD",),
         "mantenimientos": ("MANTENIMIENTOS", "MANTENIMIENTO"),
         "matriculas": ("MATRICULAS", "MATRICULA"),
         "matricula_materias": (
@@ -68,6 +69,10 @@ class PermissionService:
     }
 
     MODULE_RESOURCE_ALIASES: dict[str, dict[str, tuple[str, ...]]] = {
+        "seguridad": {
+            "usuarios": ("USUARIOS", "USUARIO"),
+            "roles": ("ROLES", "ROL"),
+        },
         "matriculas": {
             "matriculas": ("MATRICULAS", "MATRICULA"),
             "reportes": ("REPORTES", "REPORTE"),
@@ -99,10 +104,12 @@ class PermissionService:
 
     ACTION_ALIASES: dict[str, tuple[str, ...]] = {
         "access": ("ACCESO", "VER", "CONSULTAR", "LISTAR"),
+        "view": ("VER", "CONSULTAR", "LISTAR", "ACCESO"),
         "create": ("CREAR", "NUEVO", "GUARDAR", "REGISTRAR", "INSERTAR", "FACTURAR"),
-        "update": ("ACTUALIZAR", "EDITAR", "MODIFICAR", "CAMBIAR_ESTADO"),
+        "update": ("ACTUALIZAR", "EDITAR", "MODIFICAR", "CAMBIAR_ESTADO", "GESTIONAR"),
         "delete": ("ELIMINAR", "BORRAR", "DESACTIVAR"),
         "report": ("REPORTES", "REPORTE", "CONSULTAR", "VER", "LISTAR"),
+        "manage": ("GESTIONAR", "ADMINISTRAR", "ASIGNAR", "CONFIGURAR"),
     }
 
     @staticmethod
@@ -256,7 +263,7 @@ class PermissionService:
 
         candidates: list[str] = []
 
-        if action_key == "access":
+        if action_key in ("access", "view"):
             for module in module_aliases:
                 candidates.append(f"{module}.ACCESO")
 
@@ -268,7 +275,7 @@ class PermissionService:
 
         # Fallbacks globales de mantenimiento para escenarios donde exista
         # permiso transversal del módulo completo por operación.
-        if action_key != "access":
+        if action_key not in ("access", "view"):
             for module in module_aliases:
                 for action in action_aliases:
                     candidates.append(f"{module}.{action}")
@@ -508,10 +515,12 @@ class PermissionService:
 
         action_labels = {
             "ACCESS": "acceder",
+            "VIEW": "consultar",
             "CREATE": "crear",
             "UPDATE": "actualizar",
             "DELETE": "eliminar",
             "REPORT": "consultar reportes",
+            "MANAGE": "gestionar",
         }
         action_label = action_labels.get(action_name, action_name.lower())
 
@@ -555,6 +564,7 @@ class PermissionService:
 
         action_labels = {
             "ACCESS": "acceder",
+            "VIEW": "consultar",
             "CREATE": "crear",
             "UPDATE": "actualizar",
             "DELETE": "eliminar",
