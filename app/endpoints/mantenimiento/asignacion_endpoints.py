@@ -7,7 +7,6 @@ from app.repositories.auditoria_repo import insert_auditoria
 
 from app.repositories.mantenimiento.asignacion_repo import (
     fetch_programas_activos,
-    fetch_docentes_activos,
     list_asignaciones,
     insert_asignacion,
     update_asignacion,
@@ -18,6 +17,7 @@ from app.services.mantenimiento.asignacion_service import (
     validar_asignacion_data,
     validar_asignacion_creacion,
     validar_asignacion_actualizacion,
+    obtener_docentes_disponibles_para_programa,
 )
 from app.services.security.permission_service import (
     require_maintenance_access,
@@ -29,16 +29,10 @@ RESOURCE_KEY = "asignacion"
 
 
 def _get_conn():
-    """
-    Obtiene la conexión técnica de la aplicación.
-    """
     return connect_app()
 
 
 def _compose_named_row_id(curso_cod: int, docente_cod: int) -> str:
-    """
-    Representación compacta y clara para PK compuesta.
-    """
     return f"curso_cod={int(curso_cod)};docente_cod={int(docente_cod)}"
 
 
@@ -60,7 +54,6 @@ def _registrar_auditoria(
             id_row_tabla=id_row_tabla,
         )
     except Exception:
-        # No romper el flujo principal por un fallo aislado de auditoría
         pass
 
 
@@ -69,17 +62,34 @@ def get_lookups(
     db_pass: str | None = None,
 ):
     """
-    Devuelve:
-    - programas activos
-    - docentes activos
+    Devuelve programas activos.
+    El combo de docentes se carga por programa seleccionado.
     """
     require_maintenance_access(RESOURCE_KEY)
 
     conn = _get_conn()
     try:
         programas = fetch_programas_activos(conn)
-        docentes = fetch_docentes_activos(conn)
-        return programas, docentes
+        return programas, []
+    finally:
+        conn.close()
+
+
+def get_docentes_disponibles_para_programa(
+    db_user: str | None,
+    db_pass: str | None,
+    curso_cod: int,
+    docente_cod_actual: int | None = None,
+):
+    require_maintenance_access(RESOURCE_KEY)
+
+    conn = _get_conn()
+    try:
+        return obtener_docentes_disponibles_para_programa(
+            conn,
+            curso_cod=int(curso_cod),
+            docente_cod_actual=docente_cod_actual,
+        )
     finally:
         conn.close()
 
@@ -89,11 +99,6 @@ def listar_asignaciones(
     db_pass: str | None = None,
     codigo_usuario: int | None = None,
 ):
-    """
-    Lista asignaciones visibles en el grid.
-    db_user y db_pass se conservan por compatibilidad temporal.
-    codigo_usuario se acepta por consistencia.
-    """
     require_maintenance_access(RESOURCE_KEY)
 
     conn = _get_conn()

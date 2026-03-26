@@ -1,7 +1,6 @@
-# app/endpoints/matriculas_materia/matricula_materia_endpoints.py
 from __future__ import annotations
 
-from app.core.db import connect
+from app.core.db import connect_app
 from app.core.auditoria import (
     Mov,
     Tab,
@@ -32,10 +31,6 @@ def _build_row_id_fallback(
     """
     Fallback contextual para auditoría cuando el flujo no devuelve
     explícitamente Matricula_Materia_Id.
-
-    Se usa porque la tabla Matricula_Materia tiene PK simple
-    (Matricula_Materia_Id), pero este endpoint actualmente trabaja
-    con un service que devuelve mensaje y no necesariamente el ID.
     """
     return compose_named_row_id(
         Carnet=(carnet or "").strip(),
@@ -59,7 +54,6 @@ def _registrar_auditoria(
             id_row_tabla=id_row_tabla,
         )
     except Exception:
-        # No romper flujo principal por fallo aislado de auditoría
         pass
 
 
@@ -73,8 +67,8 @@ def _resolver_movimiento(default_value: int | str | None) -> int:
     return 0
 
 
-def _open_conn(db_user: str, db_pass: str):
-    return connect(db_user, db_pass)
+def _open_conn(db_user: str | None = None, db_pass: str | None = None):
+    return connect_app()
 
 
 # =========================================================
@@ -99,14 +93,10 @@ def fetch_periodos_activos_matricula_materia(
     db_pass: str,
 ) -> list:
     """
-    Compatibilidad temporal:
-
-    Puede devolver cualquiera de estas formas, según lo que implemente el service:
+    Puede devolver variantes como:
     - [2026, 2027]
     - [("2026-I", 2026), ("2026-II", 2026)]
     - [(1, "2026-I", 2026), (2, "2026-II", 2026)]
-
-    El tab ya está preparado para interpretar cualquiera de esas variantes.
     """
     require_matricula_materias_action("consultar", resource_key="matricula_materia")
 
@@ -269,10 +259,6 @@ def assign_matricula_materia(
     estado_codigo: int = 1,
     codigo_usuario: int | None = None,
 ) -> str:
-    """
-    Crear matrícula por materia.
-    Compatibilidad temporal: 'periodo' sigue llegando como AÑO lógico.
-    """
     require_matricula_materias_action("crear", resource_key="matricula_materia")
 
     conn = _open_conn(db_user, db_pass)
@@ -324,9 +310,6 @@ def update_estado_matricula_materia_endpoint(
     nuevo_estado_codigo: int,
     codigo_usuario: int | None = None,
 ) -> str:
-    """
-    Actualizar estado de matrícula por materia.
-    """
     require_matricula_materias_action("actualizar", resource_key="matricula_materia")
 
     conn = _open_conn(db_user, db_pass)
@@ -373,9 +356,6 @@ def delete_matricula_materia_endpoint(
     matricula_materia_id: int,
     codigo_usuario: int | None = None,
 ) -> str:
-    """
-    Borrado lógico de matrícula por materia.
-    """
     require_matricula_materias_action("eliminar", resource_key="matricula_materia")
 
     conn = _open_conn(db_user, db_pass)
@@ -422,8 +402,6 @@ def validar_rango_actual_beca(
     Utilitario para UI.
     Permite saber si el estudiante ya cumple el mínimo
     requerido por la beca y cuántas materias puede agregar.
-
-    Compatibilidad temporal: 'periodo' sigue llegando como AÑO lógico.
     """
     require_matricula_materias_action("consultar", resource_key="matricula_materia")
 

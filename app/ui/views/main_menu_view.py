@@ -76,6 +76,7 @@ class MainMenuView(ttk.Frame):
     def _has_access(self, key: str) -> bool:
         access_map = {
             "mantenimiento": self._can_access_mantenimientos(),
+            "registro": self._can_access_mantenimientos(),
             "asignacion_docentes": self._can_access_mantenimientos(),
             "matriculas": self._can_access_matriculas(),
             "matricula_materias": self._can_access_matricula_materias(),
@@ -86,6 +87,7 @@ class MainMenuView(ttk.Frame):
     def _deny_access(self, key: str) -> None:
         mensajes = {
             "mantenimiento": "Tu rol actual no tiene acceso al módulo de Mantenimientos.",
+            "registro": "Tu rol actual no tiene acceso al módulo de Registro.",
             "asignacion_docentes": "Tu rol actual no tiene acceso a Asignación de Docentes.",
             "matriculas": "Tu rol actual no tiene acceso al módulo de Matrículas.",
             "matricula_materias": "Tu rol actual no tiene acceso al módulo de Matrícula por Materias.",
@@ -104,61 +106,30 @@ class MainMenuView(ttk.Frame):
         self.rowconfigure(0, weight=1)
 
         # =====================================================
-        # Sidebar (con scroll)
+        # Sidebar fijo (SIN scroll)
         # =====================================================
         sidebar = ttk.Frame(self, style="Sidebar.TFrame", width=220)
         sidebar.grid(row=0, column=0, sticky="ns")
         sidebar.grid_propagate(False)
+        sidebar.columnconfigure(0, weight=1)
 
-        sb_canvas = tk.Canvas(sidebar, bg="#1f2a35", highlightthickness=0)
-        sb_canvas.pack(side="left", fill="both", expand=False)
-
-        sb_scroll = ttk.Scrollbar(sidebar, orient="vertical", command=sb_canvas.yview)
-        sb_scroll.pack(side="right", fill="y")
-        sb_canvas.configure(yscrollcommand=sb_scroll.set)
-
-        sb_inner = ttk.Frame(sb_canvas, style="Sidebar.TFrame")
-        sb_canvas.create_window((0, 0), window=sb_inner, anchor="nw")
-
-        def _sb_on_configure(_evt=None):
-            sb_canvas.configure(scrollregion=sb_canvas.bbox("all"))
-
-        sb_inner.bind("<Configure>", _sb_on_configure)
-
-        def _sb_on_mousewheel(event):
-            try:
-                sb_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-            except Exception:
-                pass
-
-        sb_canvas.bind_all("<MouseWheel>", _sb_on_mousewheel)
-
-        ttk.Label(
-            sb_inner,
-            text="Admin Docente",
-            style="SidebarTitle.TLabel"
-        ).grid(row=0, column=0, sticky="w", padx=16, pady=(18, 8))
-
-        user_txt = f"Usuario: {self.usuario}" if self.usuario else "Usuario: (no autenticado)"
-        ttk.Label(
-            sb_inner,
-            text=user_txt,
-            style="SidebarUser.TLabel"
-        ).grid(row=1, column=0, sticky="w", padx=16, pady=(0, 4))
+        sb_inner = ttk.Frame(sidebar, style="Sidebar.TFrame")
+        sb_inner.grid(row=0, column=0, sticky="nsew")
+        sb_inner.columnconfigure(0, weight=1)
 
         nombre_txt = f"Nombre: {self.nombre_usuario}" if self.nombre_usuario else "Nombre: -"
         ttk.Label(
             sb_inner,
             text=nombre_txt,
             style="SidebarUser.TLabel"
-        ).grid(row=2, column=0, sticky="w", padx=16, pady=(0, 4))
+        ).grid(row=0, column=0, sticky="w", padx=16, pady=(18, 4))
 
         rol_txt = f"Rol: {self.nombre_rol}" if self.nombre_rol else "Rol: SIN ROL"
         ttk.Label(
             sb_inner,
             text=rol_txt,
             style="SidebarUser.TLabel"
-        ).grid(row=3, column=0, sticky="w", padx=16, pady=(0, 16))
+        ).grid(row=1, column=0, sticky="w", padx=16, pady=(0, 16))
 
         def add_menu_btn(text: str, key: str, row: int, enabled: bool = True):
             btn = tk.Button(
@@ -184,19 +155,20 @@ class MainMenuView(ttk.Frame):
                 "enabled": enabled,
             }
 
-        add_menu_btn("Mantenimiento", "mantenimiento", 4, self._can_access_mantenimientos())
-        add_menu_btn("Matrículas", "matriculas", 5, self._can_access_matriculas())
+        add_menu_btn("Mantenimiento", "mantenimiento", 2, self._can_access_mantenimientos())
+        add_menu_btn("Registro", "registro", 3, self._can_access_mantenimientos())
+        add_menu_btn("Matrículas", "matriculas", 4, self._can_access_matriculas())
         add_menu_btn(
             "Matrícula por Materias",
             "matricula_materias",
-            6,
+            5,
             self._can_access_matricula_materias(),
         )
-        add_menu_btn("Asistencias", "asistencias", 7, self._can_access_asistencias())
+        add_menu_btn("Asistencias", "asistencias", 6, self._can_access_asistencias())
         add_menu_btn(
             "Asignación Docentes",
             "asignacion_docentes",
-            8,
+            7,
             self._can_access_mantenimientos(),
         )
 
@@ -221,7 +193,6 @@ class MainMenuView(ttk.Frame):
         req_w = sb_inner.winfo_reqwidth()
         target_w = req_w + 8
         sidebar.configure(width=target_w)
-        sb_canvas.configure(width=target_w)
 
         # =====================================================
         # Área derecha
@@ -301,7 +272,7 @@ class MainMenuView(ttk.Frame):
 
         self.placeholder_label = ttk.Label(
             self.view_placeholder,
-            text="Módulo en construcción.\n(Para Entregable #2, el foco es: Mantenimientos)",
+            text="Módulo en construcción.",
             anchor="center",
             font=("Segoe UI", 14),
         )
@@ -313,6 +284,7 @@ class MainMenuView(ttk.Frame):
     def _get_default_menu_key(self) -> str:
         preferred_order = [
             "mantenimiento",
+            "registro",
             "matriculas",
             "matricula_materias",
             "asistencias",
@@ -454,6 +426,12 @@ class MainMenuView(ttk.Frame):
             self.view_mantenimientos.grid()
             self.view_mantenimientos.select_home()
 
+        elif key == "registro":
+            self.view_placeholder.grid()
+            self.placeholder_label.configure(
+                text="Módulo 'Registro' en construcción.\nPróximo paso de desarrollo."
+            )
+
         elif key == "asignacion_docentes":
             self.view_mantenimientos.grid()
             self.view_mantenimientos.select_asignacion()
@@ -483,8 +461,7 @@ class MainMenuView(ttk.Frame):
                 self.placeholder_label.configure(
                     text=(
                         f"Módulo '{key}' en construcción.\n"
-                        "Para Entregable #3, el foco es: Matrículas, Asistencias y Reportes.\n"
-                        "Mantenimientos ya está completo desde el Entregable #2 y versionado como 3.0"
+                        "Pendiente de implementación."
                     )
                 )
 

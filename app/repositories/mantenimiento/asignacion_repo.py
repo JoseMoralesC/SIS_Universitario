@@ -41,6 +41,129 @@ def fetch_docentes_activos(conn: pyodbc.Connection) -> list[tuple[int, str]]:
     return [(int(r[0]), str(r[1])) for r in cur.fetchall()]
 
 
+def fetch_docentes_disponibles_con_profesion(
+    conn: pyodbc.Connection,
+    docente_cod_actual: int | None = None,
+) -> list[tuple[int, str, str]]:
+    """
+    Retorna docentes activos que NO están asignados a ningún programa,
+    excepto el docente actual si viene informado (para edición).
+
+    Salida:
+    (Docente_Cod, Nombre_Completo, Profesion_Desc)
+    """
+    cur = conn.cursor()
+
+    if docente_cod_actual is None:
+        cur.execute(
+            """
+            SELECT
+                d.Docente_Cod,
+                d.Nombre_Completo,
+                ISNULL(p.Descripcion, '') AS Profesion_Desc
+            FROM dbo.Docentes d
+            INNER JOIN dbo.Estado_General eg
+                ON eg.Estado_Codigo = d.Estado_Codigo
+            LEFT JOIN dbo.Profesiones p
+                ON p.Profesion_Cod = d.Profesion_Cod
+            WHERE eg.Estado_Desc <> 'Inactivo'
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM dbo.Curso_Docente cd
+                  WHERE cd.Docente_Cod = d.Docente_Cod
+              )
+            ORDER BY d.Nombre_Completo;
+            """
+        )
+    else:
+        cur.execute(
+            """
+            SELECT
+                d.Docente_Cod,
+                d.Nombre_Completo,
+                ISNULL(p.Descripcion, '') AS Profesion_Desc
+            FROM dbo.Docentes d
+            INNER JOIN dbo.Estado_General eg
+                ON eg.Estado_Codigo = d.Estado_Codigo
+            LEFT JOIN dbo.Profesiones p
+                ON p.Profesion_Cod = d.Profesion_Cod
+            WHERE eg.Estado_Desc <> 'Inactivo'
+              AND (
+                    d.Docente_Cod = ?
+                    OR NOT EXISTS (
+                        SELECT 1
+                        FROM dbo.Curso_Docente cd
+                        WHERE cd.Docente_Cod = d.Docente_Cod
+                    )
+                  )
+            ORDER BY d.Nombre_Completo;
+            """,
+            (int(docente_cod_actual),),
+        )
+
+    return [(int(r[0]), str(r[1]), str(r[2])) for r in cur.fetchall()]
+
+
+def get_programa_descripcion(conn: pyodbc.Connection, curso_cod: int) -> str | None:
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT cp.Descripcion
+        FROM dbo.Cursos_Programas cp
+        WHERE cp.Curso_Cod = ?;
+        """,
+        (int(curso_cod),),
+    )
+    row = cur.fetchone()
+    return None if not row else str(row[0])
+
+
+def get_docente_profesion_descripcion(conn: pyodbc.Connection, docente_cod: int) -> str | None:
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT p.Descripcion
+        FROM dbo.Docentes d
+        LEFT JOIN dbo.Profesiones p
+            ON p.Profesion_Cod = d.Profesion_Cod
+        WHERE d.Docente_Cod = ?;
+        """,
+        (int(docente_cod),),
+    )
+    row = cur.fetchone()
+    return None if not row else str(row[0])
+
+
+def exists_docente_asignado(
+    conn: pyodbc.Connection,
+    docente_cod: int,
+    exclude_curso_cod: int | None = None,
+) -> bool:
+    cur = conn.cursor()
+
+    if exclude_curso_cod is None:
+        cur.execute(
+            """
+            SELECT TOP 1 1
+            FROM dbo.Curso_Docente
+            WHERE Docente_Cod = ?;
+            """,
+            (int(docente_cod),),
+        )
+    else:
+        cur.execute(
+            """
+            SELECT TOP 1 1
+            FROM dbo.Curso_Docente
+            WHERE Docente_Cod = ?
+              AND Curso_Cod <> ?;
+            """,
+            (int(docente_cod), int(exclude_curso_cod)),
+        )
+
+    return cur.fetchone() is not None
+
+
 # =========================================================
 # VALIDACIONES DE EXISTENCIA
 # =========================================================

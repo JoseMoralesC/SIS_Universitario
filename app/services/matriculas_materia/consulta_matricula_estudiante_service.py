@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import List, Tuple
 
-from app.core.db import connect
+from app.core.db import connect_app
 
 from app.repositories.matriculas_materia.consulta_matricula_estudiante_repo import (
     fetch_periodos_con_matricula,
@@ -25,7 +25,7 @@ def listar_periodos_con_matricula(
     Formato:
         (Periodo_Id, Periodo_Codigo, Anio)
     """
-    conn = connect(db_user, db_pass)
+    conn = connect_app()
 
     try:
         return fetch_periodos_con_matricula(conn)
@@ -49,7 +49,7 @@ def listar_cursos_por_periodo(
     Retorna:
         (Curso_Cod, Descripcion)
     """
-    conn = connect(db_user, db_pass)
+    conn = connect_app()
 
     try:
         return fetch_cursos_por_periodo(
@@ -78,7 +78,7 @@ def listar_estudiantes_por_periodo_curso(
     Retorna:
         (Carnet, Nombre_Completo)
     """
-    conn = connect(db_user, db_pass)
+    conn = connect_app()
 
     try:
         return fetch_estudiantes_por_periodo_curso(
@@ -116,7 +116,7 @@ def listar_matricula_detalle_estudiante(
         Estado
         Fecha_Matricula
     """
-    conn = connect(db_user, db_pass)
+    conn = connect_app()
 
     try:
         return list_matricula_detalle_estudiante(

@@ -7,6 +7,7 @@ from tkinter import ttk
 from app.ui.mantenimientos.base_tab import MaintenanceTab
 from app.endpoints.mantenimiento.asignacion_endpoints import (
     get_lookups,
+    get_docentes_disponibles_para_programa,
     listar_asignaciones,
     crear_asignacion,
     actualizar_asignacion,
@@ -69,14 +70,27 @@ class AsignacionTab(MaintenanceTab):
         for item in self.tree.get_children():
             self.tree.delete(item)
 
+    def _clear_selection_fields(self):
+        self.vars["Curso_Cod"].set("")
+        self.vars["Docente_Cod"].set("")
+        self.vars["Programa"].set("")
+        self.vars["Docente"].set("")
+
+        try:
+            self.cb_docente["values"] = []
+        except Exception:
+            pass
+
+        self.cb_docente.configure(state="disabled")
+
     # ------------------------------------------------
     # UI
     # ------------------------------------------------
     def _build_form(self, parent: ttk.LabelFrame):
         self.vars["Curso_Cod"] = tk.StringVar(value="")
-        self.vars["Docente_Cod"] = tk.StringVar(value="")
         self.vars["Programa"] = tk.StringVar(value="")
         self.vars["Docente"] = tk.StringVar(value="")
+        self.vars["Docente_Cod"] = tk.StringVar(value="")
 
         r = 0
 
@@ -85,10 +99,7 @@ class AsignacionTab(MaintenanceTab):
         ent_curso.grid(row=r, column=1, sticky="ew", padx=(10, 0), pady=6)
         r += 1
 
-        ttk.Label(parent, text="Código Docente:").grid(row=r, column=0, sticky="w", pady=6)
-        ent_doc = ttk.Entry(parent, textvariable=self.vars["Docente_Cod"], state="readonly")
-        ent_doc.grid(row=r, column=1, sticky="ew", padx=(10, 0), pady=6)
-        r += 1
+
 
         ttk.Label(parent, text="Carrera / Programa:").grid(row=r, column=0, sticky="w", pady=6)
         self.cb_programa = ttk.Combobox(
@@ -105,11 +116,16 @@ class AsignacionTab(MaintenanceTab):
         self.cb_docente = ttk.Combobox(
             parent,
             textvariable=self.vars["Docente"],
-            state="readonly",
+            state="disabled",
             width=32,
         )
         self.cb_docente.grid(row=r, column=1, sticky="ew", padx=(10, 0), pady=6)
         self.cb_docente.bind("<<ComboboxSelected>>", self._on_docente_change)
+        r += 1
+
+        ttk.Label(parent, text="Código Docente:").grid(row=r, column=0, sticky="w", pady=6)
+        ent_doc = ttk.Entry(parent, textvariable=self.vars["Docente_Cod"], state="readonly")
+        ent_doc.grid(row=r, column=1, sticky="ew", padx=(10, 0), pady=6)
         r += 1
 
     def _build_grid(self, parent: ttk.LabelFrame):
@@ -131,7 +147,6 @@ class AsignacionTab(MaintenanceTab):
             self.tree.heading(c, text=c)
             self.tree.column(c, width=base_widths.get(c, 140), anchor="w", stretch=True)
 
-        # ocultar columna lógica
         self.tree.column("Id", width=0, stretch=False)
         self.tree.heading("Id", text="")
 
@@ -161,6 +176,7 @@ class AsignacionTab(MaintenanceTab):
 
         self.vars["Programa"].set("")
         self.vars["Docente"].set("")
+        self.cb_docente.configure(state="disabled")
 
         self._clear_grid()
 
@@ -173,6 +189,47 @@ class AsignacionTab(MaintenanceTab):
     def _build_docente_display(self, docente_cod: int, nombre: str) -> str:
         return f"{int(docente_cod)} - {nombre}"
 
+    def _cargar_docentes_para_programa(self, curso_cod: int, docente_cod_actual: int | None = None):
+        try:
+            docentes = get_docentes_disponibles_para_programa(
+                self.db_user,
+                self.db_pass,
+                curso_cod=curso_cod,
+                docente_cod_actual=docente_cod_actual,
+            )
+        except Exception as e:
+            handle_exception(self, e, context="Cargar docentes filtrados")
+            docentes = []
+
+        docente_displays = [
+            self._build_docente_display(cod, nombre)
+            for cod, nombre in docentes
+        ]
+
+        self.docente_desc_to_cod = {
+            self._build_docente_display(cod, nombre): cod
+            for cod, nombre in docentes
+        }
+        self.docente_cod_to_desc = {
+            cod: self._build_docente_display(cod, nombre)
+            for cod, nombre in docentes
+        }
+
+        self.cb_docente["values"] = docente_displays
+
+        if docente_displays:
+            self.cb_docente.configure(state="readonly")
+            if docente_cod_actual is not None and docente_cod_actual in self.docente_cod_to_desc:
+                self.vars["Docente"].set(self.docente_cod_to_desc[docente_cod_actual])
+                self.vars["Docente_Cod"].set(str(docente_cod_actual))
+            else:
+                self.vars["Docente"].set("")
+                self.vars["Docente_Cod"].set("")
+        else:
+            self.vars["Docente"].set("")
+            self.vars["Docente_Cod"].set("")
+            self.cb_docente.configure(state="disabled")
+
     def _on_programa_change(self, _evt=None):
         if not self.can_access():
             return
@@ -180,6 +237,29 @@ class AsignacionTab(MaintenanceTab):
         value = self.vars["Programa"].get().strip()
         curso_cod = self.programa_desc_to_cod.get(value)
         self.vars["Curso_Cod"].set("" if curso_cod is None else str(curso_cod))
+
+        self.vars["Docente"].set("")
+        self.vars["Docente_Cod"].set("")
+        self.cb_docente["values"] = []
+        self.cb_docente.configure(state="disabled")
+
+        if curso_cod is None:
+            return
+
+        docente_cod_actual = None
+        try:
+            docente_cod_actual = int((self.vars["Docente_Cod"].get() or "").strip())
+        except Exception:
+            docente_cod_actual = None
+
+        self._cargar_docentes_para_programa(curso_cod, docente_cod_actual=docente_cod_actual)
+
+        if not self.cb_docente["values"]:
+            show_warning(
+                self,
+                "Sin docentes disponibles",
+                "No hay docentes disponibles y compatibles para la carrera/programa seleccionado.",
+            )
 
     def _on_docente_change(self, _evt=None):
         if not self.can_access():
@@ -209,21 +289,18 @@ class AsignacionTab(MaintenanceTab):
             self.vars["Docente"].set("")
             self.vars["Curso_Cod"].set("")
             self.vars["Docente_Cod"].set("")
+            self.cb_docente.configure(state="disabled")
             return
 
         try:
-            programas, docentes = get_lookups(self.db_user, self.db_pass)
+            programas, _docentes = get_lookups(self.db_user, self.db_pass)
         except Exception as e:
             handle_exception(self, e, context="Cargar catálogos")
-            programas, docentes = [], []
+            programas = []
 
         programa_displays = [
             self._build_programa_display(cod, desc)
             for cod, desc in programas
-        ]
-        docente_displays = [
-            self._build_docente_display(cod, nombre)
-            for cod, nombre in docentes
         ]
 
         self.programa_desc_to_cod = {
@@ -235,31 +312,18 @@ class AsignacionTab(MaintenanceTab):
             for cod, desc in programas
         }
 
-        self.docente_desc_to_cod = {
-            self._build_docente_display(cod, nombre): cod
-            for cod, nombre in docentes
-        }
-        self.docente_cod_to_desc = {
-            cod: self._build_docente_display(cod, nombre)
-            for cod, nombre in docentes
-        }
+        self.docente_desc_to_cod = {}
+        self.docente_cod_to_desc = {}
 
         self.cb_programa["values"] = programa_displays
-        self.cb_docente["values"] = docente_displays
+        self.cb_docente["values"] = []
+        self.cb_docente.configure(state="disabled")
 
-        if programa_displays:
-            self.vars["Programa"].set(programa_displays[0])
-            self._on_programa_change()
-        else:
-            self.vars["Programa"].set("")
-            self.vars["Curso_Cod"].set("")
-
-        if docente_displays:
-            self.vars["Docente"].set(docente_displays[0])
-            self._on_docente_change()
-        else:
-            self.vars["Docente"].set("")
-            self.vars["Docente_Cod"].set("")
+        # FIX: siempre dejar ambos combos en blanco
+        self.vars["Programa"].set("")
+        self.vars["Curso_Cod"].set("")
+        self.vars["Docente"].set("")
+        self.vars["Docente_Cod"].set("")
 
     def refresh_grid(self):
         if not self.tree:
@@ -354,8 +418,9 @@ class AsignacionTab(MaintenanceTab):
 
         self.vars["Curso_Cod"].set(str(curso_cod))
         self.vars["Docente_Cod"].set(str(docente_cod))
-
         self.vars["Programa"].set(self.programa_cod_to_desc.get(curso_cod, ""))
+
+        self._cargar_docentes_para_programa(curso_cod, docente_cod_actual=docente_cod)
         self.vars["Docente"].set(self.docente_cod_to_desc.get(docente_cod, ""))
 
     # ------------------------------------------------
@@ -368,19 +433,7 @@ class AsignacionTab(MaintenanceTab):
 
         self.ensure_loaded()
 
-        if self.cb_programa["values"]:
-            self.vars["Programa"].set(self.cb_programa["values"][0])
-            self._on_programa_change()
-        else:
-            self.vars["Programa"].set("")
-            self.vars["Curso_Cod"].set("")
-
-        if self.cb_docente["values"]:
-            self.vars["Docente"].set(self.cb_docente["values"][0])
-            self._on_docente_change()
-        else:
-            self.vars["Docente"].set("")
-            self.vars["Docente_Cod"].set("")
+        self._clear_selection_fields()
 
         if self.tree:
             self.tree.selection_remove(self.tree.selection())
@@ -419,7 +472,10 @@ class AsignacionTab(MaintenanceTab):
             return
 
         self.refresh_grid()
-        self.on_nuevo()
+        self._load_lookups()
+        self._clear_selection_fields()
+        if self.tree:
+            self.tree.selection_remove(self.tree.selection())
         show_info(self, "Éxito", "Asignación guardada correctamente.")
 
     def on_actualizar(self):
@@ -464,6 +520,10 @@ class AsignacionTab(MaintenanceTab):
             return
 
         self.refresh_grid()
+        self._load_lookups()
+        self._clear_selection_fields()
+        if self.tree:
+            self.tree.selection_remove(self.tree.selection())
         show_info(self, "Éxito", "Asignación actualizada correctamente.")
 
     def on_eliminar(self):
@@ -500,5 +560,8 @@ class AsignacionTab(MaintenanceTab):
             return
 
         self.refresh_grid()
-        self.on_nuevo()
+        self._load_lookups()
+        self._clear_selection_fields()
+        if self.tree:
+            self.tree.selection_remove(self.tree.selection())
         show_info(self, "Éxito", "Asignación eliminada correctamente.")

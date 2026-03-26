@@ -387,6 +387,68 @@ class MatriculaMateriaTab(ttk.Frame):
         self.cbo_docente.configure(state="disabled")
 
     # =====================================================
+    # Helpers de normalización
+    # =====================================================
+    def _normalizar_matricula_curso(self, matricula_curso) -> tuple[int, str] | None:
+        """
+        Normaliza distintas variantes que pueda devolver el endpoint/service.
+
+        Formas soportadas:
+        - (curso_cod, curso_desc)
+        - (algo, curso_cod, curso_desc, ...)
+        - {"curso_cod": ..., "curso_desc": ...}
+        - {"Curso_Cod": ..., "Descripcion": ...}
+        """
+        if not matricula_curso:
+            return None
+
+        if isinstance(matricula_curso, dict):
+            posibles_cod = (
+                matricula_curso.get("curso_cod"),
+                matricula_curso.get("Curso_Cod"),
+                matricula_curso.get("curso"),
+                matricula_curso.get("Curso"),
+            )
+            posibles_desc = (
+                matricula_curso.get("curso_desc"),
+                matricula_curso.get("Descripcion"),
+                matricula_curso.get("descripcion"),
+                matricula_curso.get("curso_nombre"),
+                matricula_curso.get("Curso_Desc"),
+            )
+
+            curso_cod = next((v for v in posibles_cod if v is not None), None)
+            curso_desc = next((v for v in posibles_desc if v is not None), None)
+
+            if curso_cod is not None and curso_desc is not None:
+                try:
+                    return int(curso_cod), str(curso_desc)
+                except Exception:
+                    return None
+
+            return None
+
+        if isinstance(matricula_curso, (tuple, list)):
+            try:
+                if len(matricula_curso) >= 2:
+                    # Caso ideal: (curso_cod, curso_desc)
+                    try:
+                        return int(matricula_curso[0]), str(matricula_curso[1])
+                    except Exception:
+                        pass
+
+                if len(matricula_curso) >= 3:
+                    # Caso alterno: (algo, curso_cod, curso_desc, ...)
+                    try:
+                        return int(matricula_curso[1]), str(matricula_curso[2])
+                    except Exception:
+                        pass
+            except Exception:
+                return None
+
+        return None
+
+    # =====================================================
     # Lookups
     # =====================================================
     def _load_initial_lookups(self):
@@ -449,7 +511,6 @@ class MatriculaMateriaTab(ttk.Frame):
             for codigo, desc in estados:
                 self._estado_display_to_cod[str(desc)] = int(codigo)
 
-            # Fijar período por defecto (solo lectura)
             periodos_display = list(self._periodo_display_to_anio.keys())
             if periodos_display:
                 self.vars["periodo"].set(periodos_display[0])
@@ -487,11 +548,11 @@ class MatriculaMateriaTab(ttk.Frame):
                     carnet=carnet,
                     periodo=periodo,
                 )
-                if not matricula_curso:
+                normalizado = self._normalizar_matricula_curso(matricula_curso)
+                if not normalizado:
                     continue
 
-                curso_cod, curso_desc = matricula_curso
-                curso_cod = int(curso_cod)
+                curso_cod, curso_desc = normalizado
 
                 if curso_cod in seen:
                     continue
@@ -524,10 +585,11 @@ class MatriculaMateriaTab(ttk.Frame):
                     carnet=carnet,
                     periodo=periodo,
                 )
-                if not matricula_curso:
+                normalizado = self._normalizar_matricula_curso(matricula_curso)
+                if not normalizado:
                     continue
 
-                curso_cod_est, _curso_desc = matricula_curso
+                curso_cod_est, _curso_desc = normalizado
                 if int(curso_cod_est) != int(curso_cod):
                     continue
 
@@ -549,10 +611,6 @@ class MatriculaMateriaTab(ttk.Frame):
         return self._estudiante_display_to_carnet.get(display)
 
     def _get_periodo_selected(self) -> int | None:
-        """
-        Lógica temporal:
-        devuelve el AÑO aunque visualmente el usuario vea 2026-I, 2026-II, etc.
-        """
         display = (self.vars["periodo"].get() or "").strip()
         if not display:
             return None
@@ -701,7 +759,8 @@ class MatriculaMateriaTab(ttk.Frame):
                 periodo=periodo,
             )
 
-            if not matricula_curso:
+            normalizado = self._normalizar_matricula_curso(matricula_curso)
+            if not normalizado:
                 show_warning(
                     self,
                     "Sin matrícula de curso",
@@ -710,7 +769,7 @@ class MatriculaMateriaTab(ttk.Frame):
                 self._refresh_grid_contextual()
                 return
 
-            curso_cod_real, curso_desc_real = matricula_curso
+            curso_cod_real, curso_desc_real = normalizado
 
             if int(curso_cod_real) != int(curso_cod_sel):
                 show_warning(
@@ -722,7 +781,6 @@ class MatriculaMateriaTab(ttk.Frame):
                 self._refresh_grid_contextual()
                 return
 
-            # Mantener el curso seleccionado visible y normalizado
             self.vars["curso"].set(f"{curso_cod_real} - {curso_desc_real}")
 
             beca = mm_ep.fetch_beca_estudiante(

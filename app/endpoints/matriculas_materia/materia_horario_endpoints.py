@@ -1,7 +1,6 @@
-# app/endpoints/matriculas_materia/materia_horario_endpoints.py
 from __future__ import annotations
 
-from app.core.db import connect
+from app.core.db import connect_app
 from app.core.auditoria import (
     Mov,
     Tab,
@@ -32,8 +31,8 @@ def _resolver_movimiento(default_value: int | str | None) -> int:
     return 0
 
 
-def _open_conn(db_user: str, db_pass: str):
-    return connect(db_user, db_pass)
+def _open_conn(db_user: str | None = None, db_pass: str | None = None):
+    return connect_app()
 
 
 def _registrar_auditoria(

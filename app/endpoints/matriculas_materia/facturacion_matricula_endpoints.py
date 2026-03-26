@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.core.db import connect
+from app.core.db import connect_app
 from app.core.auditoria import (
     Mov,
     Tab,
@@ -63,6 +63,10 @@ def _registrar_auditoria(
         pass
 
 
+def _open_conn(db_user: str | None = None, db_pass: str | None = None):
+    return connect_app()
+
+
 # =========================================================
 # Catálogos
 # =========================================================
@@ -73,7 +77,7 @@ def get_formas_pago(
 ) -> list[tuple[int, str]]:
     require_matricula_materias_action("consultar", resource_key="facturacion_matricula")
 
-    conn = connect(db_user, db_pass)
+    conn = _open_conn(db_user, db_pass)
     try:
         return fetch_formas_pago(conn)
     finally:
@@ -92,7 +96,7 @@ def get_referencia_pago_preview(
 ) -> str:
     require_matricula_materias_action("consultar", resource_key="facturacion_matricula")
 
-    conn = connect(db_user, db_pass)
+    conn = _open_conn(db_user, db_pass)
     try:
         return generar_referencia_preview(
             conn,
@@ -128,7 +132,7 @@ def get_resumen_facturacion(
         forma_pago_cod=forma_pago_cod,
     )
 
-    conn = connect(db_user, db_pass)
+    conn = _open_conn(db_user, db_pass)
     try:
         return build_resumen_facturacion(
             conn,
@@ -171,7 +175,7 @@ def save_facturacion_matricula(
         forma_pago_cod=forma_pago_cod,
     )
 
-    conn = connect(db_user, db_pass)
+    conn = _open_conn(db_user, db_pass)
     try:
         result = insert_facturacion_matricula(
             conn,
