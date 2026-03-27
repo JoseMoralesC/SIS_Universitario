@@ -95,12 +95,48 @@ class AuthService:
             return False
         return bloqueado_hasta > datetime.now()
 
-    @staticmethod
+    def _filtrar_permisos_por_rol(self, codigo_rol: str, permisos: list[str]) -> list[str]:
+        """
+        Aplica reglas de negocio para restringir permisos según el rol.
+        Esto evita que errores en BD otorguen accesos indebidos.
+        """
+        rol = (codigo_rol or "").strip().upper()
+
+        # ADMIN -> acceso total (no se filtra)
+        if rol == "ADMIN":
+            return permisos
+
+        # DOCENTE -> solo asistencias
+        if rol == "DOCENTE":
+            return [
+                p for p in permisos
+                if (p or "").strip().upper().startswith("ASISTENCIA")
+                or (p or "").strip().upper().startswith("ASISTENCIAS")
+            ]
+
+        # AUDITOR -> solo consulta / reportes
+        if rol == "AUDITOR":
+            return [
+                p for p in permisos
+                if any(x in (p or "").strip().upper() for x in ("VER", "CONSULTAR", "LISTAR", "REPORT"))
+            ]
+
+        # OPERADOR -> sin filtro (controlado por permisos BD)
+        if rol == "OPERADOR":
+            return permisos
+
+        # default -> no tocar
+        return permisos
+
     def _build_session_payload(
+        self,
         user_data: dict,
         rol_principal: dict | None,
         permisos: list[str],
     ) -> dict:
+        codigo_rol = rol_principal.get("codigo_rol") if rol_principal else None
+        permisos_filtrados = self._filtrar_permisos_por_rol(codigo_rol, permisos)
+
         return {
             "usuario_seguridad_id": user_data.get("usuario_seguridad_id"),
             "codigo_usuario": user_data.get("codigo_usuario"),
@@ -113,10 +149,10 @@ class AuthService:
             "estado_usuario": user_data.get("estado_usuario"),
             "descripcion_estado": user_data.get("descripcion_estado"),
             "rol_id": rol_principal.get("rol_id") if rol_principal else None,
-            "codigo_rol": rol_principal.get("codigo_rol") if rol_principal else None,
+            "codigo_rol": codigo_rol,
             "nombre_rol": rol_principal.get("nombre_rol") if rol_principal else None,
             "roles": [],
-            "permisos": permisos,
+            "permisos": permisos_filtrados,
             "debe_cambiar_clave": user_data.get("debe_cambiar_clave", False),
             "ultimo_acceso": user_data.get("ultimo_acceso"),
         }

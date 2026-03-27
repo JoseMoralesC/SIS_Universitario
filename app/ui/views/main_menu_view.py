@@ -10,6 +10,7 @@ from app.core.session import (
     get_rol_nombre,
 )
 from app.services.security.permission_service import can_access_module
+from app.ui.components.toast import Toast
 from app.ui.views.mantenimientos_view import MantenimientosView
 
 
@@ -41,30 +42,41 @@ class MainMenuView(ttk.Frame):
         self.codigo_rol = (get_rol_codigo() or "").strip().upper()
         self.nombre_rol = get_rol_nombre() or self.codigo_rol or "SIN ROL"
 
-        # Matrículas (lazy-load)
+        self._perfil_loaded = False
+        self._perfil_view = None
+
+        self._auditoria_loaded = False
+        self._auditoria_view = None
+
         self._matriculas_loaded = False
         self._matriculas_view = None
 
-        # Matrícula por materias (lazy-load)
         self._matricula_materias_loaded = False
         self._matricula_materias_view = None
 
-        # Asistencias (lazy-load)
         self._asistencias_loaded = False
         self._asistencias_view = None
 
-        # Registro de usuarios (lazy-load)
         self._registro_loaded = False
         self._registro_view = None
 
         self.menu_buttons: dict[str, tk.Button] = {}
         self._menu_definitions: dict[str, dict] = {}
 
+        self._welcome_toast: Toast | None = None
+
         self._build_ui()
+        self.after(300, self._show_role_welcome_toast)
 
     # =====================================================
     # Permisos / acceso
     # =====================================================
+    def _can_access_mi_perfil(self) -> bool:
+        return True
+
+    def _can_access_auditoria(self) -> bool:
+        return self.codigo_rol == "CONSULTA" or self._get_tipo_usuario() == 2
+
     def _can_access_mantenimientos(self) -> bool:
         return can_access_module("mantenimientos")
 
@@ -78,14 +90,19 @@ class MainMenuView(ttk.Frame):
         return can_access_module("asistencias")
 
     def _can_access_registro(self) -> bool:
-        """
-        Registro de usuarios del sistema:
-        acceso exclusivo para ADMINISTRADOR.
-        """
         return self.codigo_rol == "ADMIN"
+
+    def _get_tipo_usuario(self) -> int | None:
+        value = self.session_data.get("tipo_usuario")
+        try:
+            return int(value) if value is not None else None
+        except (TypeError, ValueError):
+            return None
 
     def _has_access(self, key: str) -> bool:
         access_map = {
+            "mi_perfil": self._can_access_mi_perfil(),
+            "auditoria": self._can_access_auditoria(),
             "mantenimiento": self._can_access_mantenimientos(),
             "registro": self._can_access_registro(),
             "asignacion_docentes": self._can_access_mantenimientos(),
@@ -97,6 +114,8 @@ class MainMenuView(ttk.Frame):
 
     def _deny_access(self, key: str) -> None:
         mensajes = {
+            "mi_perfil": "No fue posible acceder al perfil del usuario activo.",
+            "auditoria": "Tu usuario no tiene acceso al módulo de Auditoría.",
             "mantenimiento": "Tu rol actual no tiene acceso al módulo de Mantenimientos.",
             "registro": "Tu rol actual no tiene acceso al módulo de Registro de Usuarios.",
             "asignacion_docentes": "Tu rol actual no tiene acceso a Asignación de Docentes.",
@@ -110,15 +129,110 @@ class MainMenuView(ttk.Frame):
         )
 
     # =====================================================
+    # Bienvenida por rol usando Toast
+    # =====================================================
+    def _get_role_welcome_profile(self) -> dict[str, str]:
+        rol = (self.codigo_rol or "").strip().upper()
+        nombre = self.nombre_usuario or self.usuario or "Usuario"
+
+        perfiles = {
+            "ADMIN": {
+                "title": "Acceso al sistema",
+                "message": (
+                    f"Bienvenido {nombre} al Sistema de Gestión Académica\n\n"
+                    "Perfil: Administrador\n\n"
+                    "Tienes acceso administrativo del sistema.\n"
+                    "Puedes gestionar usuarios, mantenimientos, parametrización y supervisar "
+                    "el funcionamiento general de los módulos habilitados.\n\n"
+                ),
+            },
+            "AUDITOR": {
+                "title": "Acceso al sistema",
+                "message": (
+                    f"Bienvenido {nombre} al Sistema de Gestión Académica\n\n"
+                    "Perfil: Auditor\n\n"
+                    "Tu perfil está orientado a revisión, control y seguimiento.\n"
+                    "Debes operar únicamente dentro de los módulos y consultas "
+                    "habilitados para auditoría.\n\n"
+                ),
+            },
+            "CONSULTA": {
+                "title": "Acceso al sistema",
+                "message": (
+                    f"Bienvenido {nombre} al Sistema de Gestión Académica\n\n"
+                    "Perfil: Consulta / Auditor\n\n"
+                    "Tu acceso está orientado a revisión y análisis de movimientos del sistema.\n"
+                    "Puedes consultar el módulo de auditoría según los permisos asignados.\n\n"
+                ),
+            },
+            "DOCENTE": {
+                "title": "Acceso al sistema",
+                "message": (
+                    f"Bienvenido {nombre} al Sistema de Gestión Académica\n\n"
+                    "Perfil: Docente\n\n"
+                    "Tu acceso está orientado exclusivamente al módulo de Asistencias.\n"
+                    "Desde este perfil podrás registrar y consultar listas de asistencia "
+                    "según los permisos asignados.\n\n"
+                ),
+            },
+            "OPERADOR": {
+                "title": "Acceso al sistema",
+                "message": (
+                    f"Bienvenido {nombre} al Sistema de Gestión Académica\n\n"
+                    "Perfil: Operador\n\n"
+                    "Tu perfil está orientado a la operación diaria y al registro de datos "
+                    "en los módulos habilitados por permisos.\n\n"
+                ),
+            },
+        }
+
+        return perfiles.get(
+            rol,
+            {
+                "title": "Acceso al sistema",
+                "message": (
+                    f"Bienvenido {nombre} al Sistema de Gestión Académica\n\n"
+                    f"Perfil: {self.nombre_rol or 'Sin rol'}\n\n"
+                    "Has iniciado sesión correctamente.\n"
+                    "Tu acceso al sistema dependerá de los permisos asociados a tu rol."
+                ),
+            },
+        )
+
+    def _show_role_welcome_toast(self):
+        profile = self._get_role_welcome_profile()
+
+        try:
+            if self._welcome_toast is not None and self._welcome_toast.winfo_exists():
+                return
+        except Exception:
+            self._welcome_toast = None
+
+        self._welcome_toast = Toast(
+            parent=self,
+            title=profile["title"],
+            message=profile["message"],
+            duration_ms=15000,
+            width=700,
+            bg="#0f1c2a",
+            y_offset=-40,
+            wrap_pad=50,
+            margin=12,
+            animate=True,
+            step=20,
+            delay_ms=18,
+            slide_in_from="right",
+            slide_out_to="right",
+            slide_extra_px=180,
+        )
+
+    # =====================================================
     # UI
     # =====================================================
     def _build_ui(self):
         self.columnconfigure(1, weight=1)
         self.rowconfigure(0, weight=1)
 
-        # =====================================================
-        # Sidebar fijo (SIN scroll)
-        # =====================================================
         sidebar = ttk.Frame(self, style="Sidebar.TFrame", width=220)
         sidebar.grid(row=0, column=0, sticky="ns")
         sidebar.grid_propagate(False)
@@ -142,46 +256,45 @@ class MainMenuView(ttk.Frame):
             style="SidebarUser.TLabel"
         ).grid(row=1, column=0, sticky="w", padx=16, pady=(0, 16))
 
-        def add_menu_btn(text: str, key: str, row: int, enabled: bool = True):
+        def add_menu_btn(text: str, key: str, row: int):
             btn = tk.Button(
                 sb_inner,
                 text=text,
-                bg="#223142" if enabled else "#3d4852",
-                fg="white" if enabled else "#c6cbd1",
-                activebackground="#2f445d" if enabled else "#3d4852",
+                bg="#223142",
+                fg="white",
+                activebackground="#2f445d",
                 activeforeground="white",
                 relief="groove",
                 bd=2,
                 font=("Segoe UI", 11, "bold"),
-                cursor="hand2" if enabled else "arrow",
+                cursor="hand2",
                 padx=8,
                 pady=10,
-                state="normal" if enabled else "disabled",
                 command=lambda: self.on_menu_click(key),
             )
             btn.grid(row=row, column=0, sticky="ew", padx=14, pady=6)
             self.menu_buttons[key] = btn
             self._menu_definitions[key] = {
                 "text": text,
-                "enabled": enabled,
+                "enabled": True,
             }
 
-        add_menu_btn("Mantenimiento", "mantenimiento", 2, self._can_access_mantenimientos())
-        add_menu_btn("Registro", "registro", 3, self._can_access_registro())
-        add_menu_btn("Matrículas", "matriculas", 4, self._can_access_matriculas())
-        add_menu_btn(
-            "Matrícula por Materias",
-            "matricula_materias",
-            5,
-            self._can_access_matricula_materias(),
-        )
-        add_menu_btn("Asistencias", "asistencias", 6, self._can_access_asistencias())
-        add_menu_btn(
-            "Asignación Docentes",
-            "asignacion_docentes",
-            7,
-            self._can_access_mantenimientos(),
-        )
+        visible_menu_items = [
+            ("Mi Perfil", "mi_perfil"),
+            ("Auditoría", "auditoria"),
+            ("Mantenimiento", "mantenimiento"),
+            ("Registro", "registro"),
+            ("Matrículas", "matriculas"),
+            ("Matrícula por Materias", "matricula_materias"),
+            ("Asistencias", "asistencias"),
+            ("Asignación Docentes", "asignacion_docentes"),
+        ]
+
+        current_row = 2
+        for text, key in visible_menu_items:
+            if self._has_access(key):
+                add_menu_btn(text, key, current_row)
+                current_row += 1
 
         btn_salir = tk.Button(
             sb_inner,
@@ -205,17 +318,46 @@ class MainMenuView(ttk.Frame):
         target_w = req_w + 8
         sidebar.configure(width=target_w)
 
-        # =====================================================
-        # Área derecha
-        # =====================================================
         self.content = ttk.Frame(self)
         self.content.grid(row=0, column=1, sticky="nsew")
         self.content.rowconfigure(0, weight=1)
         self.content.columnconfigure(0, weight=1)
 
-        # =====================================================
-        # View: Mantenimientos
-        # =====================================================
+        # -------------------------------------------------
+        # Mi Perfil
+        # -------------------------------------------------
+        self.view_perfil = ttk.Frame(self.content)
+        self.view_perfil.grid(row=0, column=0, sticky="nsew")
+        self.view_perfil.rowconfigure(0, weight=1)
+        self.view_perfil.columnconfigure(0, weight=1)
+
+        self._perfil_placeholder_label = ttk.Label(
+            self.view_perfil,
+            text="Módulo Mi Perfil en carga...",
+            anchor="center",
+            font=("Segoe UI", 14),
+        )
+        self._perfil_placeholder_label.grid(row=0, column=0, sticky="nsew")
+
+        # -------------------------------------------------
+        # Auditoría
+        # -------------------------------------------------
+        self.view_auditoria = ttk.Frame(self.content)
+        self.view_auditoria.grid(row=0, column=0, sticky="nsew")
+        self.view_auditoria.rowconfigure(0, weight=1)
+        self.view_auditoria.columnconfigure(0, weight=1)
+
+        self._auditoria_placeholder_label = ttk.Label(
+            self.view_auditoria,
+            text="Módulo Auditoría en carga...",
+            anchor="center",
+            font=("Segoe UI", 14),
+        )
+        self._auditoria_placeholder_label.grid(row=0, column=0, sticky="nsew")
+
+        # -------------------------------------------------
+        # Mantenimientos
+        # -------------------------------------------------
         self.view_mantenimientos = MantenimientosView(
             self.content,
             usuario=self.usuario,
@@ -225,9 +367,9 @@ class MainMenuView(ttk.Frame):
         )
         self.view_mantenimientos.grid(row=0, column=0, sticky="nsew")
 
-        # =====================================================
-        # View: Registro (lazy-load)
-        # =====================================================
+        # -------------------------------------------------
+        # Registro
+        # -------------------------------------------------
         self.view_registro = ttk.Frame(self.content)
         self.view_registro.grid(row=0, column=0, sticky="nsew")
         self.view_registro.rowconfigure(0, weight=1)
@@ -241,9 +383,9 @@ class MainMenuView(ttk.Frame):
         )
         self._registro_placeholder_label.grid(row=0, column=0, sticky="nsew")
 
-        # =====================================================
-        # View: Matrículas (lazy-load)
-        # =====================================================
+        # -------------------------------------------------
+        # Matrículas
+        # -------------------------------------------------
         self.view_matriculas = ttk.Frame(self.content)
         self.view_matriculas.grid(row=0, column=0, sticky="nsew")
         self.view_matriculas.rowconfigure(0, weight=1)
@@ -257,9 +399,9 @@ class MainMenuView(ttk.Frame):
         )
         self._matriculas_placeholder_label.grid(row=0, column=0, sticky="nsew")
 
-        # =====================================================
-        # View: Matrícula por Materias (lazy-load)
-        # =====================================================
+        # -------------------------------------------------
+        # Matrícula por materias
+        # -------------------------------------------------
         self.view_matricula_materias = ttk.Frame(self.content)
         self.view_matricula_materias.grid(row=0, column=0, sticky="nsew")
         self.view_matricula_materias.rowconfigure(0, weight=1)
@@ -273,9 +415,9 @@ class MainMenuView(ttk.Frame):
         )
         self._matricula_materias_placeholder_label.grid(row=0, column=0, sticky="nsew")
 
-        # =====================================================
-        # View: Asistencias (lazy-load)
-        # =====================================================
+        # -------------------------------------------------
+        # Asistencias
+        # -------------------------------------------------
         self.view_asistencias = ttk.Frame(self.content)
         self.view_asistencias.grid(row=0, column=0, sticky="nsew")
         self.view_asistencias.rowconfigure(0, weight=1)
@@ -289,9 +431,9 @@ class MainMenuView(ttk.Frame):
         )
         self._asistencias_placeholder_label.grid(row=0, column=0, sticky="nsew")
 
-        # =====================================================
-        # Placeholder general otras opciones
-        # =====================================================
+        # -------------------------------------------------
+        # Placeholder general
+        # -------------------------------------------------
         self.view_placeholder = ttk.Frame(self.content)
         self.view_placeholder.grid(row=0, column=0, sticky="nsew")
         self.view_placeholder.rowconfigure(0, weight=1)
@@ -310,6 +452,8 @@ class MainMenuView(ttk.Frame):
 
     def _get_default_menu_key(self) -> str:
         preferred_order = [
+            "mi_perfil",
+            "auditoria",
             "mantenimiento",
             "registro",
             "matriculas",
@@ -323,6 +467,8 @@ class MainMenuView(ttk.Frame):
         return "placeholder"
 
     def _hide_all_views(self):
+        self.view_perfil.grid_remove()
+        self.view_auditoria.grid_remove()
         self.view_mantenimientos.grid_remove()
         self.view_registro.grid_remove()
         self.view_matriculas.grid_remove()
@@ -330,11 +476,71 @@ class MainMenuView(ttk.Frame):
         self.view_asistencias.grid_remove()
         self.view_placeholder.grid_remove()
 
+    def _ensure_perfil_loaded(self):
+        if self._perfil_loaded:
+            return
+
+        try:
+            from app.ui.security.perfil_usuario_view import PerfilUsuarioView  # type: ignore
+
+            try:
+                if self._perfil_placeholder_label is not None:
+                    self._perfil_placeholder_label.destroy()
+                    self._perfil_placeholder_label = None
+            except Exception:
+                pass
+
+            self._perfil_view = PerfilUsuarioView(
+                self.view_perfil,
+                usuario=self.usuario,
+                db_user=self.db_user,
+                db_pass=self.db_pass,
+                codigo_usuario=self.codigo_usuario,
+            )
+            self._perfil_view.grid(row=0, column=0, sticky="nsew")
+            self._perfil_loaded = True
+
+        except Exception as e:
+            self._perfil_loaded = False
+            self._perfil_view = None
+            messagebox.showerror(
+                "Error cargando Mi Perfil",
+                f"No se pudo cargar el módulo.\n\nDetalle:\n{e}"
+            )
+
+    def _ensure_auditoria_loaded(self):
+        if self._auditoria_loaded:
+            return
+
+        try:
+            from app.ui.auditoria.auditoria_view import AuditoriaView  # type: ignore
+
+            try:
+                if self._auditoria_placeholder_label is not None:
+                    self._auditoria_placeholder_label.destroy()
+                    self._auditoria_placeholder_label = None
+            except Exception:
+                pass
+
+            self._auditoria_view = AuditoriaView(
+                self.view_auditoria,
+                usuario=self.usuario,
+                db_user=self.db_user,
+                db_pass=self.db_pass,
+                codigo_usuario=self.codigo_usuario,
+            )
+            self._auditoria_view.grid(row=0, column=0, sticky="nsew")
+            self._auditoria_loaded = True
+
+        except Exception as e:
+            self._auditoria_loaded = False
+            self._auditoria_view = None
+            messagebox.showerror(
+                "Error cargando Auditoría",
+                f"No se pudo cargar el módulo.\n\nDetalle:\n{e}"
+            )
+
     def _ensure_registro_loaded(self):
-        """
-        Carga (una sola vez) la vista real de Registro de Usuarios.
-        Si falla el import o la construcción, muestra el error real.
-        """
         if self._registro_loaded:
             return
 
@@ -356,7 +562,6 @@ class MainMenuView(ttk.Frame):
                 codigo_usuario=self.codigo_usuario,
             )
             self._registro_view.grid(row=0, column=0, sticky="nsew")
-
             self._registro_loaded = True
 
         except Exception as e:
@@ -368,10 +573,6 @@ class MainMenuView(ttk.Frame):
             )
 
     def _ensure_matriculas_loaded(self):
-        """
-        Carga (una sola vez) la vista real de Matrículas.
-        Si todavía no está creada, mantiene el placeholder sin romper la app.
-        """
         if self._matriculas_loaded:
             return
 
@@ -397,14 +598,9 @@ class MainMenuView(ttk.Frame):
             codigo_usuario=self.codigo_usuario,
         )
         self._matriculas_view.grid(row=0, column=0, sticky="nsew")
-
         self._matriculas_loaded = True
 
     def _ensure_matricula_materias_loaded(self):
-        """
-        Carga (una sola vez) la vista real de Matrícula por Materias.
-        Si falla el import o la construcción, muestra el error real.
-        """
         if self._matricula_materias_loaded:
             return
 
@@ -426,7 +622,6 @@ class MainMenuView(ttk.Frame):
                 codigo_usuario=self.codigo_usuario,
             )
             self._matricula_materias_view.grid(row=0, column=0, sticky="nsew")
-
             self._matricula_materias_loaded = True
 
         except Exception as e:
@@ -438,10 +633,6 @@ class MainMenuView(ttk.Frame):
             )
 
     def _ensure_asistencias_loaded(self):
-        """
-        Carga (una sola vez) la vista real de Asistencias.
-        Si falla el import o la construcción, muestra el error real.
-        """
         if self._asistencias_loaded:
             return
 
@@ -462,7 +653,6 @@ class MainMenuView(ttk.Frame):
                 codigo_usuario=self.codigo_usuario,
             )
             self._asistencias_view.grid(row=0, column=0, sticky="nsew")
-
             self._asistencias_loaded = True
 
         except Exception as e:
@@ -479,15 +669,19 @@ class MainMenuView(ttk.Frame):
             return
 
         for k, b in self.menu_buttons.items():
-            enabled = self._menu_definitions.get(k, {}).get("enabled", True)
-            if not enabled:
-                b.configure(bg="#3d4852", fg="#c6cbd1")
-            else:
-                b.configure(bg="#2f445d" if k == key else "#223142", fg="white")
+            b.configure(bg="#2f445d" if k == key else "#223142", fg="white")
 
         self._hide_all_views()
 
-        if key == "mantenimiento":
+        if key == "mi_perfil":
+            self.view_perfil.grid()
+            self._ensure_perfil_loaded()
+
+        elif key == "auditoria":
+            self.view_auditoria.grid()
+            self._ensure_auditoria_loaded()
+
+        elif key == "mantenimiento":
             self.view_mantenimientos.grid()
             self.view_mantenimientos.select_home()
 
@@ -513,7 +707,7 @@ class MainMenuView(ttk.Frame):
 
         else:
             self.view_placeholder.grid()
-            if not any(self._has_access(k) for k in self.menu_buttons.keys()):
+            if not self.menu_buttons:
                 self.placeholder_label.configure(
                     text=(
                         "Tu usuario no tiene módulos habilitados actualmente.\n"
@@ -529,9 +723,15 @@ class MainMenuView(ttk.Frame):
                 )
 
     def on_exit(self):
+        try:
+            if self._welcome_toast is not None and self._welcome_toast.winfo_exists():
+                self._welcome_toast.close()
+        except Exception:
+            pass
+
         salir_todo = messagebox.askyesno(
             "Salir",
-            "¿Deseas salir del sistema?\n\nSI: se cierra todo.\nNO: vuelves al Welcome."
+            "¿Deseas salir del sistema?\n\nSI: se cierra todo.\nNO: se cerrará la sesión actual y volverás al Welcome."
         )
         if callable(self.on_exit_request):
             self.on_exit_request(salir_todo)

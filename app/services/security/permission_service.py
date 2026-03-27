@@ -6,6 +6,7 @@ from typing import Iterable
 from app.core.exceptions import ValidationError
 from app.core.session import (
     get_permisos,
+    get_rol_codigo,
     has_permission,
     is_admin,
 )
@@ -33,6 +34,7 @@ class PermissionService:
     Objetivos:
     - Unificar las reglas de autorización para UI y endpoints.
     - Soportar ADMIN como bypass global.
+    - Soportar reglas explícitas por rol como capa de negocio.
     - Tolerar variaciones razonables en nombres de permisos
       (singular/plural, prefijos de módulo, alias históricos).
     - Exponer helpers listos para módulos, submódulos y tabs.
@@ -105,11 +107,53 @@ class PermissionService:
     ACTION_ALIASES: dict[str, tuple[str, ...]] = {
         "access": ("ACCESO", "VER", "CONSULTAR", "LISTAR"),
         "view": ("VER", "CONSULTAR", "LISTAR", "ACCESO"),
+        "consultar": ("CONSULTAR", "VER", "LISTAR", "ACCESO"),
         "create": ("CREAR", "NUEVO", "GUARDAR", "REGISTRAR", "INSERTAR", "FACTURAR"),
+        "crear": ("CREAR", "NUEVO", "GUARDAR", "REGISTRAR", "INSERTAR", "FACTURAR"),
         "update": ("ACTUALIZAR", "EDITAR", "MODIFICAR", "CAMBIAR_ESTADO", "GESTIONAR"),
+        "actualizar": ("ACTUALIZAR", "EDITAR", "MODIFICAR", "CAMBIAR_ESTADO", "GESTIONAR"),
         "delete": ("ELIMINAR", "BORRAR", "DESACTIVAR"),
+        "eliminar": ("ELIMINAR", "BORRAR", "DESACTIVAR"),
         "report": ("REPORTES", "REPORTE", "CONSULTAR", "VER", "LISTAR"),
         "manage": ("GESTIONAR", "ADMINISTRAR", "ASIGNAR", "CONFIGURAR"),
+    }
+
+    # =========================================================
+    # Políticas explícitas por rol
+    # =========================================================
+    ROLE_MODULE_POLICY: dict[str, dict[str, tuple[str, ...] | str]] = {
+        "DOCENTE": {
+            "allow": ("asistencias",),
+            "deny": (
+                "seguridad",
+                "mantenimientos",
+                "matriculas",
+                "matricula_materias",
+            ),
+        },
+        "AUDITOR": {
+            "allow": "*",
+            "deny": (),
+        },
+        "OPERADOR": {
+            "allow": "*",
+            "deny": (),
+        },
+    }
+
+    ROLE_ACTION_POLICY: dict[str, dict[str, tuple[str, ...] | str]] = {
+        "DOCENTE": {
+            "allow": ("access", "view", "consultar", "create", "crear", "update", "actualizar", "report"),
+            "deny": ("delete", "eliminar", "manage"),
+        },
+        "AUDITOR": {
+            "allow": ("access", "view", "consultar", "report"),
+            "deny": ("create", "crear", "update", "actualizar", "delete", "eliminar", "manage"),
+        },
+        "OPERADOR": {
+            "allow": "*",
+            "deny": (),
+        },
     }
 
     @staticmethod
@@ -123,6 +167,9 @@ class PermissionService:
         if not normalized:
             return ""
         return normalized.lower()
+
+    def _current_role_code(self) -> str:
+        return self._normalize_token(get_rol_codigo())
 
     def _permission_set(self) -> set[str]:
         return {
@@ -184,6 +231,81 @@ class PermissionService:
 
         return tuple(result)
 
+    # =========================================================
+    # Reglas por rol
+    # =========================================================
+    def _role_allows_module(self, module_key: str) -> bool | None:
+        """
+        Retorna:
+        - True  -> el rol permite explícitamente el módulo
+        - False -> el rol prohíbe explícitamente el módulo
+        - None  -> sin regla explícita, usar permisos de sesión
+        """
+        if is_admin():
+            return True
+
+        role_code = self._current_role_code()
+        if not role_code:
+            return None
+
+        policy = self.ROLE_MODULE_POLICY.get(role_code)
+        if not policy:
+            return None
+
+        module_norm = self._normalize_key(module_key)
+        deny_modules = {self._normalize_key(x) for x in policy.get("deny", ())}
+        allow_modules = policy.get("allow", ())
+
+        if module_norm in deny_modules:
+            return False
+
+        if allow_modules == "*":
+            return None
+
+        allow_set = {self._normalize_key(x) for x in allow_modules}
+        return True if module_norm in allow_set else None
+
+    def _role_allows_action(
+        self,
+        action_key: str,
+        *,
+        module_key: str | None = None,
+    ) -> bool | None:
+        """
+        Retorna:
+        - True  -> el rol permite explícitamente la acción
+        - False -> el rol prohíbe explícitamente la acción
+        - None  -> sin regla explícita, usar permisos de sesión
+        """
+        if is_admin():
+            return True
+
+        role_code = self._current_role_code()
+        if not role_code:
+            return None
+
+        policy = self.ROLE_ACTION_POLICY.get(role_code)
+        if not policy:
+            return None
+
+        action_norm = self._normalize_key(action_key)
+        deny_actions = {self._normalize_key(x) for x in policy.get("deny", ())}
+        allow_actions = policy.get("allow", ())
+
+        if action_norm in deny_actions:
+            return False
+
+        if module_key:
+            module_rule = self._role_allows_module(module_key)
+            if module_rule is False:
+                return False
+
+        if allow_actions == "*":
+            return None
+
+        allow_set = {self._normalize_key(x) for x in allow_actions}
+        return True if action_norm in allow_set else None
+
     def _build_module_candidates(self, module_key: str) -> tuple[str, ...]:
         module_aliases = self._module_aliases(module_key)
         candidates: list[str] = []
@@ -216,7 +338,6 @@ class PermissionService:
 
         candidates: list[str] = []
 
-        # Siempre tolerar acceso global del módulo
         for module in module_aliases:
             candidates.extend(
                 [
@@ -227,7 +348,6 @@ class PermissionService:
                 ]
             )
 
-        # Si no se envía recurso específico, usar permiso global del módulo
         if not resource_key:
             for module in module_aliases:
                 for action in action_aliases:
@@ -238,14 +358,10 @@ class PermissionService:
 
         for resource in resource_aliases:
             for action in action_aliases:
-                # Permiso directo del recurso
                 candidates.append(f"{resource}.{action}")
-
-                # Permiso namespaced bajo el módulo
                 for module in module_aliases:
                     candidates.append(f"{module}.{resource}.{action}")
 
-        # Fallback transversal por operación del módulo completo
         for module in module_aliases:
             for action in action_aliases:
                 candidates.append(f"{module}.{action}")
@@ -263,7 +379,7 @@ class PermissionService:
 
         candidates: list[str] = []
 
-        if action_key in ("access", "view"):
+        if action_key in ("access", "view", "consultar"):
             for module in module_aliases:
                 candidates.append(f"{module}.ACCESO")
 
@@ -273,9 +389,7 @@ class PermissionService:
                 for module in module_aliases:
                     candidates.append(f"{module}.{resource}.{action}")
 
-        # Fallbacks globales de mantenimiento para escenarios donde exista
-        # permiso transversal del módulo completo por operación.
-        if action_key not in ("access", "view"):
+        if action_key not in ("access", "view", "consultar"):
             for module in module_aliases:
                 for action in action_aliases:
                     candidates.append(f"{module}.{action}")
@@ -311,6 +425,14 @@ class PermissionService:
         return result.allowed
 
     def check_module_access(self, module_key: str, *, admin_bypass: bool = True) -> PermissionCheckResult:
+        role_rule = self._role_allows_module(module_key)
+
+        if role_rule is False:
+            return PermissionCheckResult(False, None, ())
+
+        if role_rule is True:
+            return PermissionCheckResult(True, f"ROLE:{self._current_role_code()}", ())
+
         candidates = self._build_module_candidates(module_key)
         return self._check_candidates(candidates, admin_bypass=admin_bypass)
 
@@ -325,6 +447,21 @@ class PermissionService:
         resource_key: str | None = None,
         admin_bypass: bool = True,
     ) -> PermissionCheckResult:
+        role_module_rule = self._role_allows_module(module_key)
+        if role_module_rule is False:
+            return PermissionCheckResult(False, None, ())
+
+        role_action_rule = self._role_allows_action(action_key, module_key=module_key)
+        if role_action_rule is False:
+            return PermissionCheckResult(False, None, ())
+
+        if role_module_rule is True and role_action_rule is True:
+            return PermissionCheckResult(
+                True,
+                f"ROLE:{self._current_role_code()}",
+                (),
+            )
+
         candidates = self._build_module_action_candidates(
             module_key,
             action_key,
@@ -383,6 +520,7 @@ class PermissionService:
         return {
             "module": self._normalize_key(module_key),
             "resource": self._normalize_key(resource_key or ""),
+            "role_code": self._current_role_code(),
             "is_admin": is_admin(),
             "access": access_result.allowed,
             "create": create_result.allowed,
@@ -412,6 +550,21 @@ class PermissionService:
         *,
         admin_bypass: bool = True,
     ) -> PermissionCheckResult:
+        role_module_rule = self._role_allows_module("mantenimientos")
+        if role_module_rule is False:
+            return PermissionCheckResult(False, None, ())
+
+        role_action_rule = self._role_allows_action(action_key, module_key="mantenimientos")
+        if role_action_rule is False:
+            return PermissionCheckResult(False, None, ())
+
+        if role_module_rule is True and role_action_rule is True:
+            return PermissionCheckResult(
+                True,
+                f"ROLE:{self._current_role_code()}",
+                (),
+            )
+
         candidates = self._build_maintenance_candidates(resource_key, action_key)
         return self._check_candidates(candidates, admin_bypass=admin_bypass)
 
@@ -435,6 +588,7 @@ class PermissionService:
 
         return {
             "resource": self._normalize_key(resource_key),
+            "role_code": self._current_role_code(),
             "is_admin": is_admin(),
             "access": access_result.allowed,
             "create": create_result.allowed,
@@ -516,9 +670,13 @@ class PermissionService:
         action_labels = {
             "ACCESS": "acceder",
             "VIEW": "consultar",
+            "CONSULTAR": "consultar",
             "CREATE": "crear",
+            "CREAR": "crear",
             "UPDATE": "actualizar",
+            "ACTUALIZAR": "actualizar",
             "DELETE": "eliminar",
+            "ELIMINAR": "eliminar",
             "REPORT": "consultar reportes",
             "MANAGE": "gestionar",
         }
@@ -565,9 +723,13 @@ class PermissionService:
         action_labels = {
             "ACCESS": "acceder",
             "VIEW": "consultar",
+            "CONSULTAR": "consultar",
             "CREATE": "crear",
+            "CREAR": "crear",
             "UPDATE": "actualizar",
+            "ACTUALIZAR": "actualizar",
             "DELETE": "eliminar",
+            "ELIMINAR": "eliminar",
         }
         action_label = action_labels.get(action_name, action_name.lower())
 
@@ -692,7 +854,6 @@ permission_service = PermissionService()
 # =========================================================
 # Funciones helper para imports directos
 # =========================================================
-
 def can_access_module(module_key: str, *, admin_bypass: bool = True) -> bool:
     return permission_service.can_access_module(module_key, admin_bypass=admin_bypass)
 

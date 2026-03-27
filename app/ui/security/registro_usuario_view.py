@@ -57,10 +57,12 @@ class RegistroUsuarioView(ttk.Frame):
         self.var_clave = tk.StringVar()
         self.var_confirmar_clave = tk.StringVar()
         self.var_debe_cambiar = tk.BooleanVar(value=True)
+        self.var_show_password = tk.BooleanVar(value=False)
 
         self._build_ui()
         self._load_lookups()
         self._set_defaults()
+        self._bind_live_summary()
 
     # =========================================================
     # UI
@@ -71,11 +73,15 @@ class RegistroUsuarioView(ttk.Frame):
 
         wrapper = ttk.Frame(self, padding=16)
         wrapper.grid(row=0, column=0, sticky="nsew")
-        wrapper.columnconfigure(0, weight=1)
+        wrapper.columnconfigure(0, weight=3)
+        wrapper.columnconfigure(1, weight=2)
         wrapper.rowconfigure(1, weight=1)
 
+        # -----------------------------------------------------
+        # Header
+        # -----------------------------------------------------
         header = ttk.Frame(wrapper)
-        header.grid(row=0, column=0, sticky="ew", pady=(0, 10))
+        header.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 12))
         header.columnconfigure(0, weight=1)
 
         ttk.Label(
@@ -86,118 +92,188 @@ class RegistroUsuarioView(ttk.Frame):
 
         ttk.Label(
             header,
-            text="Creación de usuarios del sistema con rol principal y credenciales seguras.",
+            text=(
+                "Creación de usuarios del sistema con rol principal, tipo de usuario, "
+                "estado inicial y credenciales seguras."
+            ),
             font=("Segoe UI", 10),
         ).grid(row=1, column=0, sticky="w", pady=(4, 0))
 
-        body = ttk.Frame(wrapper)
-        body.grid(row=1, column=0, sticky="nsew")
-        body.columnconfigure(0, weight=1)
-        body.columnconfigure(1, weight=1)
+        # -----------------------------------------------------
+        # Panel principal izquierdo
+        # -----------------------------------------------------
+        left_panel = ttk.Frame(wrapper)
+        left_panel.grid(row=1, column=0, sticky="nsew", padx=(0, 10))
+        left_panel.columnconfigure(0, weight=1)
+        left_panel.rowconfigure(0, weight=1)
+        left_panel.rowconfigure(1, weight=0)
+        left_panel.rowconfigure(2, weight=0)
 
-        card = ttk.LabelFrame(body, text="Datos del usuario", padding=14)
-        card.grid(row=0, column=0, sticky="nsew")
-        card.columnconfigure(0, weight=1)
-        card.columnconfigure(1, weight=1)
+        # Card principal
+        form_card = ttk.LabelFrame(left_panel, text="Formulario de registro", padding=14)
+        form_card.grid(row=0, column=0, sticky="nsew")
+        form_card.columnconfigure(0, weight=1)
+        form_card.rowconfigure(0, weight=0)
+        form_card.rowconfigure(1, weight=0)
+        form_card.rowconfigure(2, weight=0)
 
-        ttk.Label(card, text="Identificación:").grid(
+        # ---------------------------------------------
+        # Sección 1: Información general
+        # ---------------------------------------------
+        sec_general = ttk.LabelFrame(form_card, text="Información general", padding=12)
+        sec_general.grid(row=0, column=0, sticky="ew", pady=(0, 12))
+        sec_general.columnconfigure(0, weight=1)
+        sec_general.columnconfigure(1, weight=1)
+
+        ttk.Label(sec_general, text="Identificación").grid(
             row=0, column=0, sticky="w", padx=(0, 10), pady=(0, 4)
         )
         self.entry_id_usuario = ttk.Entry(
-            card,
+            sec_general,
             textvariable=self.var_id_usuario,
         )
-        self.entry_id_usuario.grid(row=1, column=0, sticky="ew", padx=(0, 10), pady=(0, 10))
+        self.entry_id_usuario.grid(
+            row=1, column=0, sticky="ew", padx=(0, 10), pady=(0, 10)
+        )
 
-        ttk.Label(card, text="Usuario/Login:").grid(
+        ttk.Label(sec_general, text="Usuario / Login").grid(
             row=0, column=1, sticky="w", pady=(0, 4)
         )
         self.entry_usuario = ttk.Entry(
-            card,
+            sec_general,
             textvariable=self.var_usuario,
         )
-        self.entry_usuario.grid(row=1, column=1, sticky="ew", pady=(0, 10))
+        self.entry_usuario.grid(
+            row=1, column=1, sticky="ew", pady=(0, 10)
+        )
 
-        ttk.Label(card, text="Nombre completo:").grid(
+        ttk.Label(sec_general, text="Nombre completo").grid(
             row=2, column=0, sticky="w", padx=(0, 10), pady=(0, 4)
         )
         self.entry_nombre_usuario = ttk.Entry(
-            card,
+            sec_general,
             textvariable=self.var_nombre_usuario,
         )
-        self.entry_nombre_usuario.grid(row=3, column=0, sticky="ew", padx=(0, 10), pady=(0, 10))
+        self.entry_nombre_usuario.grid(
+            row=3, column=0, sticky="ew", padx=(0, 10), pady=(0, 10)
+        )
 
-        ttk.Label(card, text="Correo:").grid(
+        ttk.Label(sec_general, text="Correo").grid(
             row=2, column=1, sticky="w", pady=(0, 4)
         )
         self.entry_correo = ttk.Entry(
-            card,
+            sec_general,
             textvariable=self.var_correo,
         )
-        self.entry_correo.grid(row=3, column=1, sticky="ew", pady=(0, 10))
+        self.entry_correo.grid(
+            row=3, column=1, sticky="ew", pady=(0, 10)
+        )
 
-        ttk.Label(card, text="Tipo de usuario:").grid(
-            row=4, column=0, sticky="w", padx=(0, 10), pady=(0, 4)
+        # ---------------------------------------------
+        # Sección 2: Clasificación del usuario
+        # ---------------------------------------------
+        sec_clasificacion = ttk.LabelFrame(form_card, text="Clasificación y acceso", padding=12)
+        sec_clasificacion.grid(row=1, column=0, sticky="ew", pady=(0, 12))
+        sec_clasificacion.columnconfigure(0, weight=1)
+        sec_clasificacion.columnconfigure(1, weight=1)
+        sec_clasificacion.columnconfigure(2, weight=1)
+
+        ttk.Label(sec_clasificacion, text="Tipo de usuario").grid(
+            row=0, column=0, sticky="w", padx=(0, 10), pady=(0, 4)
         )
         self.cbo_tipo_usuario = ttk.Combobox(
-            card,
+            sec_clasificacion,
             textvariable=self.var_tipo_usuario,
             state="readonly",
         )
-        self.cbo_tipo_usuario.grid(row=5, column=0, sticky="ew", padx=(0, 10), pady=(0, 10))
+        self.cbo_tipo_usuario.grid(
+            row=1, column=0, sticky="ew", padx=(0, 10), pady=(0, 10)
+        )
 
-        ttk.Label(card, text="Estado de usuario:").grid(
-            row=4, column=1, sticky="w", pady=(0, 4)
+        ttk.Label(sec_clasificacion, text="Estado inicial").grid(
+            row=0, column=1, sticky="w", padx=(0, 10), pady=(0, 4)
         )
         self.cbo_estado_usuario = ttk.Combobox(
-            card,
+            sec_clasificacion,
             textvariable=self.var_estado_usuario,
             state="readonly",
         )
-        self.cbo_estado_usuario.grid(row=5, column=1, sticky="ew", pady=(0, 10))
+        self.cbo_estado_usuario.grid(
+            row=1, column=1, sticky="ew", padx=(0, 10), pady=(0, 10)
+        )
 
-        ttk.Label(card, text="Rol principal:").grid(
-            row=6, column=0, sticky="w", padx=(0, 10), pady=(0, 4)
+        ttk.Label(sec_clasificacion, text="Rol principal").grid(
+            row=0, column=2, sticky="w", pady=(0, 4)
         )
         self.cbo_rol = ttk.Combobox(
-            card,
+            sec_clasificacion,
             textvariable=self.var_rol,
             state="readonly",
         )
-        self.cbo_rol.grid(row=7, column=0, sticky="ew", padx=(0, 10), pady=(0, 10))
+        self.cbo_rol.grid(
+            row=1, column=2, sticky="ew", pady=(0, 10)
+        )
 
         ttk.Checkbutton(
-            card,
+            sec_clasificacion,
             text="Debe cambiar clave en el próximo inicio de sesión",
             variable=self.var_debe_cambiar,
-        ).grid(row=7, column=1, sticky="w", pady=(0, 10))
+        ).grid(row=2, column=0, columnspan=3, sticky="w", pady=(4, 0))
 
-        ttk.Label(card, text="Contraseña:").grid(
-            row=8, column=0, sticky="w", padx=(0, 10), pady=(0, 4)
+        # ---------------------------------------------
+        # Sección 3: Seguridad
+        # ---------------------------------------------
+        sec_seguridad = ttk.LabelFrame(form_card, text="Seguridad", padding=12)
+        sec_seguridad.grid(row=2, column=0, sticky="ew")
+        sec_seguridad.columnconfigure(0, weight=1)
+        sec_seguridad.columnconfigure(1, weight=1)
+
+        ttk.Label(sec_seguridad, text="Contraseña").grid(
+            row=0, column=0, sticky="w", padx=(0, 10), pady=(0, 4)
         )
         self.entry_clave = ttk.Entry(
-            card,
+            sec_seguridad,
             textvariable=self.var_clave,
             show="*",
         )
-        self.entry_clave.grid(row=9, column=0, sticky="ew", padx=(0, 10), pady=(0, 10))
+        self.entry_clave.grid(
+            row=1, column=0, sticky="ew", padx=(0, 10), pady=(0, 10)
+        )
 
-        ttk.Label(card, text="Confirmar contraseña:").grid(
-            row=8, column=1, sticky="w", pady=(0, 4)
+        ttk.Label(sec_seguridad, text="Confirmar contraseña").grid(
+            row=0, column=1, sticky="w", pady=(0, 4)
         )
         self.entry_confirmar_clave = ttk.Entry(
-            card,
+            sec_seguridad,
             textvariable=self.var_confirmar_clave,
             show="*",
         )
-        self.entry_confirmar_clave.grid(row=9, column=1, sticky="ew", pady=(0, 10))
+        self.entry_confirmar_clave.grid(
+            row=1, column=1, sticky="ew", pady=(0, 10)
+        )
 
-        acciones = ttk.Frame(body)
-        acciones.grid(row=1, column=0, sticky="ew", pady=(12, 0))
-        acciones.columnconfigure(0, weight=1)
+        ttk.Checkbutton(
+            sec_seguridad,
+            text="Mostrar contraseñas",
+            variable=self.var_show_password,
+            command=self._toggle_password_visibility,
+        ).grid(row=2, column=0, columnspan=2, sticky="w")
 
-        btns = ttk.Frame(acciones)
-        btns.grid(row=0, column=0, sticky="e")
+        ttk.Label(
+            sec_seguridad,
+            text="Recomendación: usa una clave segura y evita credenciales demasiado simples.",
+            font=("Segoe UI", 9),
+        ).grid(row=3, column=0, columnspan=2, sticky="w", pady=(8, 0))
+
+        # -----------------------------------------------------
+        # Barra inferior de acciones
+        # -----------------------------------------------------
+        action_bar = ttk.Frame(left_panel)
+        action_bar.grid(row=1, column=0, sticky="ew", pady=(12, 0))
+        action_bar.columnconfigure(0, weight=1)
+
+        btns = ttk.Frame(action_bar)
+        btns.grid(row=0, column=1, sticky="e")
 
         ttk.Button(
             btns,
@@ -210,6 +286,77 @@ class RegistroUsuarioView(ttk.Frame):
             text="Registrar usuario",
             command=self._on_save,
         ).grid(row=0, column=1)
+
+        # -----------------------------------------------------
+        # Panel derecho de apoyo visual
+        # -----------------------------------------------------
+        right_panel = ttk.Frame(wrapper)
+        right_panel.grid(row=1, column=1, sticky="nsew")
+        right_panel.columnconfigure(0, weight=1)
+        right_panel.rowconfigure(0, weight=0)
+        right_panel.rowconfigure(1, weight=1)
+
+        resumen_card = ttk.LabelFrame(right_panel, text="Resumen del registro", padding=14)
+        resumen_card.grid(row=0, column=0, sticky="ew", pady=(0, 10))
+        resumen_card.columnconfigure(1, weight=1)
+
+        self.var_resumen_id = tk.StringVar(value="-")
+        self.var_resumen_usuario = tk.StringVar(value="-")
+        self.var_resumen_nombre = tk.StringVar(value="-")
+        self.var_resumen_correo = tk.StringVar(value="-")
+        self.var_resumen_tipo = tk.StringVar(value="-")
+        self.var_resumen_estado = tk.StringVar(value="-")
+        self.var_resumen_rol = tk.StringVar(value="-")
+        self.var_resumen_clave = tk.StringVar(value="Pendiente")
+
+        self._add_summary_field(resumen_card, "Identificación:", self.var_resumen_id, 0)
+        self._add_summary_field(resumen_card, "Usuario:", self.var_resumen_usuario, 1)
+        self._add_summary_field(resumen_card, "Nombre:", self.var_resumen_nombre, 2)
+        self._add_summary_field(resumen_card, "Correo:", self.var_resumen_correo, 3)
+        self._add_summary_field(resumen_card, "Tipo:", self.var_resumen_tipo, 4)
+        self._add_summary_field(resumen_card, "Estado:", self.var_resumen_estado, 5)
+        self._add_summary_field(resumen_card, "Rol:", self.var_resumen_rol, 6)
+        self._add_summary_field(resumen_card, "Clave:", self.var_resumen_clave, 7)
+
+        ayuda_card = ttk.LabelFrame(right_panel, text="Guía rápida", padding=14)
+        ayuda_card.grid(row=1, column=0, sticky="nsew")
+        ayuda_card.columnconfigure(0, weight=1)
+
+        ttk.Label(
+            ayuda_card,
+            text=(
+                "• Completa primero la identificación, usuario y nombre.\n\n"
+                "• Selecciona el tipo, estado y rol principal.\n\n"
+                "• Si agregas correo, se almacenará como dato de contacto.\n\n"
+                "• La opción 'Debe cambiar clave' obliga al usuario a renovar "
+                "su contraseña al iniciar sesión.\n\n"
+                "• Antes de guardar, revisa el resumen para confirmar que todo "
+                "quede correcto."
+            ),
+            justify="left",
+            wraplength=300,
+            font=("Segoe UI", 10),
+        ).grid(row=0, column=0, sticky="nw")
+
+    def _add_summary_field(
+        self,
+        parent: ttk.Frame,
+        label_text: str,
+        variable: tk.StringVar,
+        row: int,
+    ) -> None:
+        ttk.Label(
+            parent,
+            text=label_text,
+            font=("Segoe UI", 9, "bold"),
+        ).grid(row=row, column=0, sticky="nw", padx=(0, 8), pady=4)
+
+        ttk.Label(
+            parent,
+            textvariable=variable,
+            wraplength=220,
+            justify="left",
+        ).grid(row=row, column=1, sticky="nw", pady=4)
 
     # =========================================================
     # Lookups
@@ -266,6 +413,8 @@ class RegistroUsuarioView(ttk.Frame):
         self.var_clave.set("")
         self.var_confirmar_clave.set("")
         self.var_debe_cambiar.set(True)
+        self.var_show_password.set(False)
+        self._toggle_password_visibility()
 
         if self.cbo_tipo_usuario["values"]:
             self.cbo_tipo_usuario.current(0)
@@ -287,6 +436,8 @@ class RegistroUsuarioView(ttk.Frame):
             self.cbo_rol.current(0)
         else:
             self.var_rol.set("")
+
+        self._refresh_summary()
 
     # =========================================================
     # Helpers
@@ -363,6 +514,38 @@ class RegistroUsuarioView(ttk.Frame):
             "confirmar_clave": self.var_confirmar_clave.get(),
             "debe_cambiar_clave": bool(self.var_debe_cambiar.get()),
         }
+
+    def _toggle_password_visibility(self) -> None:
+        show_char = "" if self.var_show_password.get() else "*"
+        self.entry_clave.configure(show=show_char)
+        self.entry_confirmar_clave.configure(show=show_char)
+
+    def _bind_live_summary(self) -> None:
+        observed_vars = [
+            self.var_id_usuario,
+            self.var_usuario,
+            self.var_nombre_usuario,
+            self.var_correo,
+            self.var_tipo_usuario,
+            self.var_estado_usuario,
+            self.var_rol,
+            self.var_clave,
+        ]
+        for var in observed_vars:
+            var.trace_add("write", self._on_form_change)
+
+    def _on_form_change(self, *_args) -> None:
+        self._refresh_summary()
+
+    def _refresh_summary(self) -> None:
+        self.var_resumen_id.set(self.var_id_usuario.get().strip() or "-")
+        self.var_resumen_usuario.set(self.var_usuario.get().strip() or "-")
+        self.var_resumen_nombre.set(self.var_nombre_usuario.get().strip() or "-")
+        self.var_resumen_correo.set(self.var_correo.get().strip() or "-")
+        self.var_resumen_tipo.set(self.var_tipo_usuario.get().strip() or "-")
+        self.var_resumen_estado.set(self.var_estado_usuario.get().strip() or "-")
+        self.var_resumen_rol.set(self.var_rol.get().strip() or "-")
+        self.var_resumen_clave.set("Definida" if self.var_clave.get() else "Pendiente")
 
     # =========================================================
     # Eventos

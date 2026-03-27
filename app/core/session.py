@@ -6,6 +6,15 @@ from copy import deepcopy
 _current_session: dict | None = None
 
 
+def _normalize_token(value: object) -> str:
+    """
+    Normaliza valores de sesión, roles y permisos para comparaciones seguras.
+    """
+    if value is None:
+        return ""
+    return str(value).strip().upper().replace(" ", "_").replace("-", "_")
+
+
 # =========================================================
 # Gestión de sesión
 # =========================================================
@@ -108,28 +117,32 @@ def get_roles() -> list[dict]:
 def has_permission(codigo_permiso: str) -> bool:
     """
     Valida si la sesión activa posee un permiso específico.
+    La comparación se hace normalizada para tolerar variantes
+    de formato en los códigos.
     """
-    if not codigo_permiso:
+    normalized = _normalize_token(codigo_permiso)
+    if not normalized:
         return False
 
-    permisos = set(get_permisos())
-    return codigo_permiso in permisos
+    permisos = {_normalize_token(code) for code in get_permisos() if _normalize_token(code)}
+    return normalized in permisos
 
 
 def has_any_permission(*codigos_permiso: str) -> bool:
     """
     Valida si la sesión activa tiene al menos uno de los permisos indicados.
     """
-    permisos = set(get_permisos())
-    return any(code in permisos for code in codigos_permiso if code)
+    permisos = {_normalize_token(code) for code in get_permisos() if _normalize_token(code)}
+    valid_codes = [_normalize_token(code) for code in codigos_permiso if _normalize_token(code)]
+    return any(code in permisos for code in valid_codes)
 
 
 def has_all_permissions(*codigos_permiso: str) -> bool:
     """
     Valida si la sesión activa tiene todos los permisos indicados.
     """
-    permisos = set(get_permisos())
-    valid_codes = [code for code in codigos_permiso if code]
+    permisos = {_normalize_token(code) for code in get_permisos() if _normalize_token(code)}
+    valid_codes = [_normalize_token(code) for code in codigos_permiso if _normalize_token(code)]
     if not valid_codes:
         return False
     return all(code in permisos for code in valid_codes)
@@ -140,18 +153,17 @@ def has_role(codigo_rol: str) -> bool:
     Valida si el rol principal de la sesión coincide con el indicado
     o si el usuario lo tiene dentro de su lista de roles.
     """
-    if not codigo_rol:
+    normalized_role = _normalize_token(codigo_rol)
+    if not normalized_role:
         return False
 
-    codigo_rol = codigo_rol.strip().upper()
-
-    rol_principal = (get_rol_codigo() or "").strip().upper()
-    if rol_principal == codigo_rol:
+    rol_principal = _normalize_token(get_rol_codigo())
+    if rol_principal == normalized_role:
         return True
 
     for rol in get_roles():
-        current = str(rol.get("codigo_rol") or "").strip().upper()
-        if current == codigo_rol:
+        current = _normalize_token(rol.get("codigo_rol"))
+        if current == normalized_role:
             return True
 
     return False
@@ -162,6 +174,27 @@ def is_admin() -> bool:
     Atajo para validar si el usuario actual es Administrador.
     """
     return has_role("ADMIN")
+
+
+def is_docente() -> bool:
+    """
+    Atajo para validar si el usuario actual es Docente.
+    """
+    return has_role("DOCENTE")
+
+
+def is_auditor() -> bool:
+    """
+    Atajo para validar si el usuario actual es Auditor.
+    """
+    return has_role("AUDITOR")
+
+
+def is_operador() -> bool:
+    """
+    Atajo para validar si el usuario actual es Operador.
+    """
+    return has_role("OPERADOR")
 
 
 # =========================================================

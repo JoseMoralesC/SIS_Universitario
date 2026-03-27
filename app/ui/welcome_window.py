@@ -6,7 +6,7 @@ from tkinter import ttk, messagebox
 
 from app.ui.views.main_menu_view import MainMenuView
 from app.core.db import connect_app
-from app.core.session import set_session, clear_session, get_session
+from app.core.session import set_session, clear_session
 from app.services.auth_service import (
     login_sistema,
     CredencialesInvalidasError,
@@ -140,8 +140,20 @@ class WelcomeWindow(tk.Tk):
         def status_line(title: str, value: str):
             row = tk.Frame(box, bg=self.bg_left)
             row.pack(fill="x", padx=12, pady=8)
-            tk.Label(row, text=title, bg=self.bg_left, fg=self.text_soft, font=("Segoe UI", 9)).pack(side="left")
-            tk.Label(row, text=value, bg=self.bg_left, fg="white", font=("Segoe UI", 9, "bold")).pack(side="right")
+            tk.Label(
+                row,
+                text=title,
+                bg=self.bg_left,
+                fg=self.text_soft,
+                font=("Segoe UI", 9),
+            ).pack(side="left")
+            tk.Label(
+                row,
+                text=value,
+                bg=self.bg_left,
+                fg="white",
+                font=("Segoe UI", 9, "bold"),
+            ).pack(side="right")
 
         status_line("Servidor", "SQL Server Express")
         status_line("Base de datos", "Universidad")
@@ -200,9 +212,11 @@ class WelcomeWindow(tk.Tk):
         self.info_wrap.columnconfigure(0, weight=1)
         self.info_wrap.rowconfigure(2, weight=1)
 
-        ttk.Label(self.info_wrap, text="Bienvenido al Sistema Administrativo", style="W.Header.TLabel").grid(
-            row=0, column=0, sticky="ew", pady=(0, 6)
-        )
+        ttk.Label(
+            self.info_wrap,
+            text="Bienvenido al Sistema Administrativo",
+            style="W.Header.TLabel",
+        ).grid(row=0, column=0, sticky="ew", pady=(0, 6))
 
         ttk.Label(
             self.info_wrap,
@@ -339,39 +353,41 @@ class WelcomeWindow(tk.Tk):
             usuario = session_data.get("usuario")
             codigo_usuario = session_data.get("codigo_usuario")
 
-            if self.main_menu_view is None:
-                self.main_menu_view = MainMenuView(
-                    parent=self.main_layer,
-                    usuario=usuario,
-                    db_user=None,
-                    db_pass=None,
-                    codigo_usuario=codigo_usuario,
-                    on_exit_request=self._on_main_menu_exit_request,
-                )
-                self.main_menu_view.pack(fill="both", expand=True)
-            else:
+            if self.main_menu_view is not None:
                 try:
                     self.main_menu_view.destroy()
                 except Exception:
                     pass
+                self.main_menu_view = None
 
-                self.main_menu_view = MainMenuView(
-                    parent=self.main_layer,
-                    usuario=usuario,
-                    db_user=None,
-                    db_pass=None,
-                    codigo_usuario=codigo_usuario,
-                    on_exit_request=self._on_main_menu_exit_request,
-                )
-                self.main_menu_view.pack(fill="both", expand=True)
+            self.main_menu_view = MainMenuView(
+                parent=self.main_layer,
+                usuario=usuario,
+                db_user=None,
+                db_pass=None,
+                codigo_usuario=codigo_usuario,
+                on_exit_request=self._on_main_menu_exit_request,
+            )
+            self.main_menu_view.pack(fill="both", expand=True)
 
             self._slide(self.main_layer, start_x, end_x, step=40)
 
         self.hide_login_panel(on_done=_after_login_hidden)
 
+    def _reset_login_state(self):
+        """
+        Restablece por completo el panel de login para permitir
+        un cambio limpio de usuario entre sesiones.
+        """
+        try:
+            self.login_panel.reset_form()
+        except Exception:
+            pass
+
     def _on_main_menu_exit_request(self, salir_todo: bool):
         if salir_todo:
             clear_session()
+            self._reset_login_state()
             self.destroy()
             return
 
@@ -383,7 +399,17 @@ class WelcomeWindow(tk.Tk):
 
         def _done():
             self.main_layer.place_forget()
+
+            if self.main_menu_view is not None:
+                try:
+                    self.main_menu_view.destroy()
+                except Exception:
+                    pass
+                self.main_menu_view = None
+
             clear_session()
+            self._reset_login_state()
+            self.show_login_panel()
 
         self._slide(self.main_layer, current_x, end_x, step=44, on_done=_done)
 
@@ -402,6 +428,8 @@ class LoginPanel(ttk.Frame):
         self.var_pass = tk.StringVar()
 
         self.var_user.trace_add("write", lambda *_: self._update_avatar())
+
+        self._avatar_img = None
 
         self._build_ui()
         self._update_avatar()
@@ -504,6 +532,16 @@ class LoginPanel(ttk.Frame):
     def focus_user(self):
         self.after(10, lambda: self.ent_user.focus_set())
 
+    def reset_form(self):
+        """
+        Limpia completamente el formulario de login para soportar
+        un cambio de usuario limpio al cerrar sesión.
+        """
+        self.var_user.set("")
+        self.var_pass.set("")
+        self._update_avatar()
+        self.focus_user()
+
     def _find_avatar_path(self, username: str) -> str | None:
         key = (username or "").strip().lower()
         if not key:
@@ -519,6 +557,7 @@ class LoginPanel(ttk.Frame):
         path = self._find_avatar_path(self.var_user.get())
         if not path:
             self.lbl_avatar.configure(image="", text="")
+            self._avatar_img = None
             return
 
         if Image is None or ImageTk is None:
@@ -526,11 +565,13 @@ class LoginPanel(ttk.Frame):
                 try:
                     img = tk.PhotoImage(file=path)
                     self._avatar_img = img
-                    self.lbl_avatar.configure(image=img)
+                    self.lbl_avatar.configure(image=img, text="")
                 except Exception:
                     self.lbl_avatar.configure(image="", text="")
+                    self._avatar_img = None
             else:
                 self.lbl_avatar.configure(image="", text="")
+                self._avatar_img = None
             return
 
         try:
@@ -538,9 +579,10 @@ class LoginPanel(ttk.Frame):
             im = im.resize((120, 120))
             img = ImageTk.PhotoImage(im)
             self._avatar_img = img
-            self.lbl_avatar.configure(image=img)
+            self.lbl_avatar.configure(image=img, text="")
         except Exception:
             self.lbl_avatar.configure(image="", text="")
+            self._avatar_img = None
 
     def _registrar_auditoria(self, codigo_usuario: int | None, movimiento_cod: int) -> None:
         """

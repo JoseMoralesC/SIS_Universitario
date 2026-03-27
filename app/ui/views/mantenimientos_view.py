@@ -9,7 +9,6 @@ from app.services.security.permission_service import (
     can_access_maintenance,
     can_access_module,
 )
-from app.ui.components.toast import Toast
 from app.ui.mantenimientos.docentes_tab import DocentesTab
 from app.ui.mantenimientos.cursos_tab import CursosTab
 from app.ui.mantenimientos.estudiantes_tab import EstudiantesTab
@@ -74,22 +73,6 @@ class MantenimientosView(ttk.Frame):
         # TAB: Inicio
         # =====================================================
         self.tab_home = ttk.Frame(self.notebook)
-
-        Toast(
-            parent=self,
-            title="Panel de Mantenimientos",
-            message=(
-                "Administra la información del sistema de forma rápida y ordenada.\n\n"
-                "• Selecciona una pestaña para ver su formulario y listado.\n"
-                "• Los datos se cargan al ingresar a cada sección.\n"
-                "• Usa Nuevo / Guardar / Actualizar / Eliminar según corresponda."
-            ),
-            duration_ms=7000,
-            slide_in_from="right",
-            slide_out_to="right",
-            step=20,
-            delay_ms=18,
-        )
 
         home_canvas = tk.Canvas(self.tab_home, highlightthickness=0, bd=0)
         home_canvas.pack(fill="both", expand=True)
@@ -179,159 +162,124 @@ class MantenimientosView(ttk.Frame):
                 "Tu usuario no tiene permisos para acceder al módulo de Mantenimientos."
             ),
             justify="left",
+            anchor="w",
         ).grid(row=0, column=0, sticky="w")
 
     def _build_no_sections_home(self, overlay: ttk.Frame):
-        card = ttk.LabelFrame(overlay, text="Sin secciones disponibles", padding=18)
+        card = ttk.LabelFrame(overlay, text="Sin secciones habilitadas", padding=18)
         card.grid(row=0, column=0, padx=24, pady=24, sticky="nw")
 
         ttk.Label(
             card,
             text=(
-                "Tu rol puede ingresar al módulo, pero no tiene permisos de acceso "
-                "a ninguna sección de mantenimiento disponible."
+                "Tu usuario puede ingresar al módulo, pero no tiene recursos "
+                "de mantenimiento habilitados actualmente."
             ),
             justify="left",
+            anchor="w",
         ).grid(row=0, column=0, sticky="w")
 
     def _create_tabs(self):
-        self.tab_periodos = PeriodosTab(
-            self.notebook,
-            db_user=self.db_user,
-            db_pass=self.db_pass,
-            codigo_usuario=self.codigo_usuario,
-        )
-        self.tab_programas = ProgramasTab(
-            self.notebook,
-            db_user=self.db_user,
-            db_pass=self.db_pass,
-            codigo_usuario=self.codigo_usuario,
-        )
-        self.tab_cursos = CursosTab(
-            self.notebook,
-            db_user=self.db_user,
-            db_pass=self.db_pass,
-            codigo_usuario=self.codigo_usuario,
-        )
-        self.tab_docentes = DocentesTab(
-            self.notebook,
-            db_user=self.db_user,
-            db_pass=self.db_pass,
-            codigo_usuario=self.codigo_usuario,
-        )
-        self.tab_asignacion = AsignacionTab(
-            self.notebook,
-            db_user=self.db_user,
-            db_pass=self.db_pass,
-            codigo_usuario=self.codigo_usuario,
-        )
-        self.tab_estudiantes = EstudiantesTab(
-            self.notebook,
-            db_user=self.db_user,
-            db_pass=self.db_pass,
-            codigo_usuario=self.codigo_usuario,
-        )
-        self.tab_becas = BecasTab(
-            self.notebook,
-            db_user=self.db_user,
-            db_pass=self.db_pass,
-            codigo_usuario=self.codigo_usuario,
-        )
-        self.tab_becados = BecadosTab(
-            self.notebook,
-            db_user=self.db_user,
-            db_pass=self.db_pass,
-            codigo_usuario=self.codigo_usuario,
-        )
-
         self._tabs_by_key = {
-            "periodos": self.tab_periodos,
-            "programas": self.tab_programas,
-            "cursos": self.tab_cursos,
-            "docentes": self.tab_docentes,
-            "asignacion": self.tab_asignacion,
-            "estudiantes": self.tab_estudiantes,
-            "becas": self.tab_becas,
-            "becados": self.tab_becados,
+            "docentes": DocentesTab(
+                self.notebook,
+                db_user=self.db_user,
+                db_pass=self.db_pass,
+                codigo_usuario=self.codigo_usuario,
+            ),
+            "cursos": CursosTab(
+                self.notebook,
+                db_user=self.db_user,
+                db_pass=self.db_pass,
+                codigo_usuario=self.codigo_usuario,
+            ),
+            "estudiantes": EstudiantesTab(
+                self.notebook,
+                db_user=self.db_user,
+                db_pass=self.db_pass,
+                codigo_usuario=self.codigo_usuario,
+            ),
+            "programas": ProgramasTab(
+                self.notebook,
+                db_user=self.db_user,
+                db_pass=self.db_pass,
+                codigo_usuario=self.codigo_usuario,
+            ),
+            "becas": BecasTab(
+                self.notebook,
+                db_user=self.db_user,
+                db_pass=self.db_pass,
+                codigo_usuario=self.codigo_usuario,
+            ),
+            "becados": BecadosTab(
+                self.notebook,
+                db_user=self.db_user,
+                db_pass=self.db_pass,
+                codigo_usuario=self.codigo_usuario,
+            ),
+            "periodos": PeriodosTab(
+                self.notebook,
+                db_user=self.db_user,
+                db_pass=self.db_pass,
+                codigo_usuario=self.codigo_usuario,
+            ),
+            "asignacion": AsignacionTab(
+                self.notebook,
+                db_user=self.db_user,
+                db_pass=self.db_pass,
+                codigo_usuario=self.codigo_usuario,
+            ),
         }
 
-    def _add_allowed_tabs(self):
-        definitions = [
-            ("periodos", "Períodos"),
-            ("programas", "Programas"),
-            ("cursos", "Cursos"),
+        self._tab_order = [
             ("docentes", "Docentes"),
-            ("asignacion", "Asignación"),
+            ("cursos", "Cursos"),
             ("estudiantes", "Estudiantes"),
+            ("programas", "Programas"),
             ("becas", "Becas"),
             ("becados", "Becados"),
+            ("periodos", "Periodos"),
+            ("asignacion", "Asignación"),
         ]
 
-        self._tab_order.clear()
+    def _add_allowed_tabs(self):
+        allowed_count = 0
 
-        for key, label in definitions:
-            if not self._can_access_tab(key):
-                continue
+        for key, title in self._tab_order:
+            if self._can_access_tab(key):
+                self.notebook.add(self._tabs_by_key[key], text=title)
+                allowed_count += 1
 
-            tab = self._tabs_by_key.get(key)
-            if tab is None:
-                continue
+        if allowed_count == 0:
+            show_warning(
+                "Permisos",
+                "No tienes secciones de mantenimiento habilitadas actualmente."
+            )
 
-            self.notebook.add(tab, text=label)
-            self._tab_order.append((key, label))
-
-    def _ensure_tab_loaded(self, tab_widget):
+    def _on_tab_changed(self, _event=None):
         try:
-            if hasattr(tab_widget, "ensure_loaded"):
-                tab_widget.ensure_loaded()
+            current_tab_id = self.notebook.select()
+            current_widget = self.nametowidget(current_tab_id)
         except Exception:
-            pass
+            return
 
-    def _on_tab_changed(self, _evt=None):
-        current = self.notebook.select()
+        if hasattr(current_widget, "refresh_data"):
+            try:
+                current_widget.refresh_data()
+            except Exception:
+                pass
 
-        for key, _label in self._tab_order:
-            tab_widget = self._tabs_by_key.get(key)
-            if tab_widget is not None and current == str(tab_widget):
-                self._ensure_tab_loaded(tab_widget)
-                return
-
-    # =====================================================
-    # Helpers públicos
-    # =====================================================
     def select_home(self):
         try:
-            self.notebook.select(self.tab_home)
+            self.notebook.select(0)
         except Exception:
             pass
 
     def select_asignacion(self):
-        """
-        Muestra directamente el tab de Asignación Docentes
-        reutilizando el módulo ya existente dentro de Mantenimientos.
-        """
-        if not self._can_access_module():
-            show_warning(
-                self,
-                "Permisos",
-                "No tienes permisos para acceder al módulo de Mantenimientos.",
-            )
-            return
-
-        if not self._can_access_tab("asignacion"):
-            show_warning(
-                self,
-                "Permisos",
-                "No tienes permisos para acceder a Asignación.",
-            )
-            return
-
-        try:
-            self.tab_asignacion.ensure_loaded()
-        except Exception:
-            pass
-
-        try:
-            self.notebook.select(self.tab_asignacion)
-        except Exception:
-            pass
+        for idx, (key, _) in enumerate(self._tab_order, start=1):
+            if key == "asignacion" and self._can_access_tab("asignacion"):
+                try:
+                    self.notebook.select(idx)
+                except Exception:
+                    pass
+                return
