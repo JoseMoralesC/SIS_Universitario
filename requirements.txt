@@ -1,0 +1,20 @@
+Requisitos del sistema
+
+Para la correcta ejecución del proyecto SIS-Universitario se requiere contar con los siguientes componentes:
+
+* Python 3.10 o superior
+* SQL Server Express
+* ODBC Driver 17 o 18 for SQL Server
+* Base de datos Universidad correctamente restaurada o creada
+* Dependencias de Python instaladas mediante requirements.txt
+
+Contenido de requirements.txt:
+
+pyodbc>=5.0.0
+Pillow>=10.0.0
+tkcalendar>=1.6.1
+
+Nota:
+El sistema utiliza además la librería tkinter para la interfaz gráfica. En entornos Windows, 
+tkinter normalmente viene incluida con la instalación estándar de Python, por lo que no es necesario 
+agregarla al archivo requirements.txt.

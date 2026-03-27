@@ -17,7 +17,11 @@ Correo:
 │   ├── assets
 │   │   ├── users
 │   │   │   ├── Administrador.jpg
+│   │   │   ├── AndresN.png
 │   │   │   ├── Auditor.jpg
+│   │   │   ├── DanielaS.png
+│   │   │   ├── JavierA.png
+│   │   │   ├── JoseM.png
 │   │   │   ├── Operador.jpg
 │   │   │   └── default.png
 │   │   └── background.png
@@ -28,6 +32,7 @@ Correo:
 │   │   ├── db.py
 │   │   ├── error_handler.py
 │   │   ├── exceptions.py
+│   │   ├── security_context.py
 │   │   └── session.py
 │   ├── endpoints
 │   │   ├── asistencias
@@ -45,13 +50,17 @@ Correo:
 │   │   ├── matriculas
 │   │   │   ├── _init_.py
 │   │   │   └── matriculas_endpoints.py
-│   │   └── matriculas_materia
-│   │       ├── _init_.py
-│   │       ├── consulta_matricula_estudiante_endpoints.py
-│   │       ├── docente_materia_endpoints.py
-│   │       ├── facturacion_matricula_endpoints.py
-│   │       ├── materia_horario_endpoints.py
-│   │       └── matricula_materia_endpoints.py
+│   │   ├── matriculas_materia
+│   │   │   ├── _init_.py
+│   │   │   ├── consulta_matricula_estudiante_endpoints.py
+│   │   │   ├── docente_materia_endpoints.py
+│   │   │   ├── facturacion_matricula_endpoints.py
+│   │   │   ├── materia_horario_endpoints.py
+│   │   │   └── matricula_materia_endpoints.py
+│   │   ├── security
+│   │   │   ├── perfil_usuario_endpoints.py
+│   │   │   └── usuarios_security_endpoints.py
+│   │   └── auditoria_consulta_endpoints.py
 │   ├── repositories
 │   │   ├── asistencias
 │   │   │   ├── _init_.py
@@ -77,7 +86,13 @@ Correo:
 │   │   │   ├── facturacion_matricula_repo.py
 │   │   │   ├── materia_horario_repo.py
 │   │   │   └── matricula_materia_repo.py
+│   │   ├── security
+│   │   │   ├── __init__.py
+│   │   │   ├── perfil_usuario_repo.py
+│   │   │   ├── usuario_security_repo.py
+│   │   │   └── usuarios_repo.py
 │   │   ├── _init_.py
+│   │   ├── auditoria_consulta_repo.py
 │   │   ├── auditoria_repo.py
 │   │   └── usuarios_repo.py
 │   ├── services
@@ -103,7 +118,14 @@ Correo:
 │   │   │   ├── facturacion_matricula_service.py
 │   │   │   ├── materia_horario_service.py
 │   │   │   └── matricula_materia_service.py
+│   │   ├── security
+│   │   │   ├── __init__.py
+│   │   │   ├── password_service.py
+│   │   │   ├── perfil_usuario_service.py
+│   │   │   ├── permission_service.py
+│   │   │   └── usuarios_service.py
 │   │   ├── _init_.py
+│   │   ├── auditoria_consulta_service.py
 │   │   └── auth_service.py
 │   ├── ui
 │   │   ├── asistencias
@@ -111,6 +133,8 @@ Correo:
 │   │   │   ├── asistencia_consulta_tab.py
 │   │   │   ├── asistencia_registro_tab.py
 │   │   │   └── asistencias_tab.py
+│   │   ├── auditoria
+│   │   │   └── auditoria_view.py
 │   │   ├── components
 │   │   │   ├── _init_.py
 │   │   │   ├── confirm_dialog.py
@@ -138,6 +162,9 @@ Correo:
 │   │   │   ├── docente_materia_tab.py
 │   │   │   ├── materia_horario_tab.py
 │   │   │   └── matricula_materia_tab.py
+│   │   ├── security
+│   │   │   ├── perfil_usuario_view.py
+│   │   │   └── registro_usuario_view.py
 │   │   ├── transitions
 │   │   │   ├── popup_slide.py
 │   │   │   └── window_slide.py
@@ -155,8 +182,9 @@ Correo:
 │   └── _init_.py
 ├── docs
 │   └── mapa
+│       ├── control_entregables_avances.txt
 │       └── mapa_visual_estructura.txt
 ├── .gitignore
-├── README.TXT
+├── README.md
 ├── main.py
 └── requirements.txt

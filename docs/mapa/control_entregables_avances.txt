@@ -879,8 +879,140 @@ auditoría y escalabilidad del sistema.
 Este entregable consolida aún más la base funcional del proyecto y deja preparado el sistema para continuar 
 con módulos académicos de mayor profundidad y análisis.
 
-Autor
+----------------------------------------------------------------
+ENTREGABLE No. 6
+----------------------------------------------------------------
+Descripción General del Entregable No. 6
 
+El Entregable No. 6 consolida el sistema SIS-Universitario como una solución académica robusta, incorporando mejoras significativas en seguridad, experiencia de usuario, control de accesos, auditoría de movimientos y gestión de asistencias, elevando el sistema a un nivel cercano a aplicaciones empresariales reales.
+
+Este entregable no solo amplía la funcionalidad del sistema, sino que también introduce mejoras en la interacción del usuario, organización visual y control dinámico del sistema basado en roles.
+
+Alcance del Entregable No. 6
+Implementación del módulo de Seguridad de Usuarios.
+Gestión de roles y asignación de rol principal por usuario.
+Control de acceso a módulos según permisos.
+Ocultamiento dinámico de componentes UI según rol.
+Implementación del módulo de Auditoría de movimientos.
+Registro automático de operaciones del sistema.
+Implementación del módulo de Asistencias académicas.
+Incorporación del perfil de usuario interactivo dentro del sistema.
+Mejora en la experiencia de usuario (UI/UX).
+Integración completa con la arquitectura modular existente.
+Seguridad y Control de Accesos
+
+El sistema implementa un modelo de seguridad robusto basado en roles, el cual permite controlar el acceso a funcionalidades del sistema de forma dinámica.
+
+Características principales:
+
+Autenticación contra SQL Server.
+Asociación de usuarios con roles mediante base de datos.
+Identificación de rol principal por usuario.
+Validación de permisos antes de acceder a módulos.
+Ocultamiento completo de botones y opciones no autorizadas.
+Restricción de acciones críticas según permisos.
+
+Este enfoque permite que cada usuario visualice únicamente las funcionalidades que le corresponden.
+
+Auditoría del Sistema
+
+Se incorpora un sistema de auditoría que permite registrar todas las acciones relevantes ejecutadas dentro del sistema.
+
+Características:
+
+Registro automático desde la capa de endpoints.
+Captura de:
+Usuario que ejecuta la acción
+Fecha y hora
+Tipo de movimiento
+Identificador del registro afectado
+Manejo de identificadores simples y compuestos.
+Integración con múltiples módulos del sistema.
+
+Este módulo garantiza trazabilidad completa de las operaciones realizadas.
+
+Módulo de Asistencias
+
+Se implementa el módulo de gestión de asistencias académicas, permitiendo registrar y consultar listas de asistencia de forma estructurada.
+
+Funcionalidades:
+
+Registro de asistencia por:
+Período
+Curso
+Materia
+Docente
+Fecha
+Clasificación de estudiantes:
+Asistente
+Ausente
+Registro de observaciones.
+Consulta de listas históricas.
+Validaciones para evitar inconsistencias en los datos.
+
+El módulo sigue un flujo guiado que facilita la operación del usuario.
+
+Perfil de Usuario y Experiencia de Usuario (UI/UX)
+
+Se incorpora un nuevo componente visual de Perfil de Usuario, accesible desde la interfaz principal, el cual mejora la interacción y comprensión del sistema por parte del usuario.
+
+Incluye:
+
+Visualización de información del usuario activo.
+Acceso a funcionalidades relacionadas con su sesión.
+Integración con el sistema de roles.
+
+Adicionalmente, se implementan mejoras en la interfaz:
+
+Ocultamiento dinámico de botones según permisos.
+Mejor organización visual de formularios.
+Uso de ventanas emergentes (popups) para interacción.
+Integración de componentes reutilizables.
+Mejora en la navegación entre módulos.
+
+Estas mejoras elevan significativamente la experiencia de usuario del sistema.
+
+Lógica del Sistema y Mejoras Técnicas
+
+El sistema incorpora nuevas mejoras en la lógica interna:
+
+Validaciones centralizadas en la capa de servicios.
+Control de sesión activa y contexto del usuario.
+Integración de auditoría en operaciones críticas.
+Separación clara entre lógica de negocio y presentación.
+Uso de lookups dinámicos desde base de datos.
+Manejo estructurado de errores.
+
+Estas mejoras fortalecen la estabilidad, mantenibilidad y escalabilidad del sistema.
+
+Arquitectura del Sistema
+
+Se mantiene la arquitectura modular por capas:
+
+UI: interacción y componentes visuales.
+Endpoints: orquestación de procesos.
+Services: lógica de negocio.
+Repositories: acceso a datos.
+Core: configuración, sesión, auditoría y manejo de errores.
+
+Se refuerza la arquitectura mediante:
+
+Seguridad desacoplada por roles.
+Auditoría transversal.
+Componentes reutilizables.
+Estado Final del Proyecto
+
+Con la finalización del Entregable No. 6:
+
+El sistema alcanza un nivel funcional completo.
+Se incorpora seguridad avanzada basada en roles.
+Se garantiza trazabilidad mediante auditoría.
+Se mejora significativamente la experiencia de usuario.
+La arquitectura permite escalabilidad y mantenimiento.
+
+El sistema queda preparado para evolucionar hacia funcionalidades más avanzadas o integraciones futuras.
+
+Autor:
 José Rodolfo Morales Calderón
 Curso: Programación III
 Institución: Colegio Universitario de Cartago (CUC)
