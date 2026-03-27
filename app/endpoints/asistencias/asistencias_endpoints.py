@@ -29,6 +29,22 @@ def _get_conn():
 
 
 # =========================================================
+# Helpers normalización
+# =========================================================
+def _to_int_or_none(value):
+    if value in (None, "", 0, "0"):
+        return None
+    return int(value)
+
+
+def _to_str_or_none(value):
+    if value is None:
+        return None
+    value = str(value).strip()
+    return value or None
+
+
+# =========================================================
 # Auditoría
 # =========================================================
 def _registrar_auditoria(
@@ -55,7 +71,11 @@ def _registrar_auditoria(
 # =========================================================
 # LOOKUPS
 # =========================================================
-def get_periodos_activos(db_user: str, db_pass: str, codigo_usuario: int | None = None):
+def get_periodos_activos(
+    db_user: str,
+    db_pass: str,
+    codigo_usuario: int | None = None,
+):
     require_asistencias_action("consultar")
 
     conn = _get_conn()
@@ -65,17 +85,31 @@ def get_periodos_activos(db_user: str, db_pass: str, codigo_usuario: int | None 
         conn.close()
 
 
-def get_cursos_por_periodo(db_user, db_pass, periodo_id, codigo_usuario=None):
+def get_cursos_por_periodo(
+    db_user,
+    db_pass,
+    periodo_id,
+    codigo_usuario=None,
+):
     require_asistencias_action("consultar")
 
     conn = _get_conn()
     try:
-        return listar_cursos_por_periodo(conn, periodo_id=int(periodo_id))
+        return listar_cursos_por_periodo(
+            conn,
+            periodo_id=int(periodo_id),
+        )
     finally:
         conn.close()
 
 
-def get_materias_por_periodo_curso(db_user, db_pass, periodo_id, curso_cod, codigo_usuario=None):
+def get_materias_por_periodo_curso(
+    db_user,
+    db_pass,
+    periodo_id,
+    curso_cod,
+    codigo_usuario=None,
+):
     require_asistencias_action("consultar")
 
     conn = _get_conn()
@@ -89,7 +123,14 @@ def get_materias_por_periodo_curso(db_user, db_pass, periodo_id, curso_cod, codi
         conn.close()
 
 
-def get_docentes_por_periodo_curso_materia(db_user, db_pass, periodo_id, curso_cod, materia_cod, codigo_usuario=None):
+def get_docentes_por_periodo_curso_materia(
+    db_user,
+    db_pass,
+    periodo_id,
+    curso_cod,
+    materia_cod,
+    codigo_usuario=None,
+):
     require_asistencias_action("consultar")
 
     conn = _get_conn()
@@ -104,7 +145,15 @@ def get_docentes_por_periodo_curso_materia(db_user, db_pass, periodo_id, curso_c
         conn.close()
 
 
-def get_estudiantes_grupo(db_user, db_pass, periodo_id, curso_cod, materia_cod, docente_cod, codigo_usuario=None):
+def get_estudiantes_grupo(
+    db_user,
+    db_pass,
+    periodo_id,
+    curso_cod,
+    materia_cod,
+    docente_cod,
+    codigo_usuario=None,
+):
     require_asistencias_action("consultar")
 
     conn = _get_conn()
@@ -120,10 +169,79 @@ def get_estudiantes_grupo(db_user, db_pass, periodo_id, curso_cod, materia_cod, 
         conn.close()
 
 
+def get_horario_principal_materia(
+    db_user,
+    db_pass,
+    materia_cod,
+    codigo_usuario=None,
+):
+    require_asistencias_action("consultar")
+
+    conn = _get_conn()
+    try:
+        return obtener_horario_principal_materia(
+            conn,
+            materia_cod=int(materia_cod),
+        )
+    finally:
+        conn.close()
+
+
+def get_horarios_materia(
+    db_user,
+    db_pass,
+    materia_cod,
+    codigo_usuario=None,
+):
+    require_asistencias_action("consultar")
+
+    conn = _get_conn()
+    try:
+        return listar_horarios_materia(
+            conn,
+            materia_cod=int(materia_cod),
+        )
+    finally:
+        conn.close()
+
+
+def get_resumen_grupo(
+    db_user,
+    db_pass,
+    periodo_id,
+    curso_cod,
+    materia_cod,
+    docente_cod,
+    codigo_usuario=None,
+):
+    require_asistencias_action("consultar")
+
+    conn = _get_conn()
+    try:
+        return obtener_resumen_grupo(
+            conn,
+            periodo_id=int(periodo_id),
+            curso_cod=int(curso_cod),
+            materia_cod=int(materia_cod),
+            docente_cod=int(docente_cod),
+        )
+    finally:
+        conn.close()
+
+
 # =========================================================
 # CONSULTAS
 # =========================================================
-def get_asistencia_existente(db_user, db_pass, periodo_id, curso_cod, materia_cod, docente_cod, fecha_clase, codigo_usuario=None):
+def get_asistencia_existente(
+    db_user,
+    db_pass,
+    periodo_id,
+    curso_cod,
+    materia_cod,
+    docente_cod,
+    fecha_clase,
+    codigo_usuario=None,
+):
     require_asistencias_action("consultar")
 
     conn = _get_conn()
@@ -140,7 +258,12 @@ def get_asistencia_existente(db_user, db_pass, periodo_id, curso_cod, materia_co
         conn.close()
 
 
-def get_asistencia_by_id(db_user, db_pass, asistencia_lista_id, codigo_usuario=None):
+def get_asistencia_by_id(
+    db_user,
+    db_pass,
+    asistencia_lista_id,
+    codigo_usuario=None,
+):
     require_asistencias_action("consultar")
 
     conn = _get_conn()
@@ -153,7 +276,12 @@ def get_asistencia_by_id(db_user, db_pass, asistencia_lista_id, codigo_usuario=N
         conn.close()
 
 
-def get_resumen_lista_asistencia(db_user, db_pass, asistencia_lista_id, codigo_usuario=None):
+def get_resumen_lista_asistencia(
+    db_user,
+    db_pass,
+    asistencia_lista_id,
+    codigo_usuario=None,
+):
     require_asistencias_action("consultar")
 
     conn = _get_conn()
@@ -171,7 +299,17 @@ def search_listas_asistencia(db_user, db_pass, **kwargs):
 
     conn = _get_conn()
     try:
-        return consultar_listas_asistencia(conn, **kwargs)
+        filtros = {
+            "periodo_id": _to_int_or_none(kwargs.get("periodo_id")),
+            "curso_cod": _to_int_or_none(kwargs.get("curso_cod")),
+            "materia_cod": _to_int_or_none(kwargs.get("materia_cod")),
+            "docente_cod": _to_int_or_none(kwargs.get("docente_cod")),
+            "fecha_desde": _to_str_or_none(kwargs.get("fecha_desde")),
+            "fecha_hasta": _to_str_or_none(kwargs.get("fecha_hasta")),
+            "solo_activas": bool(kwargs.get("solo_activas", True)),
+        }
+
+        return consultar_listas_asistencia(conn, **filtros)
     finally:
         conn.close()
 
@@ -179,8 +317,19 @@ def search_listas_asistencia(db_user, db_pass, **kwargs):
 # =========================================================
 # GUARDADO
 # =========================================================
-def save_asistencia(db_user, db_pass, *, periodo_id, curso_cod, materia_cod, docente_cod, fecha_clase, asistentes, ausentes, codigo_usuario):
-
+def save_asistencia(
+    db_user,
+    db_pass,
+    *,
+    periodo_id,
+    curso_cod,
+    materia_cod,
+    docente_cod,
+    fecha_clase,
+    asistentes,
+    ausentes,
+    codigo_usuario,
+):
     conn = _get_conn()
     try:
         existente = cargar_asistencia_existente(
@@ -203,17 +352,28 @@ def save_asistencia(db_user, db_pass, *, periodo_id, curso_cod, materia_cod, doc
             fecha_clase=str(fecha_clase).strip(),
             asistentes=list(asistentes or []),
             ausentes=list(ausentes or []),
-            codigo_usuario=codigo_usuario,
+            codigo_usuario=None if codigo_usuario is None else int(codigo_usuario),
         )
 
         if codigo_usuario and isinstance(result, dict):
             accion = str(result.get("accion", "")).lower()
+            asistencia_lista_id = result.get("asistencia_lista_id")
 
             if accion == "creada":
-                _registrar_auditoria(conn, codigo_usuario, Mov.ASISTENCIA_LISTA_CREADA, result.get("asistencia_lista_id"))
+                _registrar_auditoria(
+                    conn,
+                    codigo_usuario,
+                    Mov.ASISTENCIA_LISTA_CREADA,
+                    asistencia_lista_id,
+                )
 
             elif accion == "actualizada":
-                _registrar_auditoria(conn, codigo_usuario, Mov.ASISTENCIA_LISTA_ACTUALIZADA, result.get("asistencia_lista_id"))
+                _registrar_auditoria(
+                    conn,
+                    codigo_usuario,
+                    Mov.ASISTENCIA_LISTA_ACTUALIZADA,
+                    asistencia_lista_id,
+                )
 
         return result
 

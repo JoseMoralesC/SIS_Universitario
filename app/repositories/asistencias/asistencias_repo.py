@@ -28,9 +28,6 @@ def get_estado_codigo_by_desc(conn: pyodbc.Connection, estado_desc: str) -> int:
 
 
 def _normalizar_lista_carnets(items: list[str] | tuple[str, ...] | None) -> list[str]:
-    """
-    Limpia, quita vacíos y elimina duplicados preservando orden.
-    """
     if not items:
         return []
 
@@ -47,6 +44,52 @@ def _normalizar_lista_carnets(items: list[str] | tuple[str, ...] | None) -> list
         salida.append(carnet)
 
     return salida
+
+
+def _normalizar_usuario_docente(usuario_docente: str | None) -> str | None:
+    valor = str(usuario_docente or "").strip()
+    return valor or None
+
+
+def get_docente_cod_by_usuario_docente(
+    conn: pyodbc.Connection,
+    usuario_docente: str,
+) -> int | None:
+    usuario_docente = _normalizar_usuario_docente(usuario_docente)
+    if not usuario_docente:
+        return None
+
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT TOP 1 d.Docente_Cod
+        FROM dbo.Docentes d
+        WHERE UPPER(LTRIM(RTRIM(ISNULL(d.Usuario_Docente, '')))) = UPPER(LTRIM(RTRIM(?)));
+        """,
+        usuario_docente,
+    )
+    row = cur.fetchone()
+    return int(row[0]) if row else None
+
+
+def _get_periodo_academico_from_id(conn: pyodbc.Connection, periodo_id: int) -> int | None:
+    """
+    En este modelo, el campo Periodo de tablas como:
+    - Matricula_Curso
+    - Matricula_Materia
+    representa el AÑO académico (ej. 2026).
+    """
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT TOP 1 Anio
+        FROM dbo.Periodos
+        WHERE Periodo_Id = ?;
+        """,
+        int(periodo_id),
+    )
+    row = cur.fetchone()
+    return int(row[0]) if row and row[0] is not None else None
 
 
 # =========================================================
@@ -164,35 +207,68 @@ def fetch_periodos_activos(conn: pyodbc.Connection) -> list[tuple[int, str]]:
     return rows
 
 
-def fetch_cursos_por_periodo(conn: pyodbc.Connection, periodo_id: int) -> list[tuple[int, str]]:
+def fetch_cursos_por_periodo(
+    conn: pyodbc.Connection,
+    periodo_id: int,
+    usuario_docente: str | None = None,
+) -> list[tuple[int, str]]:
     """
-    Cursos que realmente tienen matrícula por materia en el período indicado.
+    Cursos válidos para asistencias.
+
+    Regla corregida:
+    - Curso activo
+    - Con estudiantes matriculados en Matricula_Curso
+    - Acepta cualquiera de estos escenarios:
+        * mc.Periodo_Id = periodo_id
+        * o mc.Periodo_Id IS NULL y mc.Periodo = anio_academico
+    - Si viene usuario_docente, solo cursos de ese docente
     """
     activo = get_estado_codigo_by_desc(conn, "Activo")
+    usuario_docente = _normalizar_usuario_docente(usuario_docente)
+    periodo_academico = _get_periodo_academico_from_id(conn, int(periodo_id))
 
-    cur = conn.cursor()
-    cur.execute(
-        """
+    sql = """
         SELECT DISTINCT
             cp.Curso_Cod,
             cp.Descripcion
-        FROM dbo.Matricula_Materia mm
-        INNER JOIN dbo.Materias m
-            ON m.Materia_Cod = mm.Materia_Cod
-        INNER JOIN dbo.Cursos_Programas cp
-            ON cp.Curso_Cod = m.Curso_Cod
-        WHERE mm.Periodo_Id = ?
-          AND mm.Estado_Codigo = ?
-          AND m.Estado_Codigo = ?
-          AND cp.Estado_Codigo = ?
-        ORDER BY cp.Descripcion ASC;
-        """,
+        FROM dbo.Cursos_Programas cp
+        INNER JOIN dbo.Matricula_Curso mc
+            ON mc.Curso_Cod = cp.Curso_Cod
+           AND (
+                mc.Periodo_Id = ?
+                OR (mc.Periodo_Id IS NULL AND mc.Periodo = ?)
+           )
+           AND mc.Estado_Codigo = ?
+        WHERE cp.Estado_Codigo = ?
+    """
+    params: list = [
         int(periodo_id),
+        None if periodo_academico is None else int(periodo_academico),
         int(activo),
         int(activo),
-        int(activo),
-    )
+    ]
 
+    if usuario_docente:
+        sql += """
+          AND EXISTS (
+                SELECT 1
+                FROM dbo.Curso_Docente cd
+                INNER JOIN dbo.Docentes d
+                    ON d.Docente_Cod = cd.Docente_Cod
+                   AND d.Estado_Codigo = ?
+                WHERE cd.Curso_Cod = cp.Curso_Cod
+                  AND UPPER(LTRIM(RTRIM(ISNULL(d.Usuario_Docente, ''))))
+                      = UPPER(LTRIM(RTRIM(?)))
+          )
+        """
+        params.extend([int(activo), usuario_docente])
+
+    sql += """
+        ORDER BY cp.Descripcion ASC;
+    """
+
+    cur = conn.cursor()
+    cur.execute(sql, params)
     return [(int(r[0]), str(r[1])) for r in cur.fetchall()]
 
 
@@ -201,33 +277,76 @@ def fetch_materias_por_periodo_curso(
     *,
     periodo_id: int,
     curso_cod: int,
+    usuario_docente: str | None = None,
 ) -> list[tuple[int, str]]:
     """
-    Materias realmente matriculadas en el período/curso seleccionado.
+    Materias válidas para asistencias.
+
+    Regla corregida:
+    - Materia activa
+    - Pertenece al curso
+    - El curso tiene estudiantes matriculados en Matricula_Curso
+    - Acepta cualquiera de estos escenarios:
+        * mc.Periodo_Id = periodo_id
+        * o mc.Periodo_Id IS NULL y mc.Periodo = anio_academico
+    - Si viene usuario_docente, solo materias vinculadas a ese docente
+      mediante Docente_Materia + Curso_Docente
     """
     activo = get_estado_codigo_by_desc(conn, "Activo")
+    usuario_docente = _normalizar_usuario_docente(usuario_docente)
+    periodo_academico = _get_periodo_academico_from_id(conn, int(periodo_id))
 
-    cur = conn.cursor()
-    cur.execute(
-        """
+    sql = """
         SELECT DISTINCT
             m.Materia_Cod,
             m.Descripcion
-        FROM dbo.Matricula_Materia mm
-        INNER JOIN dbo.Materias m
-            ON m.Materia_Cod = mm.Materia_Cod
-        WHERE mm.Periodo_Id = ?
-          AND m.Curso_Cod = ?
-          AND mm.Estado_Codigo = ?
+        FROM dbo.Materias m
+        WHERE m.Curso_Cod = ?
           AND m.Estado_Codigo = ?
-        ORDER BY m.Descripcion ASC;
-        """,
-        int(periodo_id),
+          AND EXISTS (
+                SELECT 1
+                FROM dbo.Matricula_Curso mc
+                WHERE mc.Curso_Cod = m.Curso_Cod
+                  AND (
+                        mc.Periodo_Id = ?
+                        OR (mc.Periodo_Id IS NULL AND mc.Periodo = ?)
+                  )
+                  AND mc.Estado_Codigo = ?
+          )
+    """
+    params: list = [
         int(curso_cod),
         int(activo),
+        int(periodo_id),
+        None if periodo_academico is None else int(periodo_academico),
         int(activo),
-    )
+    ]
 
+    if usuario_docente:
+        sql += """
+          AND EXISTS (
+                SELECT 1
+                FROM dbo.Docente_Materia dm
+                INNER JOIN dbo.Docentes d
+                    ON d.Docente_Cod = dm.Docente_Cod
+                   AND d.Estado_Codigo = ?
+                INNER JOIN dbo.Curso_Docente cd
+                    ON cd.Docente_Cod = dm.Docente_Cod
+                   AND cd.Curso_Cod = m.Curso_Cod
+                WHERE dm.Materia_Cod = m.Materia_Cod
+                  AND dm.Estado_Codigo = ?
+                  AND UPPER(LTRIM(RTRIM(ISNULL(d.Usuario_Docente, ''))))
+                      = UPPER(LTRIM(RTRIM(?)))
+          )
+        """
+        params.extend([int(activo), int(activo), usuario_docente])
+
+    sql += """
+        ORDER BY m.Descripcion ASC;
+    """
+
+    cur = conn.cursor()
+    cur.execute(sql, params)
     return [(int(r[0]), str(r[1])) for r in cur.fetchall()]
 
 
@@ -237,40 +356,69 @@ def fetch_docentes_por_periodo_curso_materia(
     periodo_id: int,
     curso_cod: int,
     materia_cod: int,
+    usuario_docente: str | None = None,
 ) -> list[tuple[int, str]]:
     """
-    Docentes que realmente tienen estudiantes matriculados en esa materia.
+    Docentes válidos para período + curso + materia.
+
+    Regla corregida:
+    - Docente activo
+    - Asignado al curso en Curso_Docente
+    - Asignado a la materia en Docente_Materia
+    - El curso tiene matrícula en Matricula_Curso
+    - Acepta cualquiera de estos escenarios:
+        * mc.Periodo_Id = periodo_id
+        * o mc.Periodo_Id IS NULL y mc.Periodo = anio_academico
+    - Si viene usuario_docente, se restringe a ese login
     """
     activo = get_estado_codigo_by_desc(conn, "Activo")
+    usuario_docente = _normalizar_usuario_docente(usuario_docente)
+    periodo_academico = _get_periodo_academico_from_id(conn, int(periodo_id))
 
-    cur = conn.cursor()
-    cur.execute(
-        """
+    sql = """
         SELECT DISTINCT
             d.Docente_Cod,
             d.Nombre_Completo
-        FROM dbo.Matricula_Materia mm
-        INNER JOIN dbo.Materias m
-            ON m.Materia_Cod = mm.Materia_Cod
-        INNER JOIN dbo.Docentes d
-            ON d.Docente_Cod = mm.Docente_Cod
-        WHERE mm.Periodo_Id = ?
-          AND m.Curso_Cod = ?
-          AND mm.Materia_Cod = ?
-          AND mm.Docente_Cod = d.Docente_Cod
-          AND mm.Estado_Codigo = ?
-          AND m.Estado_Codigo = ?
-          AND d.Estado_Codigo = ?
-        ORDER BY d.Nombre_Completo ASC;
-        """,
-        int(periodo_id),
+        FROM dbo.Docentes d
+        INNER JOIN dbo.Curso_Docente cd
+            ON cd.Docente_Cod = d.Docente_Cod
+           AND cd.Curso_Cod = ?
+        INNER JOIN dbo.Docente_Materia dm
+            ON dm.Docente_Cod = d.Docente_Cod
+           AND dm.Materia_Cod = ?
+           AND dm.Estado_Codigo = ?
+        INNER JOIN dbo.Matricula_Curso mc
+            ON mc.Curso_Cod = cd.Curso_Cod
+           AND (
+                mc.Periodo_Id = ?
+                OR (mc.Periodo_Id IS NULL AND mc.Periodo = ?)
+           )
+           AND mc.Estado_Codigo = ?
+        WHERE d.Estado_Codigo = ?
+    """
+    params: list = [
         int(curso_cod),
         int(materia_cod),
         int(activo),
+        int(periodo_id),
+        None if periodo_academico is None else int(periodo_academico),
         int(activo),
         int(activo),
-    )
+    ]
 
+    if usuario_docente:
+        sql += """
+          AND UPPER(LTRIM(RTRIM(ISNULL(d.Usuario_Docente, ''))))
+              = UPPER(LTRIM(RTRIM(?)))
+        """
+        params.append(usuario_docente)
+
+    sql += """
+        ORDER BY d.Nombre_Completo ASC;
+    """
+
+    cur = conn.cursor()
+    cur.execute(sql, params)
     return [(int(r[0]), str(r[1])) for r in cur.fetchall()]
 
 
@@ -279,10 +427,6 @@ def fetch_horarios_materia(
     *,
     materia_cod: int,
 ) -> list[tuple[str, str, int, str]]:
-    """
-    Retorna:
-    (dia_cod, dia_nombre, jornada_id, jornada)
-    """
     activo = get_estado_codigo_by_desc(conn, "Activo")
 
     cur = conn.cursor()
@@ -317,10 +461,6 @@ def fetch_horario_principal_materia(
     *,
     materia_cod: int,
 ) -> tuple[str, str, int, str] | None:
-    """
-    Devuelve el primer horario activo de la materia:
-    (dia_cod, dia_nombre, jornada_id, jornada)
-    """
     rows = fetch_horarios_materia(conn, materia_cod=materia_cod)
     return rows[0] if rows else None
 
@@ -332,42 +472,67 @@ def fetch_estudiantes_matriculados(
     curso_cod: int,
     materia_cod: int,
     docente_cod: int,
+    usuario_docente: str | None = None,
 ) -> list[tuple[str, str]]:
     """
-    Estudiantes activos matriculados en la combinación exacta:
-    período + curso + materia + docente
+    Estudiantes del grupo final para asistencia.
+
+    Acepta dos escenarios válidos en Matricula_Materia:
+    - mm.Periodo_Id = periodo_id
+    - o mm.Periodo = anio_academico cuando Periodo_Id venga NULL
     """
     activo = get_estado_codigo_by_desc(conn, "Activo")
+    usuario_docente = _normalizar_usuario_docente(usuario_docente)
+    periodo_academico = _get_periodo_academico_from_id(conn, int(periodo_id))
 
-    cur = conn.cursor()
-    cur.execute(
-        """
+    sql = """
         SELECT DISTINCT
             e.Carnet,
             e.Nombre_Completo
         FROM dbo.Matricula_Materia mm
-        INNER JOIN dbo.Materias m
-            ON m.Materia_Cod = mm.Materia_Cod
         INNER JOIN dbo.Estudiantes e
             ON e.Carnet = mm.Carnet
-        WHERE mm.Periodo_Id = ?
-          AND m.Curso_Cod = ?
+           AND e.Estado_Codigo = ?
+        INNER JOIN dbo.Materias m
+            ON m.Materia_Cod = mm.Materia_Cod
+           AND m.Estado_Codigo = ?
+        INNER JOIN dbo.Docentes d
+            ON d.Docente_Cod = mm.Docente_Cod
+           AND d.Estado_Codigo = ?
+        WHERE (
+                mm.Periodo_Id = ?
+                OR (mm.Periodo_Id IS NULL AND mm.Periodo = ?)
+              )
           AND mm.Materia_Cod = ?
           AND mm.Docente_Cod = ?
           AND mm.Estado_Codigo = ?
-          AND m.Estado_Codigo = ?
-          AND e.Estado_Codigo = ?
-        ORDER BY e.Nombre_Completo ASC;
-        """,
+          AND m.Curso_Cod = ?
+    """
+    params: list = [
+        int(activo),
+        int(activo),
+        int(activo),
         int(periodo_id),
-        int(curso_cod),
+        None if periodo_academico is None else int(periodo_academico),
         int(materia_cod),
         int(docente_cod),
         int(activo),
-        int(activo),
-        int(activo),
-    )
+        int(curso_cod),
+    ]
 
+    if usuario_docente:
+        sql += """
+          AND UPPER(LTRIM(RTRIM(ISNULL(d.Usuario_Docente, ''))))
+              = UPPER(LTRIM(RTRIM(?)))
+        """
+        params.append(usuario_docente)
+
+    sql += """
+        ORDER BY e.Nombre_Completo ASC;
+    """
+
+    cur = conn.cursor()
+    cur.execute(sql, params)
     return [(str(r[0]), str(r[1])) for r in cur.fetchall()]
 
 
@@ -383,9 +548,6 @@ def find_asistencia_lista_by_unique(
     docente_cod: int,
     fecha_clase: str,
 ) -> tuple | None:
-    """
-    Busca una lista existente por la llave única del negocio.
-    """
     cur = conn.cursor()
     cur.execute(
         """
@@ -424,26 +586,6 @@ def get_asistencia_lista_detalle_cabecera(
     *,
     asistencia_lista_id: int,
 ) -> tuple | None:
-    """
-    Retorna cabecera enriquecida:
-    (
-        Asistencia_Lista_Id,
-        Periodo_Id,
-        Periodo_Label,
-        Curso_Cod,
-        Curso_Desc,
-        Materia_Cod,
-        Materia_Desc,
-        Docente_Cod,
-        Docente_Nombre,
-        Dia_Cod,
-        Dia_Nombre,
-        Fecha_Clase,
-        Fecha_Registro,
-        Codigo_Usuario,
-        Estado_Codigo
-    )
-    """
     cur = conn.cursor()
     cur.execute(
         """
@@ -488,17 +630,6 @@ def fetch_asistencia_detalle(
     *,
     asistencia_lista_id: int,
 ) -> list[tuple]:
-    """
-    Retorna:
-    (
-        Asistencia_Detalle_Id,
-        Carnet,
-        Nombre_Completo,
-        Estado_Asistencia,
-        Observacion,
-        Estado_Codigo
-    )
-    """
     cur = conn.cursor()
     cur.execute(
         """
@@ -522,7 +653,7 @@ def fetch_asistencia_detalle(
 
 
 # =========================================================
-# Consultas de listas existentes (nuevo)
+# Consultas de listas existentes
 # =========================================================
 def fetch_listas_asistencia(
     conn: pyodbc.Connection,
@@ -534,30 +665,10 @@ def fetch_listas_asistencia(
     fecha_desde: str | None = None,
     fecha_hasta: str | None = None,
     estado_codigo: int | None = None,
+    usuario_docente: str | None = None,
 ) -> list[tuple]:
-    """
-    Retorna filas para grilla de consultas:
-    (
-        Asistencia_Lista_Id,
-        Periodo_Id,
-        Periodo_Label,
-        Curso_Cod,
-        Curso_Desc,
-        Materia_Cod,
-        Materia_Desc,
-        Docente_Cod,
-        Docente_Nombre,
-        Dia_Cod,
-        Dia_Nombre,
-        Fecha_Clase,
-        Fecha_Registro,
-        Codigo_Usuario,
-        Estado_Codigo,
-        Total_Asistentes,
-        Total_Ausentes,
-        Total_Registros
-    )
-    """
+    usuario_docente = _normalizar_usuario_docente(usuario_docente)
+
     cur = conn.cursor()
 
     sql = """
@@ -626,6 +737,13 @@ def fetch_listas_asistencia(
         sql += " AND al.Estado_Codigo = ?"
         params.append(int(estado_codigo))
 
+    if usuario_docente:
+        sql += """
+            AND UPPER(LTRIM(RTRIM(ISNULL(d.Usuario_Docente, ''))))
+                = UPPER(LTRIM(RTRIM(?)))
+        """
+        params.append(usuario_docente)
+
     sql += """
         GROUP BY
             al.Asistencia_Lista_Id,
@@ -662,9 +780,6 @@ def fetch_asistencia_lista_resumen_row(
     *,
     asistencia_lista_id: int,
 ) -> tuple | None:
-    """
-    Retorna una sola fila resumen para una lista específica.
-    """
     cur = conn.cursor()
     cur.execute(
         """
@@ -886,9 +1001,6 @@ def replace_asistencia_detalle(
     ausentes: list[str] | tuple[str, ...] | None,
     estado_codigo: int,
 ) -> None:
-    """
-    Reemplaza completamente el detalle de la lista.
-    """
     asistentes_norm = _normalizar_lista_carnets(asistentes)
     ausentes_norm = _normalizar_lista_carnets(ausentes)
 
@@ -958,34 +1070,54 @@ def count_estudiantes_matriculados(
     curso_cod: int,
     materia_cod: int,
     docente_cod: int,
+    usuario_docente: str | None = None,
 ) -> int:
     activo = get_estado_codigo_by_desc(conn, "Activo")
+    usuario_docente = _normalizar_usuario_docente(usuario_docente)
+    periodo_academico = _get_periodo_academico_from_id(conn, int(periodo_id))
 
-    cur = conn.cursor()
-    cur.execute(
-        """
+    sql = """
         SELECT COUNT(DISTINCT e.Carnet)
         FROM dbo.Matricula_Materia mm
-        INNER JOIN dbo.Materias m
-            ON m.Materia_Cod = mm.Materia_Cod
         INNER JOIN dbo.Estudiantes e
             ON e.Carnet = mm.Carnet
-        WHERE mm.Periodo_Id = ?
-          AND m.Curso_Cod = ?
+           AND e.Estado_Codigo = ?
+        INNER JOIN dbo.Materias m
+            ON m.Materia_Cod = mm.Materia_Cod
+           AND m.Estado_Codigo = ?
+        INNER JOIN dbo.Docentes d
+            ON d.Docente_Cod = mm.Docente_Cod
+           AND d.Estado_Codigo = ?
+        WHERE (
+                mm.Periodo_Id = ?
+                OR (mm.Periodo_Id IS NULL AND mm.Periodo = ?)
+              )
           AND mm.Materia_Cod = ?
           AND mm.Docente_Cod = ?
           AND mm.Estado_Codigo = ?
-          AND m.Estado_Codigo = ?
-          AND e.Estado_Codigo = ?;
-        """,
+          AND m.Curso_Cod = ?
+    """
+    params: list = [
+        int(activo),
+        int(activo),
+        int(activo),
         int(periodo_id),
-        int(curso_cod),
+        None if periodo_academico is None else int(periodo_academico),
         int(materia_cod),
         int(docente_cod),
         int(activo),
-        int(activo),
-        int(activo),
-    )
+        int(curso_cod),
+    ]
+
+    if usuario_docente:
+        sql += """
+          AND UPPER(LTRIM(RTRIM(ISNULL(d.Usuario_Docente, ''))))
+              = UPPER(LTRIM(RTRIM(?)))
+        """
+        params.append(usuario_docente)
+
+    cur = conn.cursor()
+    cur.execute(sql, params)
 
     row = cur.fetchone()
     return int(row[0] or 0)

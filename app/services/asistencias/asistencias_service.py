@@ -5,6 +5,7 @@ from datetime import datetime
 import calendar
 import pyodbc
 
+from app.core.session import get_session
 from app.repositories.asistencias.asistencias_repo import (
     count_asistencia_resumen,
     count_estudiantes_matriculados,
@@ -25,6 +26,7 @@ from app.repositories.asistencias.asistencias_repo import (
     fetch_periodos_activos,
     find_asistencia_lista_by_unique,
     get_asistencia_lista_detalle_cabecera,
+    get_docente_cod_by_usuario_docente,
     get_estado_codigo_by_desc,
     insert_asistencia_lista,
     replace_asistencia_detalle,
@@ -54,6 +56,12 @@ _DIA_COD_TO_NOMBRE = {
     "S": "Sábado",
     "D": "Domingo",
 }
+
+
+def _normalize_token(value: object) -> str:
+    if value is None:
+        return ""
+    return str(value).strip().upper().replace(" ", "_").replace("-", "_")
 
 
 def _parse_fecha_iso(fecha_texto: str) -> datetime.date:
@@ -98,6 +106,113 @@ def _normalizar_lista_carnets(items: list[str] | tuple[str, ...] | None) -> list
         salida.append(carnet)
 
     return salida
+
+
+def _get_session_security_context() -> dict:
+    """
+    Normaliza los datos relevantes de la sesión actual para reglas de asistencias.
+    """
+    session_data = get_session() or {}
+
+    usuario = str(session_data.get("usuario") or "").strip()
+    codigo_rol = _normalize_token(session_data.get("codigo_rol"))
+    nombre_rol = _normalize_token(session_data.get("nombre_rol"))
+    descripcion_tipo = _normalize_token(session_data.get("descripcion_tipo"))
+    tipo_usuario = session_data.get("tipo_usuario")
+
+    return {
+        "usuario": usuario,
+        "codigo_rol": codigo_rol,
+        "nombre_rol": nombre_rol,
+        "descripcion_tipo": descripcion_tipo,
+        "tipo_usuario": tipo_usuario,
+    }
+
+
+def _is_admin_like_session() -> bool:
+    """
+    Usuarios que pueden ver el contexto global de asistencias.
+    """
+    ctx = _get_session_security_context()
+
+    rol = ctx["codigo_rol"]
+    tipo = ctx["descripcion_tipo"]
+
+    if rol in {"ADMIN", "REGISTRO"}:
+        return True
+
+    if tipo in {"ADMINISTRADOR", "OPERADOR"}:
+        return True
+
+    return False
+
+
+def _is_docente_restringido_session() -> bool:
+    """
+    Usuario docente con vista restringida a su propio contexto.
+
+    Regla de negocio:
+    - DOCENTE ve solo sus cursos / materias / listas.
+    - Los perfiles administrativos (ADMIN / REGISTRO / ADMINISTRADOR / OPERADOR)
+      mantienen vista completa.
+    """
+    if _is_admin_like_session():
+        return False
+
+    ctx = _get_session_security_context()
+    return ctx["codigo_rol"] == "DOCENTE"
+
+
+def _get_usuario_docente_scope() -> str | None:
+    """
+    Devuelve el usuario logueado cuando la sesión debe quedar restringida
+    al docente autenticado. En perfiles administrativos retorna None.
+    """
+    if not _is_docente_restringido_session():
+        return None
+
+    ctx = _get_session_security_context()
+    usuario = str(ctx["usuario"] or "").strip()
+    return usuario or None
+
+
+def _resolver_docente_cod_sesion(
+    conn: pyodbc.Connection,
+    *,
+    requerido: bool,
+) -> int | None:
+    """
+    Resuelve el Docente_Cod de la sesión actual cuando aplica restricción docente.
+    """
+    usuario_docente = _get_usuario_docente_scope()
+    if not usuario_docente:
+        return None
+
+    docente_cod = get_docente_cod_by_usuario_docente(conn, usuario_docente)
+    if docente_cod is None and requerido:
+        raise ValueError(
+            "El usuario docente autenticado no está vinculado a un registro activo de docente."
+        )
+
+    return docente_cod
+
+
+def _validar_docente_autorizado(
+    conn: pyodbc.Connection,
+    *,
+    docente_cod: int,
+) -> None:
+    """
+    Impide que un docente consulte o manipule listas ajenas.
+    """
+    docente_sesion = _resolver_docente_cod_sesion(conn, requerido=True)
+    if docente_sesion is None:
+        return
+
+    if int(docente_cod) != int(docente_sesion):
+        raise ValueError(
+            "No tiene autorización para consultar o registrar asistencias de otro docente."
+        )
 
 
 def _validar_fk_basicas(
@@ -157,12 +272,15 @@ def _validar_estudiantes_en_grupo(
     Valida que todos los carnets enviados pertenezcan al grupo exacto.
     Retorna la lista oficial de estudiantes matriculados del grupo.
     """
+    usuario_docente = _get_usuario_docente_scope()
+
     estudiantes_grupo = fetch_estudiantes_matriculados(
         conn,
         periodo_id=periodo_id,
         curso_cod=curso_cod,
         materia_cod=materia_cod,
         docente_cod=docente_cod,
+        usuario_docente=usuario_docente,
     )
 
     set_grupo = {carnet for carnet, _nombre in estudiantes_grupo}
@@ -316,7 +434,18 @@ def listar_cursos_por_periodo(
     if not periodo_id:
         return []
 
-    rows = fetch_cursos_por_periodo(conn, periodo_id=int(periodo_id))
+    usuario_docente = _get_usuario_docente_scope()
+
+    if usuario_docente:
+        docente_cod = _resolver_docente_cod_sesion(conn, requerido=False)
+        if docente_cod is None:
+            return []
+
+    rows = fetch_cursos_por_periodo(
+        conn,
+        periodo_id=int(periodo_id),
+        usuario_docente=usuario_docente,
+    )
     return [{"id": curso_cod, "label": desc} for curso_cod, desc in rows]
 
 
@@ -329,10 +458,18 @@ def listar_materias_por_periodo_curso(
     if not periodo_id or not curso_cod:
         return []
 
+    usuario_docente = _get_usuario_docente_scope()
+
+    if usuario_docente:
+        docente_cod = _resolver_docente_cod_sesion(conn, requerido=False)
+        if docente_cod is None:
+            return []
+
     rows = fetch_materias_por_periodo_curso(
         conn,
         periodo_id=int(periodo_id),
         curso_cod=int(curso_cod),
+        usuario_docente=usuario_docente,
     )
     return [{"id": materia_cod, "label": desc} for materia_cod, desc in rows]
 
@@ -347,11 +484,19 @@ def listar_docentes_por_periodo_curso_materia(
     if not periodo_id or not curso_cod or not materia_cod:
         return []
 
+    usuario_docente = _get_usuario_docente_scope()
+
+    if usuario_docente:
+        docente_cod = _resolver_docente_cod_sesion(conn, requerido=False)
+        if docente_cod is None:
+            return []
+
     rows = fetch_docentes_por_periodo_curso_materia(
         conn,
         periodo_id=int(periodo_id),
         curso_cod=int(curso_cod),
         materia_cod=int(materia_cod),
+        usuario_docente=usuario_docente,
     )
     return [{"id": docente_cod, "label": nombre} for docente_cod, nombre in rows]
 
@@ -408,12 +553,16 @@ def listar_estudiantes_grupo(
     if not periodo_id or not curso_cod or not materia_cod or not docente_cod:
         return []
 
+    _validar_docente_autorizado(conn, docente_cod=int(docente_cod))
+    usuario_docente = _get_usuario_docente_scope()
+
     rows = fetch_estudiantes_matriculados(
         conn,
         periodo_id=int(periodo_id),
         curso_cod=int(curso_cod),
         materia_cod=int(materia_cod),
         docente_cod=int(docente_cod),
+        usuario_docente=usuario_docente,
     )
 
     return [
@@ -434,12 +583,16 @@ def obtener_resumen_grupo(
     materia_cod: int,
     docente_cod: int,
 ) -> dict:
+    _validar_docente_autorizado(conn, docente_cod=int(docente_cod))
+    usuario_docente = _get_usuario_docente_scope()
+
     total = count_estudiantes_matriculados(
         conn,
         periodo_id=int(periodo_id),
         curso_cod=int(curso_cod),
         materia_cod=int(materia_cod),
         docente_cod=int(docente_cod),
+        usuario_docente=usuario_docente,
     )
 
     return {
@@ -466,6 +619,7 @@ def cargar_asistencia_existente(
         materia_cod=int(materia_cod),
         docente_cod=int(docente_cod),
     )
+    _validar_docente_autorizado(conn, docente_cod=int(docente_cod))
     _parse_fecha_iso(fecha_clase)
 
     found = find_asistencia_lista_by_unique(
@@ -503,6 +657,8 @@ def obtener_asistencia_por_id(
     )
     if cabecera is None:
         return None
+
+    _validar_docente_autorizado(conn, docente_cod=int(cabecera[7]))
 
     detalle = fetch_asistencia_detalle(
         conn,
@@ -544,6 +700,21 @@ def consultar_listas_asistencia(
     if fecha_hasta:
         _parse_fecha_iso(fecha_hasta)
 
+    usuario_docente = _get_usuario_docente_scope()
+    docente_cod_filtrado = None if docente_cod in (None, "", 0) else int(docente_cod)
+
+    if usuario_docente:
+        docente_sesion = _resolver_docente_cod_sesion(conn, requerido=False)
+        if docente_sesion is None:
+            return []
+
+        if docente_cod_filtrado is not None and int(docente_cod_filtrado) != int(docente_sesion):
+            raise ValueError(
+                "No tiene autorización para consultar listas de asistencia de otro docente."
+            )
+
+        docente_cod_filtrado = int(docente_sesion)
+
     estado_codigo = None
     if solo_activas:
         estado_codigo = get_estado_codigo_by_desc(conn, "Activo")
@@ -553,10 +724,11 @@ def consultar_listas_asistencia(
         periodo_id=None if periodo_id in (None, "", 0) else int(periodo_id),
         curso_cod=None if curso_cod in (None, "", 0) else int(curso_cod),
         materia_cod=None if materia_cod in (None, "", 0) else int(materia_cod),
-        docente_cod=None if docente_cod in (None, "", 0) else int(docente_cod),
+        docente_cod=docente_cod_filtrado,
         fecha_desde=None if not fecha_desde else str(fecha_desde).strip(),
         fecha_hasta=None if not fecha_hasta else str(fecha_hasta).strip(),
         estado_codigo=estado_codigo,
+        usuario_docente=usuario_docente,
     )
 
     data: list[dict] = []
@@ -569,6 +741,7 @@ def consultar_listas_asistencia(
             curso_cod=item["curso_cod"],
             materia_cod=item["materia_cod"],
             docente_cod=item["docente_cod"],
+            usuario_docente=usuario_docente,
         )
 
         item["total_grupo"] = int(total_grupo)
@@ -590,6 +763,9 @@ def obtener_resumen_lista_asistencia(
     if row is None:
         return None
 
+    _validar_docente_autorizado(conn, docente_cod=int(row[7]))
+    usuario_docente = _get_usuario_docente_scope()
+
     item = _build_lista_resumen_dict_con_pendientes(row)
 
     total_grupo = count_estudiantes_matriculados(
@@ -598,6 +774,7 @@ def obtener_resumen_lista_asistencia(
         curso_cod=item["curso_cod"],
         materia_cod=item["materia_cod"],
         docente_cod=item["docente_cod"],
+        usuario_docente=usuario_docente,
     )
 
     item["total_grupo"] = int(total_grupo)
@@ -640,6 +817,7 @@ def guardar_asistencia(
         materia_cod=materia_cod,
         docente_cod=docente_cod,
     )
+    _validar_docente_autorizado(conn, docente_cod=docente_cod)
 
     _parse_fecha_iso(fecha_clase)
 

@@ -11,12 +11,19 @@ from app.core.error_handler import (
     show_info,
     handle_exception,
 )
+from app.core.session import get_session
 from app.ui.components.confirm_dialog import show_confirm
 
 
 class AsistenciaRegistroTab(ttk.Frame):
     """
     Tab de registro / edición de listas de asistencia.
+
+    Reglas aplicadas:
+    - ADMIN / REGISTRO / ADMINISTRADOR / OPERADOR:
+      pueden ver todo el contexto habilitado por negocio.
+    - DOCENTE:
+      solo ve su propio contexto (cursos, materias y docente vinculado).
     """
 
     def __init__(
@@ -46,11 +53,52 @@ class AsistenciaRegistroTab(ttk.Frame):
         self.ausentes: list[str] = []
         self.current_asistencia_lista_id: int | None = None
 
+        self._session_data = get_session() or {}
+
         self._build_ui()
+        self._apply_role_ui_rules()
         self._load_periodos()
         self._set_fecha_hoy()
         self._refresh_lbl_dia()
         self._refresh_resumen_registro()
+
+    # =========================================================
+    # Sesión / helpers de rol
+    # =========================================================
+    def _normalize_token(self, value: object) -> str:
+        if value is None:
+            return ""
+        return str(value).strip().upper().replace(" ", "_").replace("-", "_")
+
+    def _is_admin_like_session(self) -> bool:
+        codigo_rol = self._normalize_token(self._session_data.get("codigo_rol"))
+        descripcion_tipo = self._normalize_token(self._session_data.get("descripcion_tipo"))
+
+        if codigo_rol in {"ADMIN", "REGISTRO"}:
+            return True
+
+        if descripcion_tipo in {"ADMINISTRADOR", "OPERADOR"}:
+            return True
+
+        return False
+
+    def _is_docente_restringido_session(self) -> bool:
+        if self._is_admin_like_session():
+            return False
+
+        codigo_rol = self._normalize_token(self._session_data.get("codigo_rol"))
+        return codigo_rol == "DOCENTE"
+
+    def _apply_role_ui_rules(self):
+        """
+        Ajustes UI suaves según rol.
+        El filtro real fuerte ya vive en service/endpoints, aquí solo
+        mejoramos experiencia visual.
+        """
+        if self._is_docente_restringido_session():
+            self.cb_docente.configure(state="disabled")
+        else:
+            self.cb_docente.configure(state="readonly")
 
     # =========================================================
     # UI
@@ -160,7 +208,11 @@ class AsistenciaRegistroTab(ttk.Frame):
         self.busqueda_var.trace_add("write", lambda *_: self._refresh_disponibles())
 
         ttk.Label(frame_disp, text="Buscar estudiante").grid(
-            row=0, column=0, sticky="w", padx=5, pady=(5, 0)
+            row=0,
+            column=0,
+            sticky="w",
+            padx=5,
+            pady=(5, 0),
         )
         self.entry_busqueda = ttk.Entry(frame_disp, textvariable=self.busqueda_var)
         self.entry_busqueda.grid(row=0, column=0, sticky="ew", padx=5, pady=(22, 5))
@@ -309,19 +361,19 @@ class AsistenciaRegistroTab(ttk.Frame):
 
     def _get_selected_periodo(self) -> dict | None:
         idx = self.cb_periodo.current()
-        return self.periodos[idx] if idx >= 0 else None
+        return self.periodos[idx] if idx >= 0 and idx < len(self.periodos) else None
 
     def _get_selected_curso(self) -> dict | None:
         idx = self.cb_curso.current()
-        return self.cursos[idx] if idx >= 0 else None
+        return self.cursos[idx] if idx >= 0 and idx < len(self.cursos) else None
 
     def _get_selected_materia(self) -> dict | None:
         idx = self.cb_materia.current()
-        return self.materias[idx] if idx >= 0 else None
+        return self.materias[idx] if idx >= 0 and idx < len(self.materias) else None
 
     def _get_selected_docente(self) -> dict | None:
         idx = self.cb_docente.current()
-        return self.docentes[idx] if idx >= 0 else None
+        return self.docentes[idx] if idx >= 0 and idx < len(self.docentes) else None
 
     def _get_estudiante_by_carnet(self, carnet: str) -> dict | None:
         for item in self.estudiantes:
@@ -360,6 +412,32 @@ class AsistenciaRegistroTab(ttk.Frame):
                 return
 
         combobox.set("")
+
+    def _clear_combo(self, combobox: ttk.Combobox, data_attr: str):
+        setattr(self, data_attr, [])
+        combobox.set("")
+        combobox["values"] = []
+
+    def _try_autoselect_single(self, combobox: ttk.Combobox, rows: list[dict]) -> bool:
+        if len(rows) == 1:
+            combobox.current(0)
+            return True
+        return False
+
+    def _refresh_docente_combo_state(self):
+        """
+        Para docente restringido:
+        - si viene un único docente, lo deja seleccionado y bloqueado.
+        - si no hay datos, queda vacío y bloqueado.
+        Para perfiles administrativos:
+        - readonly normal.
+        """
+        if self._is_docente_restringido_session():
+            if len(self.docentes) == 1:
+                self.cb_docente.current(0)
+            self.cb_docente.configure(state="disabled")
+        else:
+            self.cb_docente.configure(state="readonly")
 
     # =========================================================
     # Registro helpers
@@ -429,7 +507,8 @@ class AsistenciaRegistroTab(ttk.Frame):
         filtro = self.busqueda_var.get().strip().lower()
         if filtro:
             disponibles = [
-                e for e in disponibles
+                e
+                for e in disponibles
                 if filtro in e["label"].lower() or filtro in e["nombre"].lower()
             ]
 
@@ -445,12 +524,8 @@ class AsistenciaRegistroTab(ttk.Frame):
         self.list_asistentes.delete(0, tk.END)
         self.list_ausentes.delete(0, tk.END)
 
-        asistentes_data = [
-            self._get_estudiante_by_carnet(c) for c in self.asistentes
-        ]
-        ausentes_data = [
-            self._get_estudiante_by_carnet(c) for c in self.ausentes
-        ]
+        asistentes_data = [self._get_estudiante_by_carnet(c) for c in self.asistentes]
+        ausentes_data = [self._get_estudiante_by_carnet(c) for c in self.ausentes]
 
         asistentes_data = [x for x in asistentes_data if x is not None]
         ausentes_data = [x for x in ausentes_data if x is not None]
@@ -545,6 +620,10 @@ class AsistenciaRegistroTab(ttk.Frame):
 
             periodo = self._get_selected_periodo()
             if not periodo:
+                self._clear_combo(self.cb_curso, "cursos")
+                self._clear_combo(self.cb_materia, "materias")
+                self._clear_combo(self.cb_docente, "docentes")
+                self.lbl_dia.config(text="-")
                 return
 
             rows = ep.get_cursos_por_periodo(
@@ -562,6 +641,13 @@ class AsistenciaRegistroTab(ttk.Frame):
             self.cb_materia["values"] = []
             self.cb_docente["values"] = []
 
+            self.materias = []
+            self.docentes = []
+            self.lbl_dia.config(text="-")
+
+            if self._try_autoselect_single(self.cb_curso, rows):
+                self._on_curso()
+
         except Exception as e:
             handle_exception(self, e, context="Cargar cursos")
 
@@ -573,6 +659,9 @@ class AsistenciaRegistroTab(ttk.Frame):
             curso = self._get_selected_curso()
 
             if not periodo or not curso:
+                self._clear_combo(self.cb_materia, "materias")
+                self._clear_combo(self.cb_docente, "docentes")
+                self.lbl_dia.config(text="-")
                 return
 
             rows = ep.get_materias_por_periodo_curso(
@@ -587,7 +676,11 @@ class AsistenciaRegistroTab(ttk.Frame):
             self.cb_docente.set("")
             self.cb_materia["values"] = [r["label"] for r in rows]
             self.cb_docente["values"] = []
+            self.docentes = []
             self.lbl_dia.config(text="-")
+
+            if self._try_autoselect_single(self.cb_materia, rows):
+                self._on_materia()
 
         except Exception as e:
             handle_exception(self, e, context="Cargar materias")
@@ -601,6 +694,8 @@ class AsistenciaRegistroTab(ttk.Frame):
             materia = self._get_selected_materia()
 
             if not periodo or not curso or not materia:
+                self._clear_combo(self.cb_docente, "docentes")
+                self.lbl_dia.config(text="-")
                 return
 
             self._refresh_lbl_dia()
@@ -616,6 +711,10 @@ class AsistenciaRegistroTab(ttk.Frame):
             self.docentes = rows
             self.cb_docente.set("")
             self.cb_docente["values"] = [r["label"] for r in rows]
+            self._refresh_docente_combo_state()
+
+            if self._try_autoselect_single(self.cb_docente, rows):
+                self._on_docente()
 
         except Exception as e:
             handle_exception(self, e, context="Cargar docentes")
@@ -798,6 +897,7 @@ class AsistenciaRegistroTab(ttk.Frame):
             self._on_materia()
 
             self._set_combobox_by_item_id(self.cb_docente, self.docentes, item["docente_cod"])
+            self._refresh_docente_combo_state()
             self._on_docente()
 
             self.fecha_var.set(str(item["fecha_clase"]))

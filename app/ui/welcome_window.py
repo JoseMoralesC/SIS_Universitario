@@ -158,7 +158,8 @@ class WelcomeWindow(tk.Tk):
         status_line("Servidor", "SQL Server Express")
         status_line("Base de datos", "Universidad")
         status_line("Modo", "Académico")
-        status_line("Versión", "4.1")
+        status_line("Versión", "6.5")
+        status_line("Estado", "Finalizado")
 
         btn_login = tk.Button(
             left,
@@ -231,12 +232,12 @@ class WelcomeWindow(tk.Tk):
 
         self._card(cards, 0, 0, "Mantenimientos", "CRUD de Docentes, Cursos,\nEstudiantes y Programas.")
         self._card(cards, 0, 1, "Matrículas", "Gestión de matrículas.\nMatriculas en curso, historial, etc.")
-        self._card(cards, 1, 0, "Asistencias", "Control de asistencias.\n(En construcción)")
-        self._card(cards, 1, 1, "Reportes", "Consultas y reportes.\n(En construcción)")
+        self._card(cards, 1, 0, "Asistencias", "Control de asistencias.\ndetallada por curso y docente")
+        self._card(cards, 1, 1, "Auditoria", "Consultas detalladas.\n")
 
         tk.Label(
             self.info_wrap,
-            text="© Proyecto Académico – CUC",
+            text="© Proyecto Académico – CUC / Programación III",
             bg=self.bg_right,
             fg="#667788",
             font=("Segoe UI", 9),

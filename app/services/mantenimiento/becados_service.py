@@ -110,9 +110,7 @@ def validar_becado_existente(conn, *, id_becado: int) -> None:
         raise ValidationError("El registro de beca no existe.")
 
 
-# =========================================================
-# COMPATIBILIDAD CON VERSIONES VIEJAS DEL ENDPOINT
-# =========================================================
+
 
 def validar_becado_data(
     *,

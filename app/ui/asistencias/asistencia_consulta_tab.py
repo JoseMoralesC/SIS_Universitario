@@ -11,11 +11,18 @@ from app.core.error_handler import (
     show_info,
     handle_exception,
 )
+from app.core.session import get_session
 
 
 class AsistenciaConsultaTab(ttk.Frame):
     """
     Tab de consulta de listas de asistencia.
+
+    Reglas aplicadas:
+    - ADMIN / REGISTRO / ADMINISTRADOR / OPERADOR:
+      pueden consultar todo el contexto habilitado por negocio.
+    - DOCENTE:
+      solo consulta sus propias listas y su propio contexto académico.
     """
 
     def __init__(
@@ -38,8 +45,48 @@ class AsistenciaConsultaTab(ttk.Frame):
 
         self.consulta_rows: list[dict] = []
 
+        self._session_data = get_session() or {}
+
         self._build_ui()
+        self._apply_role_ui_rules()
         self._load_periodos_consulta()
+
+    # =========================================================
+    # Sesión / helpers de rol
+    # =========================================================
+    def _normalize_token(self, value: object) -> str:
+        if value is None:
+            return ""
+        return str(value).strip().upper().replace(" ", "_").replace("-", "_")
+
+    def _is_admin_like_session(self) -> bool:
+        codigo_rol = self._normalize_token(self._session_data.get("codigo_rol"))
+        descripcion_tipo = self._normalize_token(self._session_data.get("descripcion_tipo"))
+
+        if codigo_rol in {"ADMIN", "REGISTRO"}:
+            return True
+
+        if descripcion_tipo in {"ADMINISTRADOR", "OPERADOR"}:
+            return True
+
+        return False
+
+    def _is_docente_restringido_session(self) -> bool:
+        if self._is_admin_like_session():
+            return False
+
+        codigo_rol = self._normalize_token(self._session_data.get("codigo_rol"))
+        return codigo_rol == "DOCENTE"
+
+    def _apply_role_ui_rules(self):
+        """
+        Ajustes visuales.
+        La seguridad fuerte ya vive en service/endpoints.
+        """
+        if self._is_docente_restringido_session():
+            self.q_cb_docente.configure(state="disabled")
+        else:
+            self.q_cb_docente.configure(state="readonly")
 
     # =========================================================
     # UI
@@ -237,6 +284,25 @@ class AsistenciaConsultaTab(ttk.Frame):
 
         combobox.set("")
 
+    def _try_autoselect_single(self, combobox: ttk.Combobox, rows: list[dict]) -> bool:
+        if len(rows) == 1:
+            combobox.current(0)
+            return True
+        return False
+
+    def _clear_combo(self, combobox: ttk.Combobox, data_attr: str):
+        setattr(self, data_attr, [])
+        combobox.set("")
+        combobox["values"] = []
+
+    def _refresh_docente_combo_state(self):
+        if self._is_docente_restringido_session():
+            if len(self.q_docentes) == 1:
+                self.q_cb_docente.current(0)
+            self.q_cb_docente.configure(state="disabled")
+        else:
+            self.q_cb_docente.configure(state="readonly")
+
     # =========================================================
     # Consulta - loaders
     # =========================================================
@@ -246,6 +312,10 @@ class AsistenciaConsultaTab(ttk.Frame):
             self.q_periodos = rows
             self.q_cb_periodo["values"] = [r["label"] for r in rows]
 
+            if rows and self._is_docente_restringido_session():
+                self.q_cb_periodo.current(0)
+                self._on_q_periodo()
+
         except Exception as e:
             handle_exception(self, e, context="Cargar períodos de consulta")
 
@@ -253,6 +323,9 @@ class AsistenciaConsultaTab(ttk.Frame):
         try:
             idx = self.q_cb_periodo.current()
             if idx < 0:
+                self._clear_combo(self.q_cb_curso, "q_cursos")
+                self._clear_combo(self.q_cb_materia, "q_materias")
+                self._clear_combo(self.q_cb_docente, "q_docentes")
                 return
 
             periodo_id = self.q_periodos[idx]["id"]
@@ -270,6 +343,11 @@ class AsistenciaConsultaTab(ttk.Frame):
             self.q_cb_curso["values"] = [r["label"] for r in rows]
             self.q_cb_materia["values"] = []
             self.q_cb_docente["values"] = []
+            self.q_materias = []
+            self.q_docentes = []
+
+            if self._try_autoselect_single(self.q_cb_curso, rows):
+                self._on_q_curso()
 
         except Exception as e:
             handle_exception(self, e, context="Cargar cursos de consulta")
@@ -277,6 +355,8 @@ class AsistenciaConsultaTab(ttk.Frame):
     def _on_q_curso(self, event=None):
         try:
             if self.q_cb_periodo.current() < 0 or self.q_cb_curso.current() < 0:
+                self._clear_combo(self.q_cb_materia, "q_materias")
+                self._clear_combo(self.q_cb_docente, "q_docentes")
                 return
 
             periodo_id = self.q_periodos[self.q_cb_periodo.current()]["id"]
@@ -294,6 +374,10 @@ class AsistenciaConsultaTab(ttk.Frame):
             self.q_cb_docente.set("")
             self.q_cb_materia["values"] = [r["label"] for r in rows]
             self.q_cb_docente["values"] = []
+            self.q_docentes = []
+
+            if self._try_autoselect_single(self.q_cb_materia, rows):
+                self._on_q_materia()
 
         except Exception as e:
             handle_exception(self, e, context="Cargar materias de consulta")
@@ -305,6 +389,7 @@ class AsistenciaConsultaTab(ttk.Frame):
                 or self.q_cb_curso.current() < 0
                 or self.q_cb_materia.current() < 0
             ):
+                self._clear_combo(self.q_cb_docente, "q_docentes")
                 return
 
             periodo_id = self.q_periodos[self.q_cb_periodo.current()]["id"]
@@ -322,6 +407,11 @@ class AsistenciaConsultaTab(ttk.Frame):
             self.q_docentes = rows
             self.q_cb_docente.set("")
             self.q_cb_docente["values"] = [r["label"] for r in rows]
+            self._refresh_docente_combo_state()
+
+            if self._try_autoselect_single(self.q_cb_docente, rows):
+                if self._is_docente_restringido_session():
+                    self._buscar_listas(silent=True)
 
         except Exception as e:
             handle_exception(self, e, context="Cargar docentes de consulta")
@@ -414,6 +504,10 @@ class AsistenciaConsultaTab(ttk.Frame):
         self.consulta_rows = []
         self._clear_resumen_consulta()
 
+        if self._is_docente_restringido_session() and self.q_periodos:
+            self.q_cb_periodo.current(0)
+            self._on_q_periodo()
+
     def _clear_resumen_consulta(self):
         self.lbl_q_periodo.config(text="Período: -")
         self.lbl_q_curso.config(text="Curso: -")
@@ -496,6 +590,7 @@ class AsistenciaConsultaTab(ttk.Frame):
             self._on_q_materia()
 
             self._set_combobox_by_item_id(self.q_cb_docente, self.q_docentes, docente["id"])
+            self._refresh_docente_combo_state()
 
             self.q_fecha_desde_var.set(fecha)
             self.q_fecha_hasta_var.set(fecha)
