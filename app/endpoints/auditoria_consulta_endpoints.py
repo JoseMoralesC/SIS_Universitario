@@ -11,6 +11,7 @@ from app.services.auditoria_consulta_service import (
     listar_auditoria_legible,
     get_filtros_auditoria,
     get_diccionario_movimientos,
+    get_registro_afectado_legible,
 )
 
 
@@ -108,6 +109,39 @@ def listar_auditoria_endpoint(
             "ok": True,
             "message": "Auditoría cargada correctamente.",
             "data": rows,
+        }
+    finally:
+        conn.close()
+
+
+# =========================================================
+# DETALLE DE REGISTRO AFECTADO
+# =========================================================
+def get_registro_afectado_auditoria_endpoint(
+    db_user: str | None = None,
+    db_pass: str | None = None,
+    *,
+    id_tabla: str | None = None,
+    id_row_tabla: str | None = None,
+):
+    """
+    Resuelve y retorna el dato/registro afectado real de un movimiento
+    de auditoría en formato legible para la UI del auditor.
+    """
+    _require_auditor_access()
+
+    conn = _get_conn()
+    try:
+        data = get_registro_afectado_legible(
+            conn,
+            id_tabla=id_tabla,
+            id_row_tabla=id_row_tabla,
+        )
+
+        return {
+            "ok": True,
+            "message": "Detalle del registro afectado cargado correctamente.",
+            "data": data,
         }
     finally:
         conn.close()

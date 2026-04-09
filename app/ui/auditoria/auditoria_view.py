@@ -11,6 +11,7 @@ from app.endpoints.auditoria_consulta_endpoints import (
     listar_auditoria_endpoint,
     get_auditoria_resumen_endpoint,
     get_diccionario_movimientos_endpoint,
+    get_registro_afectado_auditoria_endpoint,
 )
 
 
@@ -379,6 +380,7 @@ class AuditoriaView(ttk.Frame):
             first_iid = self.tree.get_children()[0]
             self.tree.selection_set(first_iid)
             self.tree.focus(first_iid)
+            self._show_detail_popup_by_iid(first_iid)
 
     # =========================================================
     # Eventos
@@ -432,11 +434,14 @@ class AuditoriaView(ttk.Frame):
     def _open_detail_popup(self, row: dict) -> None:
         self._close_detail_popup()
 
+        detalle_registro = self._get_registro_afectado_data(row)
+
         popup = tk.Toplevel(self)
         popup.title("Detalle del Registro de Auditoría")
         popup.transient(self.winfo_toplevel())
         popup.grab_set()
-        popup.resizable(False, False)
+        popup.resizable(True, True)
+        popup.minsize(820, 620)
         popup.configure(bg="#f3f6fa")
 
         self._detail_popup = popup
@@ -447,76 +452,161 @@ class AuditoriaView(ttk.Frame):
             parent_w = self.winfo_toplevel().winfo_width()
             parent_h = self.winfo_toplevel().winfo_height()
 
-            width = 760
-            height = 420
+            width = 900
+            height = 700
 
             x = parent_x + (parent_w // 2) - (width // 2)
             y = parent_y + (parent_h // 2) - (height // 2)
 
             popup.geometry(f"{width}x{height}+{x}+{y}")
         except Exception:
-            popup.geometry("760x420")
+            popup.geometry("900x700")
 
         outer = ttk.Frame(popup, padding=16)
         outer.pack(fill="both", expand=True)
+        outer.columnconfigure(0, weight=1)
+        outer.rowconfigure(1, weight=1)
 
         header = ttk.Frame(outer)
-        header.pack(fill="x", pady=(0, 10))
+        header.grid(row=0, column=0, sticky="ew", pady=(0, 10))
+        header.columnconfigure(0, weight=1)
 
         ttk.Label(
             header,
             text="Detalle del Registro",
             font=("Segoe UI", 15, "bold"),
-        ).pack(anchor="w")
+        ).grid(row=0, column=0, sticky="w")
 
         ttk.Label(
             header,
             text="Información completa del movimiento seleccionado.",
             font=("Segoe UI", 10),
-        ).pack(anchor="w", pady=(4, 0))
+        ).grid(row=1, column=0, sticky="w", pady=(4, 0))
 
-        content = ttk.LabelFrame(outer, text="Datos de Auditoría", padding=14)
-        content.pack(fill="both", expand=True)
+        content = ttk.Frame(outer)
+        content.grid(row=1, column=0, sticky="nsew")
+        content.columnconfigure(0, weight=1)
+        content.rowconfigure(1, weight=1)
 
-        content.columnconfigure(1, weight=1)
-        content.columnconfigure(3, weight=1)
+        auditoria_box = ttk.LabelFrame(content, text="Datos de Auditoría", padding=14)
+        auditoria_box.grid(row=0, column=0, sticky="ew")
+        auditoria_box.columnconfigure(1, weight=1)
+        auditoria_box.columnconfigure(3, weight=1)
 
-        self._popup_field(content, "Auditoría ID:", self._safe_str(row.get("auditoria_id")), 0, 0)
-        self._popup_field(content, "Código Usuario:", self._safe_str(row.get("codigo_usuario")), 0, 2)
+        self._popup_field(auditoria_box, "Auditoría ID:", self._safe_str(row.get("auditoria_id")), 0, 0)
+        self._popup_field(auditoria_box, "Código Usuario:", self._safe_str(row.get("codigo_usuario")), 0, 2)
 
-        self._popup_field(content, "Usuario:", self._safe_str(row.get("usuario_display")), 1, 0, colspan=3)
-        self._popup_field(content, "Fecha:", self._safe_str(row.get("fecha_movimiento")), 2, 0, colspan=3)
+        self._popup_field(auditoria_box, "Usuario:", self._safe_str(row.get("usuario_display")), 1, 0, colspan=3)
+        self._popup_field(auditoria_box, "Fecha:", self._safe_str(row.get("fecha_movimiento")), 2, 0, colspan=3)
 
         movimiento_full = (
             f"{self._safe_str(row.get('movimiento_cod'))} - "
             f"{self._safe_str(row.get('movimiento_label'))}"
         )
-        self._popup_field(content, "Movimiento:", movimiento_full, 3, 0, colspan=3)
+        self._popup_field(auditoria_box, "Movimiento:", movimiento_full, 3, 0, colspan=3)
 
         tabla_full = (
             f"{self._safe_str(row.get('id_tabla'))} - "
             f"{self._safe_str(row.get('tabla_label'))}"
         )
-        self._popup_field(content, "Tabla:", tabla_full, 4, 0, colspan=3)
+        self._popup_field(auditoria_box, "Tabla:", tabla_full, 4, 0, colspan=3)
 
         self._popup_field(
-            content,
+            auditoria_box,
             "Id Row Tabla:",
             self._safe_str(row.get("row_display")),
             5,
             0,
             colspan=3,
-            height=5,
+            height=4,
         )
 
+        afectado_box = ttk.LabelFrame(content, text="Dato / Registro Afectado", padding=14)
+        afectado_box.grid(row=1, column=0, sticky="nsew", pady=(12, 0))
+        afectado_box.columnconfigure(0, weight=1)
+        afectado_box.rowconfigure(1, weight=1)
+
+        estado_texto = self._safe_str(detalle_registro.get("estado_texto"))
+        ttk.Label(
+            afectado_box,
+            text=estado_texto,
+            font=("Segoe UI", 10, "italic"),
+        ).grid(row=0, column=0, sticky="w", pady=(0, 8))
+
+        text_frame = ttk.Frame(afectado_box)
+        text_frame.grid(row=1, column=0, sticky="nsew")
+        text_frame.columnconfigure(0, weight=1)
+        text_frame.rowconfigure(0, weight=1)
+
+        txt_detalle = tk.Text(
+            text_frame,
+            height=16,
+            wrap="word",
+            relief="solid",
+            bd=1,
+            font=("Segoe UI", 10),
+        )
+        txt_detalle.grid(row=0, column=0, sticky="nsew")
+
+        txt_scroll = ttk.Scrollbar(
+            text_frame,
+            orient="vertical",
+            command=txt_detalle.yview,
+        )
+        txt_scroll.grid(row=0, column=1, sticky="ns")
+        txt_detalle.configure(yscrollcommand=txt_scroll.set)
+
+        txt_detalle.insert("1.0", self._safe_str(detalle_registro.get("texto")))
+        txt_detalle.configure(state="disabled")
+
         footer = ttk.Frame(outer)
-        footer.pack(fill="x", pady=(12, 0))
+        footer.grid(row=2, column=0, sticky="ew", pady=(12, 0))
 
         ttk.Button(
             footer,
             text="Cerrar",
             command=self._close_detail_popup,
         ).pack(side="right")
+
+    def _get_registro_afectado_data(self, row: dict) -> dict:
+        try:
+            result = get_registro_afectado_auditoria_endpoint(
+                self.db_user,
+                self.db_pass,
+                id_tabla=row.get("id_tabla"),
+                id_row_tabla=row.get("id_row_tabla"),
+            )
+            data = result.get("data") or {}
+
+            ok = bool(data.get("ok"))
+            tabla_label = self._safe_str(data.get("tabla_label")) or self._safe_str(row.get("tabla_label"))
+            mensaje = self._safe_str(data.get("mensaje"))
+            texto = self._safe_str(data.get("texto_completo"))
+
+            if not texto:
+                texto = mensaje or "No hay información disponible para este registro."
+
+            if ok:
+                estado_texto = f"Detalle resuelto para: {tabla_label}"
+            else:
+                estado_texto = "No fue posible reconstruir completamente el dato afectado."
+                if mensaje:
+                    estado_texto += f" {mensaje}"
+
+            return {
+                "ok": ok,
+                "estado_texto": estado_texto,
+                "texto": texto,
+                "raw": data,
+            }
+
+        except Exception as e:
+            return {
+                "ok": False,
+                "estado_texto": "Ocurrió un error al consultar el dato afectado.",
+                "texto": f"No fue posible cargar el dato afectado.\n\nDetalle técnico: {e}",
+                "raw": {},
+            }
 
     def _popup_field(
         self,
