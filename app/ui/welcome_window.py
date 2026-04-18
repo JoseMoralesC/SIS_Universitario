@@ -6,7 +6,7 @@ from tkinter import ttk, messagebox
 
 from app.ui.views.main_menu_view import MainMenuView
 from app.core.db import connect_app
-from app.core.session import set_session, clear_session
+from app.core.session import set_session, clear_session, get_session
 from app.services.auth_service import (
     login_sistema,
     CredencialesInvalidasError,
@@ -15,6 +15,7 @@ from app.services.auth_service import (
     RolNoAsignadoError,
 )
 from app.repositories.auditoria_repo import insert_auditoria
+from app.repositories.security.bitacora_acceso_repo import bitacora_acceso_repo
 from app.core.auditoria import Mov
 from app.core.exceptions import ValidationError
 
@@ -263,6 +264,86 @@ class WelcomeWindow(tk.Tk):
         ttk.Label(lf, text=desc, style="Card.TLabel", justify="left").grid(row=0, column=0, sticky="w")
 
     # -----------------------------
+    # Helpers auditoría / bitácora
+    # -----------------------------
+    def _registrar_auditoria(self, codigo_usuario: int | None, movimiento_cod: int) -> None:
+        """
+        Registra un movimiento en dbo.Auditoria usando la conexión técnica.
+        Si falla, no rompe el flujo principal.
+        """
+        if codigo_usuario is None:
+            return
+
+        conn = None
+        try:
+            conn = connect_app()
+            insert_auditoria(conn, codigo_usuario=codigo_usuario, movimiento_cod=movimiento_cod)
+        except Exception:
+            pass
+        finally:
+            if conn is not None:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+
+    def _cerrar_bitacora_sesion_actual(self) -> None:
+        """
+        Cierra la sesión actual en dbo.Bitacora_Acceso.
+        Intenta primero por bitacora_acceso_id y, si no existe,
+        hace fallback por usuario_seguridad_id.
+        """
+        session_data = get_session()
+        if not session_data:
+            return
+
+        bitacora_acceso_id = session_data.get("bitacora_acceso_id")
+        usuario_seguridad_id = session_data.get("usuario_seguridad_id")
+
+        conn = None
+        try:
+            conn = connect_app()
+
+            if bitacora_acceso_id:
+                cerrado = bitacora_acceso_repo.cerrar_sesion_por_bitacora_id(
+                    conn,
+                    bitacora_acceso_id=int(bitacora_acceso_id),
+                    observacion="Logout solicitado desde WelcomeWindow.",
+                )
+                if cerrado:
+                    return
+
+            if usuario_seguridad_id:
+                bitacora_acceso_repo.cerrar_sesion_abierta_por_usuario(
+                    conn,
+                    usuario_seguridad_id=int(usuario_seguridad_id),
+                    observacion="Logout solicitado desde WelcomeWindow.",
+                )
+
+        except Exception:
+            pass
+        finally:
+            if conn is not None:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+
+    def _cerrar_sesion_completa(self) -> None:
+        """
+        Cierra la sesión lógica del sistema:
+        1) registra LOGOUT en auditoría
+        2) cierra la sesión en Bitacora_Acceso
+        3) limpia la sesión local
+        """
+        session_data = get_session()
+        codigo_usuario = session_data.get("codigo_usuario") if session_data else None
+
+        self._registrar_auditoria(codigo_usuario, Mov.LOGOUT)
+        self._cerrar_bitacora_sesion_actual()
+        clear_session()
+
+    # -----------------------------
     # Login panel show/hide
     # -----------------------------
     def toggle_login_panel(self):
@@ -387,7 +468,7 @@ class WelcomeWindow(tk.Tk):
 
     def _on_main_menu_exit_request(self, salir_todo: bool):
         if salir_todo:
-            clear_session()
+            self._cerrar_sesion_completa()
             self._reset_login_state()
             self.destroy()
             return
@@ -408,7 +489,7 @@ class WelcomeWindow(tk.Tk):
                     pass
                 self.main_menu_view = None
 
-            clear_session()
+            self._cerrar_sesion_completa()
             self._reset_login_state()
             self.show_login_panel()
 
@@ -625,27 +706,21 @@ class LoginPanel(ttk.Frame):
             self.on_success(session_data)
 
         except CredencialesInvalidasError as e:
-            self._registrar_auditoria(None, Mov.LOGIN_FAIL)
             messagebox.showerror("Login", str(e))
 
         except UsuarioInactivoError as e:
-            self._registrar_auditoria(None, Mov.LOGIN_FAIL)
             messagebox.showerror("Login", str(e))
 
         except UsuarioBloqueadoError as e:
-            self._registrar_auditoria(None, Mov.LOGIN_FAIL)
             messagebox.showerror("Login", str(e))
 
         except RolNoAsignadoError as e:
-            self._registrar_auditoria(None, Mov.LOGIN_FAIL)
             messagebox.showerror("Login", str(e))
 
         except ValidationError as e:
-            self._registrar_auditoria(None, Mov.LOGIN_FAIL)
             messagebox.showerror("Login", str(e))
 
         except Exception as e:
-            self._registrar_auditoria(None, Mov.LOGIN_FAIL)
             messagebox.showerror("Login", f"Ocurrió un error inesperado.\n\nDetalle: {e}")
 
 

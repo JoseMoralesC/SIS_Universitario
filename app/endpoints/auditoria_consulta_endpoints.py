@@ -7,6 +7,7 @@ from app.core.session import (
     get_rol_codigo,
     get_session,
 )
+from app.core.auditoria import Mov
 from app.services.auditoria_consulta_service import (
     listar_auditoria_legible,
     get_filtros_auditoria,
@@ -148,6 +149,77 @@ def get_registro_afectado_auditoria_endpoint(
 
 
 # =========================================================
+# HELPERS RESUMEN
+# =========================================================
+INSERTADOS = {
+    Mov.MATRICULA_CREADA,
+    Mov.FACTURA_GENERADA,
+    Mov.DOCENTE_CREADO,
+    Mov.ESTUDIANTE_CREADO,
+    Mov.PROGRAMA_CREADO,
+    Mov.CURSO_CREADO,
+    Mov.BECA_CREADA,
+    Mov.BECADO_CREADO,
+    Mov.MATRICULA_MATERIA_CREADA,
+    Mov.DOCENTE_MATERIA_CREADA,
+    Mov.MATERIA_HORARIO_CREADO,
+    Mov.PERIODO_CREADO,
+    Mov.CURSO_DOCENTE_CREADO,
+    Mov.ASISTENCIA_LISTA_CREADA,
+    Mov.FACTURA_MATRICULA_CREADA,
+    Mov.USUARIO_CREADO,
+}
+
+ACTUALIZADOS = {
+    Mov.MATRICULA_ESTADO_CAMBIADO,
+    Mov.DOCENTE_ACTUALIZADO,
+    Mov.ESTUDIANTE_ACTUALIZADO,
+    Mov.PROGRAMA_ACTUALIZADO,
+    Mov.CURSO_ACTUALIZADO,
+    Mov.BECA_ACTUALIZADA,
+    Mov.BECADO_ACTUALIZADO,
+    Mov.MATRICULA_MATERIA_ACTUALIZADA,
+    Mov.DOCENTE_MATERIA_ACTUALIZADA,
+    Mov.MATERIA_HORARIO_ACTUALIZADO,
+    Mov.PERIODO_ACTUALIZADO,
+    Mov.CURSO_DOCENTE_ACTUALIZADO,
+    Mov.ASISTENCIA_LISTA_ACTUALIZADA,
+    Mov.ASISTENCIA_DETALLE_ACTUALIZADO,
+    Mov.FACTURA_MATRICULA_ACTUALIZADA,
+    Mov.USUARIO_ACTUALIZADO,
+    Mov.RESTRICCION_CARGA_APLICADA,
+    Mov.RESTRICCION_CARGA_LIBERADA,
+}
+
+ELIMINADOS = {
+    Mov.MATRICULA_ELIMINADA,
+    Mov.DOCENTE_ELIMINADO,
+    Mov.ESTUDIANTE_ELIMINADO,
+    Mov.PROGRAMA_ELIMINADO,
+    Mov.CURSO_ELIMINADO,
+    Mov.BECA_ELIMINADA,
+    Mov.BECADO_ELIMINADO,
+    Mov.MATRICULA_MATERIA_ELIMINADA,
+    Mov.DOCENTE_MATERIA_ELIMINADA,
+    Mov.MATERIA_HORARIO_ELIMINADO,
+    Mov.PERIODO_ELIMINADO,
+    Mov.CURSO_DOCENTE_ELIMINADO,
+    Mov.ASISTENCIA_LISTA_ELIMINADA,
+    Mov.FACTURA_MATRICULA_ANULADA,
+    Mov.USUARIO_ELIMINADO,
+}
+
+CONSULTAS = {
+    Mov.REPORTE_ESTUDIANTES_POR_CURSO,
+}
+
+LOGINS = {
+    Mov.LOGIN_OK,
+    Mov.LOGIN_FAIL,
+}
+
+
+# =========================================================
 # RESUMEN SIMPLE
 # =========================================================
 def get_auditoria_resumen_endpoint(
@@ -178,16 +250,17 @@ def get_auditoria_resumen_endpoint(
 
         for r in rows:
             mov = int(r.get("movimiento_cod") or 0)
-            if mov == 1:
-                total_insertados += 1
-            elif mov == 2:
-                total_actualizados += 1
-            elif mov in (3, 4):
-                total_eliminados += 1
-            elif mov == 5:
-                total_consultas += 1
-            elif mov == 6:
+
+            if mov in LOGINS:
                 total_logins += 1
+            elif mov in INSERTADOS:
+                total_insertados += 1
+            elif mov in ACTUALIZADOS:
+                total_actualizados += 1
+            elif mov in ELIMINADOS:
+                total_eliminados += 1
+            elif mov in CONSULTAS:
+                total_consultas += 1
 
         return {
             "ok": True,

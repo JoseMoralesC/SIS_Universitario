@@ -5,6 +5,7 @@ from datetime import datetime
 from app.core import db as db_module
 from app.core.exceptions import ValidationError
 from app.repositories.security.usuario_security_repo import UsuarioSecurityRepository
+from app.repositories.security.bitacora_acceso_repo import bitacora_acceso_repo
 from app.services.security.password_service import PasswordService
 
 
@@ -35,12 +36,13 @@ class AuthService:
     """
     Servicio de autenticación del sistema.
 
-    Nuevo flujo:
+    Flujo actual:
     1) Conecta con la cuenta técnica de la aplicación.
     2) Busca el usuario en el esquema de seguridad.
     3) Valida estado, bloqueo y contraseña hash.
     4) Carga rol principal y permisos.
     5) Actualiza intentos fallidos / último acceso.
+    6) Registra login exitoso o fallido en dbo.Bitacora_Acceso.
     """
 
     MAX_INTENTOS_FALLIDOS = 5
@@ -49,6 +51,7 @@ class AuthService:
     def __init__(self) -> None:
         self.repo = UsuarioSecurityRepository()
         self.password_service = PasswordService()
+        self.bitacora_repo = bitacora_acceso_repo
 
     # =========================================================
     # Helpers internos
@@ -57,8 +60,7 @@ class AuthService:
         """
         Obtiene la conexión técnica de la aplicación.
 
-        Este método queda preparado para el siguiente archivo,
-        donde app.core.db expondrá connect_app().
+        Este método depende de app.core.db.connect_app().
         """
         connect_app = getattr(db_module, "connect_app", None)
         if connect_app is None:
@@ -94,6 +96,12 @@ class AuthService:
         if bloqueado_hasta is None:
             return False
         return bloqueado_hasta > datetime.now()
+
+    @staticmethod
+    def _safe_user_text(value: object | None) -> str:
+        if value is None:
+            return ""
+        return str(value).strip()
 
     def _filtrar_permisos_por_rol(self, codigo_rol: str, permisos: list[str]) -> list[str]:
         """
@@ -133,6 +141,7 @@ class AuthService:
         user_data: dict,
         rol_principal: dict | None,
         permisos: list[str],
+        bitacora_acceso_id: int | None = None,
     ) -> dict:
         codigo_rol = rol_principal.get("codigo_rol") if rol_principal else None
         permisos_filtrados = self._filtrar_permisos_por_rol(codigo_rol, permisos)
@@ -155,7 +164,55 @@ class AuthService:
             "permisos": permisos_filtrados,
             "debe_cambiar_clave": user_data.get("debe_cambiar_clave", False),
             "ultimo_acceso": user_data.get("ultimo_acceso"),
+            "bitacora_acceso_id": bitacora_acceso_id,
         }
+
+    def _registrar_login_fallido_si_posible(
+        self,
+        conn,
+        *,
+        usuario_login: str,
+        motivo_fallo: str,
+        user_data: dict | None = None,
+    ) -> None:
+        """
+        Registra intento fallido en la bitácora.
+        Nunca debe romper el flujo principal del login.
+        """
+        try:
+            self.bitacora_repo.registrar_login_fallido(
+                conn,
+                usuario_login=self._safe_user_text(usuario_login),
+                motivo_fallo=self._safe_user_text(motivo_fallo) or "Credenciales inválidas.",
+                usuario_seguridad_id=(user_data or {}).get("usuario_seguridad_id"),
+                codigo_usuario=(user_data or {}).get("codigo_usuario"),
+                nombre_usuario=(user_data or {}).get("nombre_usuario"),
+                origen_aplicacion="SIS_Universitario",
+                modulo_origen="LOGIN",
+                observacion="Registro automático desde AuthService.",
+            )
+        except Exception:
+            pass
+
+    def _cerrar_sesion_previa_si_existe(
+        self,
+        conn,
+        *,
+        usuario_seguridad_id: int,
+    ) -> None:
+        """
+        Cierra una sesión abierta previa si existe.
+        Esto evita dejar múltiples sesiones abiertas en bitácora
+        para un mismo usuario en el flujo de escritorio.
+        """
+        try:
+            self.bitacora_repo.cerrar_sesion_abierta_por_usuario(
+                conn,
+                usuario_seguridad_id=int(usuario_seguridad_id),
+                observacion="Cierre automático por nuevo inicio de sesión.",
+            )
+        except Exception:
+            pass
 
     # =========================================================
     # API principal
@@ -181,12 +238,30 @@ class AuthService:
             user_data = self.repo.get_usuario_para_login(conn, usuario)
 
             if not user_data:
+                self._registrar_login_fallido_si_posible(
+                    conn,
+                    usuario_login=usuario,
+                    motivo_fallo="Usuario no encontrado o credenciales inválidas.",
+                    user_data=None,
+                )
                 raise CredencialesInvalidasError("Usuario o contraseña incorrectos.")
 
             if not self._es_estado_activo(user_data):
+                self._registrar_login_fallido_si_posible(
+                    conn,
+                    usuario_login=usuario,
+                    motivo_fallo="Usuario inactivo.",
+                    user_data=user_data,
+                )
                 raise UsuarioInactivoError("El usuario se encuentra inactivo.")
 
             if self._esta_bloqueado(user_data):
+                self._registrar_login_fallido_si_posible(
+                    conn,
+                    usuario_login=usuario,
+                    motivo_fallo="Usuario bloqueado temporalmente.",
+                    user_data=user_data,
+                )
                 raise UsuarioBloqueadoError(
                     "El usuario se encuentra bloqueado temporalmente. "
                     "Intente nuevamente más tarde."
@@ -207,17 +282,34 @@ class AuthService:
                 )
 
                 intentos_actuales = int(user_data.get("intentos_fallidos") or 0) + 1
+
                 if intentos_actuales >= self.MAX_INTENTOS_FALLIDOS:
                     self.repo.bloquear_hasta(
                         conn,
                         int(user_data["usuario_seguridad_id"]),
                         self.MINUTOS_BLOQUEO,
                     )
+
+                    self._registrar_login_fallido_si_posible(
+                        conn,
+                        usuario_login=usuario,
+                        motivo_fallo=(
+                            "Máximo de intentos fallidos alcanzado. "
+                            "Usuario bloqueado temporalmente."
+                        ),
+                        user_data=user_data,
+                    )
                     raise UsuarioBloqueadoError(
                         "Se alcanzó el máximo de intentos fallidos. "
                         "El usuario ha sido bloqueado temporalmente."
                     )
 
+                self._registrar_login_fallido_si_posible(
+                    conn,
+                    usuario_login=usuario,
+                    motivo_fallo="Contraseña incorrecta.",
+                    user_data=user_data,
+                )
                 raise CredencialesInvalidasError("Usuario o contraseña incorrectos.")
 
             rol_principal = self.repo.get_rol_principal_usuario(
@@ -225,6 +317,12 @@ class AuthService:
                 int(user_data["usuario_seguridad_id"]),
             )
             if not rol_principal:
+                self._registrar_login_fallido_si_posible(
+                    conn,
+                    usuario_login=usuario,
+                    motivo_fallo="Usuario sin rol asignado para ingresar.",
+                    user_data=user_data,
+                )
                 raise RolNoAsignadoError(
                     "El usuario no tiene un rol asignado para ingresar al sistema."
                 )
@@ -252,10 +350,27 @@ class AuthService:
                 int(user_data["usuario_seguridad_id"]),
             )
 
+            self._cerrar_sesion_previa_si_existe(
+                conn,
+                usuario_seguridad_id=int(user_data["usuario_seguridad_id"]),
+            )
+
+            bitacora_acceso_id = self.bitacora_repo.registrar_login_exitoso(
+                conn,
+                usuario_seguridad_id=int(user_data["usuario_seguridad_id"]),
+                codigo_usuario=user_data.get("codigo_usuario"),
+                usuario_login=user_data.get("usuario") or usuario,
+                nombre_usuario=user_data.get("nombre_usuario"),
+                origen_aplicacion="SIS_Universitario",
+                modulo_origen="LOGIN",
+                observacion="Login exitoso registrado desde AuthService.",
+            )
+
             session_data = self._build_session_payload(
                 user_data=user_data,
                 rol_principal=rol_principal,
                 permisos=permisos,
+                bitacora_acceso_id=bitacora_acceso_id,
             )
             session_data["roles"] = roles
 
